@@ -63,7 +63,6 @@ export interface AdapterRielflowHookContext {
     readonly RIEL_WORKFLOW_EXECUTION_ID: string;
     readonly RIEL_NODE_ID: string;
     readonly RIEL_NODE_EXEC_ID: string;
-    readonly RIEL_MAILBOX_DIR?: string;
     readonly RIEL_AGENT_BACKEND?: string;
   };
 }
@@ -73,7 +72,6 @@ export function buildAdapterRielflowHookContext(input: {
   readonly workflowExecutionId: string;
   readonly nodeId: string;
   readonly nodeExecId: string;
-  readonly mailboxDir?: string;
   readonly agentBackend?: string;
 }): AdapterRielflowHookContext {
   return {
@@ -82,9 +80,6 @@ export function buildAdapterRielflowHookContext(input: {
       RIEL_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
       RIEL_NODE_ID: input.nodeId,
       RIEL_NODE_EXEC_ID: input.nodeExecId,
-      ...(input.mailboxDir === undefined
-        ? {}
-        : { RIEL_MAILBOX_DIR: input.mailboxDir }),
       ...(input.agentBackend === undefined
         ? {}
         : { RIEL_AGENT_BACKEND: input.agentBackend }),
@@ -110,7 +105,7 @@ export interface AdapterOutputValidationError {
 export interface AdapterOutputPublicationPolicy {
   readonly owner: "runtime";
   readonly finalArtifactWrite: "runtime-only";
-  readonly mailboxWrite: "runtime-only-after-validation";
+  readonly messageWrite: "runtime-only-after-validation";
   readonly candidateSubmission: "inline-json-or-reserved-candidate-file";
   readonly futureCommunicationIdsExposed: false;
 }

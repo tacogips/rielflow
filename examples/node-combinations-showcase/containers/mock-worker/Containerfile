@@ -1,4 +1,4 @@
 FROM alpine:3.21
 
 WORKDIR /workspace
-CMD ["sh", "-lc", "mkdir -p \"$RIEL_MAILBOX_DIR/outbox\" && printf '%s\\n' '{\"lane\":\"container\",\"summary\":\"node-combinations-showcase container lane placeholder\"}' > \"$RIEL_MAILBOX_DIR/outbox/output.json\""]
+CMD ["sh", "-lc", "printf '%s\\n' '{\"lane\":\"container\",\"summary\":\"node-combinations-showcase container lane placeholder\"}'"]

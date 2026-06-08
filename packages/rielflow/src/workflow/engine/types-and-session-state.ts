@@ -267,6 +267,7 @@ export interface UpstreamOutputRef extends OutputRef {
     | NodeExecutionRecord["status"]
     | CommunicationRecord["status"];
   readonly communicationId: string;
+  readonly payloadJson?: string | null;
 }
 export interface UpstreamCommunicationConsumptionRef {
   readonly workflowExecutionId: string;

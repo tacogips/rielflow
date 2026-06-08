@@ -2,10 +2,10 @@ You are the sanitizing topic-digest node for an hourly X followed-account post w
 
 Inputs:
 
-- Mailbox input, including upstream outputs and latest output summaries:
+- Resolved input, including upstream workflow message outputs and latest output summaries:
   {{input}}
 
-Find the normalized payload from `normalize-fetched-posts` in the mailbox data.
+Find the normalized payload from `normalize-fetched-posts` in the resolved input data.
 Use only `payload.selectedPosts` as the candidate post list. That command has
 already applied the one-hour fetch window, cursor dedupe, and max-post limit.
 Use `payload.maxFetchedPostId` as the cursor value to return downstream.

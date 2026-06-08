@@ -4865,36 +4865,42 @@ describe("runWorkflow", () => {
         readonly fanout?: { readonly branchIndex?: number };
       };
     };
-    expect(reviewerInput.promptText).toContain("Runtime mailbox:");
-    expect(reviewerInput.promptText).toContain("RIEL_MAILBOX_DIR");
+    expect(reviewerInput.promptText).toContain("Runtime input/output:");
+    expect(reviewerInput.promptText).toContain("workflow_messages");
     expect(reviewerInput.variables.feature?.id).toBe("feature-a");
     expect(reviewerInput.variables.fanout?.branchIndex).toBe(0);
 
     const reviewerMailboxMetaRaw = await readFile(
       path.join(
         firstReviewerExecution.artifactDir,
-        "mailbox",
-        "inbox",
+        "resolved-input",
         "meta.json",
       ),
       "utf8",
     );
     const reviewerMailboxMeta = JSON.parse(reviewerMailboxMetaRaw) as {
-      readonly mailboxDirEnvVar?: string;
-      readonly paths?: {
-        readonly inputPath?: string;
-        readonly outputPath?: string;
+      readonly input?: {
+        readonly source?: string;
+        readonly snapshotPath?: string;
+      };
+      readonly output?: {
+        readonly publication?: string;
       };
     };
-    expect(reviewerMailboxMeta.mailboxDirEnvVar).toBe("RIEL_MAILBOX_DIR");
-    expect(reviewerMailboxMeta.paths?.inputPath).toBe("inbox/input.json");
-    expect(reviewerMailboxMeta.paths?.outputPath).toBe("outbox/output.json");
+    expect(reviewerMailboxMeta.input?.source).toBe(
+      "resolved-workflow-messages",
+    );
+    expect(reviewerMailboxMeta.input?.snapshotPath).toBe(
+      "resolved-input/input.json",
+    );
+    expect(reviewerMailboxMeta.output?.publication).toBe(
+      "runtime-owned-after-validation",
+    );
 
     const reviewerMailboxRaw = await readFile(
       path.join(
         firstReviewerExecution.artifactDir,
-        "mailbox",
-        "inbox",
+        "resolved-input",
         "input.json",
       ),
       "utf8",
@@ -4930,7 +4936,7 @@ describe("runWorkflow", () => {
         };
       };
     };
-    expect(joinInput.promptText).toContain("Runtime mailbox:");
+    expect(joinInput.promptText).toContain("Runtime input/output:");
     expect(joinInput.variables.fanoutJoin?.fanoutGroupRunId).toBe(
       group.fanoutGroupRunId,
     );
@@ -4941,7 +4947,7 @@ describe("runWorkflow", () => {
     ).toEqual([0, 1, 2]);
 
     const joinMailboxRaw = await readFile(
-      path.join(joinExec.artifactDir, "mailbox", "inbox", "input.json"),
+      path.join(joinExec.artifactDir, "resolved-input", "input.json"),
       "utf8",
     );
     const joinMailboxInput = JSON.parse(joinMailboxRaw) as {
@@ -4970,18 +4976,18 @@ describe("runWorkflow", () => {
     }
     await expect(
       readFile(path.join(writerExecution.artifactDir, "input.json"), "utf8"),
-    ).resolves.toContain("Runtime mailbox:");
+    ).resolves.toContain("Runtime input/output:");
     const writerMailboxMeta = JSON.parse(
       await readFile(
-        path.join(writerExecution.artifactDir, "mailbox", "inbox", "meta.json"),
+        path.join(writerExecution.artifactDir, "resolved-input", "meta.json"),
         "utf8",
       ),
     ) as {
-      readonly mailboxDirEnvVar?: string;
-      readonly paths?: { readonly inputPath?: string };
+      readonly input?: { readonly snapshotPath?: string };
     };
-    expect(writerMailboxMeta.mailboxDirEnvVar).toBe("RIEL_MAILBOX_DIR");
-    expect(writerMailboxMeta.paths?.inputPath).toBe("inbox/input.json");
+    expect(writerMailboxMeta.input?.snapshotPath).toBe(
+      "resolved-input/input.json",
+    );
   });
 
   test("rerun rejects ambiguous local fanout branch target without branch context", async () => {
@@ -5840,10 +5846,12 @@ describe("runWorkflow", () => {
       promptText: string;
       executionMailbox?: {
         readonly meta: {
-          readonly mailboxDirEnvVar: string;
-          readonly paths: {
-            readonly inputPath: string;
-            readonly outputPath: string;
+          readonly input: {
+            readonly source: string;
+            readonly snapshotPath: string;
+          };
+          readonly output: {
+            readonly publication: string;
           };
         };
       };
@@ -5857,17 +5865,16 @@ describe("runWorkflow", () => {
     expect(inputJson.sessionId).toBe(result.value.session.sessionId);
     expect(inputJson.workflowExecutionId).toBe(result.value.session.sessionId);
     expect(inputJson.promptText).toContain("B");
-    expect(inputJson.promptText).toContain("Runtime mailbox:");
-    expect(inputJson.promptText).toContain("RIEL_MAILBOX_DIR");
-    expect(inputJson.promptText).toContain(
-      "$RIEL_MAILBOX_DIR/inbox/input.json",
-    );
+    expect(inputJson.promptText).toContain("Runtime input/output:");
+    expect(inputJson.promptText).toContain("workflow_messages");
     expect(inputJson.executionMailbox).toMatchObject({
       meta: {
-        mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
-        paths: {
-          inputPath: "inbox/input.json",
-          outputPath: "outbox/output.json",
+        input: {
+          source: "resolved-workflow-messages",
+          snapshotPath: "resolved-input/input.json",
+        },
+        output: {
+          publication: "runtime-owned-after-validation",
         },
       },
     });
@@ -5882,26 +5889,30 @@ describe("runWorkflow", () => {
     expect(inputJson.upstreamCommunications).toEqual(["comm-000001"]);
 
     const mailboxMetaRaw = await readFile(
-      path.join(step1Exec.artifactDir, "mailbox", "inbox", "meta.json"),
+      path.join(step1Exec.artifactDir, "resolved-input", "meta.json"),
       "utf8",
     );
     const mailboxInputRaw = await readFile(
-      path.join(step1Exec.artifactDir, "mailbox", "inbox", "input.json"),
+      path.join(step1Exec.artifactDir, "resolved-input", "input.json"),
       "utf8",
     );
     const mailboxMeta = JSON.parse(mailboxMetaRaw) as {
-      readonly mailboxDirEnvVar: string;
-      readonly paths: {
-        readonly inputPath: string;
-        readonly outputPath: string;
+      readonly input: {
+        readonly source: string;
+        readonly snapshotPath: string;
+      };
+      readonly output: {
+        readonly publication: string;
       };
     };
     const mailboxInput = JSON.parse(mailboxInputRaw) as {
       readonly upstream: readonly { communicationId: string }[];
     };
-    expect(mailboxMeta.mailboxDirEnvVar).toBe("RIEL_MAILBOX_DIR");
-    expect(mailboxMeta.paths.inputPath).toBe("inbox/input.json");
-    expect(mailboxMeta.paths.outputPath).toBe("outbox/output.json");
+    expect(mailboxMeta.input.source).toBe("resolved-workflow-messages");
+    expect(mailboxMeta.input.snapshotPath).toBe("resolved-input/input.json");
+    expect(mailboxMeta.output.publication).toBe(
+      "runtime-owned-after-validation",
+    );
     expect(mailboxInput.upstream[0]?.communicationId).toBe("comm-000001");
 
     const communicationMessage = await loadSqliteMessageRecord(
@@ -6761,15 +6772,10 @@ describe("runWorkflow", () => {
     expect(adapter.calls).toHaveLength(2);
     expect(adapter.calls[0]?.nodeId).toBe("rielflow-manager");
     expect(
-      adapter.calls[0]?.rielflowHookContext?.environment.RIEL_MAILBOX_DIR,
-    ).toBe(
-      path.join(
-        result.value.session.nodeExecutions[0]?.artifactDir ?? "",
-        "mailbox",
-      ),
-    );
-    expect(adapter.calls[0]?.promptText).toContain("Runtime mailbox:");
-    expect(adapter.calls[0]?.promptText).toContain("RIEL_MAILBOX_DIR");
+      adapter.calls[0]?.rielflowHookContext?.environment,
+    ).not.toHaveProperty("RIEL_MAILBOX_DIR");
+    expect(adapter.calls[0]?.promptText).toContain("Runtime input/output:");
+    expect(adapter.calls[0]?.promptText).toContain("workflow_messages");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
       RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
       RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
@@ -7032,7 +7038,7 @@ describe("runWorkflow", () => {
 
     const mailboxInput = JSON.parse(
       await readFile(
-        path.join(managerExec.artifactDir, "mailbox", "inbox", "input.json"),
+        path.join(managerExec.artifactDir, "resolved-input", "input.json"),
         "utf8",
       ),
     ) as {
@@ -9634,7 +9640,7 @@ describe("runWorkflow", () => {
       publication: {
         owner: "runtime",
         finalArtifactWrite: "runtime-only",
-        mailboxWrite: "runtime-only-after-validation",
+        messageWrite: "runtime-only-after-validation",
         candidateSubmission: "inline-json-or-reserved-candidate-file",
         futureCommunicationIdsExposed: false,
       },
@@ -9726,11 +9732,8 @@ describe("runWorkflow", () => {
     expect(firstRequestJson.attempt).toBe(1);
     expect(firstRequestJson.executionBackend).toBe("claude-code-agent");
     expect(firstRequestJson.model).toBe("claude-opus-4-1");
-    expect(firstRequestJson.promptText).toContain("Runtime mailbox:");
-    expect(firstRequestJson.promptText).toContain("RIEL_MAILBOX_DIR");
-    expect(firstRequestJson.promptText).toContain(
-      "$RIEL_MAILBOX_DIR/inbox/input.json",
-    );
+    expect(firstRequestJson.promptText).toContain("Runtime input/output:");
+    expect(firstRequestJson.promptText).toContain("workflow_messages");
     expect(firstRequestJson.promptText).toContain("Candidate-Path:");
     expect(firstRequestJson.promptText).not.toContain(
       "Previous output was rejected:",
@@ -9763,8 +9766,8 @@ describe("runWorkflow", () => {
     expect(secondRequestJson.attempt).toBe(2);
     expect(secondRequestJson.executionBackend).toBe("claude-code-agent");
     expect(secondRequestJson.model).toBe("claude-opus-4-1");
-    expect(secondRequestJson.promptText).toContain("Runtime mailbox:");
-    expect(secondRequestJson.promptText).toContain("RIEL_MAILBOX_DIR");
+    expect(secondRequestJson.promptText).toContain("Runtime input/output:");
+    expect(secondRequestJson.promptText).toContain("workflow_messages");
     expect(secondRequestJson.promptText).toContain(
       "Previous output was rejected:",
     );
@@ -9785,14 +9788,14 @@ describe("runWorkflow", () => {
     expect(outputJson.promptText).toContain(
       "Node-specific instruction:\nstep audit",
     );
-    expect(outputJson.promptText).toContain("Runtime mailbox:");
-    expect(outputJson.promptText).toContain("RIEL_MAILBOX_DIR");
+    expect(outputJson.promptText).toContain("Runtime input/output:");
+    expect(outputJson.promptText).toContain("workflow_messages");
     expect(outputJson.promptText).not.toContain(
       "Previous output was rejected:",
     );
   });
 
-  test("persists latest completed outputs in mailbox input for downstream review context", async () => {
+  test("persists latest completed outputs in resolved input for downstream review context", async () => {
     const root = await makeTempDir();
     await createManagerlessWorkflowFixture(root, "latest-mailbox-context");
 
@@ -9823,7 +9826,7 @@ describe("runWorkflow", () => {
 
     const mailboxInput = JSON.parse(
       await readFile(
-        path.join(step2Exec.artifactDir, "mailbox", "inbox", "input.json"),
+        path.join(step2Exec.artifactDir, "resolved-input", "input.json"),
         "utf8",
       ),
     ) as {
@@ -9898,10 +9901,10 @@ describe("runWorkflow", () => {
     }
 
     expect(captureAdapter.capturedPromptText).toContain(
-      "Final output.json publication and mailbox delivery are runtime-owned.",
+      "Final output publication and workflow message delivery are runtime-owned.",
     );
     expect(captureAdapter.capturedPromptText).toContain(
-      "Do not write mailbox files, output.json, or invent communication ids.",
+      "Do not attempt runtime message publication yourself or invent communication ids.",
     );
     expect(captureAdapter.capturedPromptText).toContain(
       "This Candidate-Path restriction applies only to the final structured output submission; repository edits explicitly requested by the node instructions are still allowed.",
@@ -9914,7 +9917,7 @@ describe("runWorkflow", () => {
       publication: {
         owner: "runtime",
         finalArtifactWrite: "runtime-only",
-        mailboxWrite: "runtime-only-after-validation",
+        messageWrite: "runtime-only-after-validation",
         candidateSubmission: "inline-json-or-reserved-candidate-file",
         futureCommunicationIdsExposed: false,
       },
@@ -10416,9 +10419,9 @@ describe("runWorkflow", () => {
     }
   });
 
-  test("fails deterministically when an upstream communication output artifact is corrupted", async () => {
+  test("hydrates upstream input from sqlite payload when output artifact is removed", async () => {
     const root = await makeTempDir();
-    const workflowName = "corrupt-upstream-output";
+    const workflowName = "sqlite-upstream-payload";
     await createWorkflowFixture(root, workflowName, false);
 
     const options = {
@@ -10433,7 +10436,7 @@ describe("runWorkflow", () => {
       workflowName,
       {
         ...options,
-        sessionId: "sess-corrupt-upstream",
+        sessionId: "sess-sqlite-upstream",
         maxSteps: 1,
       },
       deterministicAdapter,
@@ -10451,11 +10454,9 @@ describe("runWorkflow", () => {
     if (managerExec === undefined) {
       return;
     }
-    await writeFile(
-      path.join(managerExec.artifactDir, "output.json"),
-      '"corrupted"\n',
-      "utf8",
-    );
+    await rm(path.join(managerExec.artifactDir, "output.json"), {
+      force: true,
+    });
 
     const resumed = await runWorkflow(
       workflowName,
@@ -10466,14 +10467,47 @@ describe("runWorkflow", () => {
       deterministicAdapter,
     );
 
-    expect(resumed.ok).toBe(false);
+    expect(resumed.ok).toBe(true);
     if (!resumed.ok) {
-      expect(resumed.error.exitCode).toBe(1);
-      expect(resumed.error.message).toContain(
-        "failed to resolve upstream communication",
-      );
-      expect(resumed.error.message).toContain("comm-000001");
+      return;
     }
+    const stepExec = resumed.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(stepExec).toBeDefined();
+    if (stepExec === undefined) {
+      return;
+    }
+    const resolvedInputRaw = await readFile(
+      path.join(stepExec.artifactDir, "resolved-input", "input.json"),
+      "utf8",
+    );
+    const resolvedInput = JSON.parse(resolvedInputRaw) as {
+      readonly upstream: readonly {
+        readonly communicationId: string;
+        readonly output?: {
+          readonly provider?: string;
+          readonly payload?: { readonly nodeId?: string };
+        };
+      }[];
+    };
+    expect(resolvedInput.upstream[0]?.communicationId).toBe("comm-000001");
+    expect(resolvedInput.upstream[0]?.output?.provider).toBe(
+      "deterministic-local",
+    );
+    expect(resolvedInput.upstream[0]?.output?.payload?.nodeId).toBe(
+      "rielflow-manager",
+    );
+    expect(
+      await Bun.file(
+        path.join(managerExec.artifactDir, "mailbox", "outbox", "output.json"),
+      ).exists(),
+    ).toBe(false);
+    expect(
+      await Bun.file(
+        path.join(stepExec.artifactDir, "mailbox", "inbox", "input.json"),
+      ).exists(),
+    ).toBe(false);
   });
 
   test("fails deterministically when the selected external output artifact is corrupted", async () => {
@@ -10854,7 +10888,7 @@ describe("runWorkflow", () => {
     }
   });
 
-  test("fails deterministically when execution mailbox artifacts cannot be persisted", async () => {
+  test("fails deterministically when resolved input artifacts cannot be persisted", async () => {
     const root = await makeTempDir();
     const workflowName = "mailbox-write-failure";
     const sessionId = "sess-mailbox-write-failure";
@@ -10862,7 +10896,7 @@ describe("runWorkflow", () => {
     const sessionStoreRoot = path.join(root, "sessions");
     await createWorkflowFixture(root, workflowName, false);
 
-    const blockedMailboxPath = path.join(
+    const blockedInputPath = path.join(
       artifactRoot,
       workflowName,
       "executions",
@@ -10870,10 +10904,10 @@ describe("runWorkflow", () => {
       "nodes",
       "rielflow-manager",
       "exec-000001",
-      "mailbox",
+      "resolved-input",
     );
-    await mkdir(path.dirname(blockedMailboxPath), { recursive: true });
-    await writeFile(blockedMailboxPath, "blocked", "utf8");
+    await mkdir(path.dirname(blockedInputPath), { recursive: true });
+    await writeFile(blockedInputPath, "blocked", "utf8");
 
     const result = await runWorkflow(
       workflowName,
@@ -10894,7 +10928,7 @@ describe("runWorkflow", () => {
     }
     expect(result.error.exitCode).toBe(1);
     expect(result.error.message).toContain(
-      "failed to persist execution mailbox",
+      "failed to persist resolved input snapshot",
     );
 
     const persisted = await loadSession(sessionId, { sessionStoreRoot });
@@ -10904,7 +10938,7 @@ describe("runWorkflow", () => {
     }
     expect(persisted.value.status).toBe("failed");
     expect(persisted.value.lastError).toContain(
-      "failed to persist execution mailbox",
+      "failed to persist resolved input snapshot",
     );
   });
 
@@ -11896,10 +11930,9 @@ describe("runWorkflow", () => {
       [
         "#!/bin/sh",
         "set -eu",
-        'echo "hello from command-worker stdout"',
+        'echo "hello from command-worker diagnostic" >&2',
         'echo "hello from command-worker stderr" >&2',
-        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
-        `printf '{"summary":"done"}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
+        `printf '{"summary":"done"}\n'`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -11926,7 +11959,7 @@ describe("runWorkflow", () => {
         entry.nodeId === "command-worker" &&
         entry.nodeExecId !== null &&
         entry.message.includes("stdout") &&
-        entry.message.includes("hello from command-worker stdout"),
+        entry.message.includes("summary"),
     );
     expect(stdoutLog).toBeDefined();
     expect(stdoutLog?.level).toBe("info");
@@ -11936,12 +11969,13 @@ describe("runWorkflow", () => {
       text?: string;
     };
     expect(payload.stream).toBe("stdout");
-    expect(payload.text).toContain("hello from command-worker stdout");
+    expect(payload.text).toBe('{"summary":"done"}\n');
     const stderrLog = logs.find(
       (entry) =>
         entry.nodeId === "command-worker" &&
         entry.nodeExecId !== null &&
         entry.message.includes("stderr") &&
+        entry.message.includes("hello from command-worker diagnostic") &&
         entry.message.includes("hello from command-worker stderr"),
     );
     expect(stderrLog?.level).toBe("warning");

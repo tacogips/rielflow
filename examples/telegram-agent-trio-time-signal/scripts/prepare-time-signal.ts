@@ -1,5 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 
 const PART_TYPES = [
   "year",
@@ -83,14 +81,7 @@ async function main(): Promise<void> {
   const replyText = shouldAnnounce
     ? `時報です。${timeZone} の現在時刻は ${localTime} です。`
     : "";
-  const mailboxDir = requiredValue(
-    process.env["RIEL_MAILBOX_DIR"],
-    "RIEL_MAILBOX_DIR",
-  );
-  const outboxDir = path.join(mailboxDir, "outbox");
-  await mkdir(outboxDir, { recursive: true });
-  await writeFile(
-    path.join(outboxDir, "output.json"),
+  process.stdout.write(
     `${JSON.stringify(
       {
         when: {
@@ -109,7 +100,6 @@ async function main(): Promise<void> {
       null,
       2,
     )}\n`,
-    "utf8",
   );
 }
 

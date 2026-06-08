@@ -419,7 +419,10 @@ export async function runWorkflowQueue(
         );
       }
       const upstreamInputs = upstreamInputsResult.value;
-      const latestOutputsResult = await buildLatestOutputMailboxIndex(session);
+      const latestOutputsResult = await buildLatestOutputMailboxIndex(
+        session,
+        options,
+      );
       if (!latestOutputsResult.ok) {
         const failed: WorkflowSessionState = {
           ...session,
@@ -526,42 +529,37 @@ export async function runWorkflowQueue(
           status: "failed",
           currentNodeId: nodeId,
           endedAt: nowIso(),
-          lastError: `input assembly failed for ${executionTargetNoun} '${nodeId}': execution mailbox was not created`,
+          lastError: `input assembly failed for ${executionTargetNoun} '${nodeId}': resolved input was not created`,
         };
         await saveSession(failed, options);
         return err(
           workflowRunFailure(
             3,
-            failed.lastError ?? "execution mailbox creation failed",
+            failed.lastError ?? "resolved input creation failed",
             failed,
           ),
         );
       }
-      let mailboxDir: string;
       try {
-        const mailboxPaths = await writeNodeExecutionMailboxArtifacts(
-          artifactDir,
-          executionMailbox,
-        );
-        mailboxDir = mailboxPaths.rootDir;
+        await writeNodeExecutionMailboxArtifacts(artifactDir, executionMailbox);
       } catch (error: unknown) {
         const message =
           error instanceof Error
             ? error.message
-            : "unknown execution mailbox persistence failure";
+            : "unknown resolved input snapshot persistence failure";
         const failed: WorkflowSessionState = {
           ...session,
           queue,
           status: "failed",
           currentNodeId: nodeId,
           endedAt: nowIso(),
-          lastError: `failed to persist execution mailbox for ${executionTargetNoun} '${nodeId}': ${message}`,
+          lastError: `failed to persist resolved input snapshot for ${executionTargetNoun} '${nodeId}': ${message}`,
         };
         await saveSession(failed, options);
         return err(
           workflowRunFailure(
             1,
-            failed.lastError ?? "execution mailbox persistence failed",
+            failed.lastError ?? "resolved input snapshot persistence failed",
             failed,
           ),
         );
@@ -796,16 +794,16 @@ export async function runWorkflowQueue(
       const { getWorkflowTelemetry, messagePayloadTelemetryAttributes } =
         await import("../../telemetry");
       const telemetry = getWorkflowTelemetry();
-      telemetry.addEvent("rielflow.mailbox.prepared", {
+      telemetry.addEvent("rielflow.resolved_input.prepared", {
         "workflow.id": workflow.workflowId,
         "workflow.execution.id": session.sessionId,
         "step.id": stepExecutionAddress.stepId,
         "node.id": nodeId,
         "node.exec.id": nodeExecId,
-        "mailbox.instance.id": mailboxInstanceId,
-        "mailbox.upstream.count": upstreamInputs.length,
+        "execution.input.instance.id": mailboxInstanceId,
+        "resolved.input.upstream.count": upstreamInputs.length,
         ...messagePayloadTelemetryAttributes({
-          key: "mailbox.input",
+          key: "resolved.input",
           value: executionMailbox.input,
           exportMessages: telemetry.config.exportMessages,
         }),
@@ -818,7 +816,7 @@ export async function runWorkflowQueue(
           "step.id": stepExecutionAddress.stepId,
           "node.id": nodeId,
           "node.exec.id": nodeExecId,
-          "mailbox.instance.id": mailboxInstanceId,
+          "execution.input.instance.id": mailboxInstanceId,
           "agent.backend": agentNodePayload?.executionBackend,
           "agent.model": agentNodePayload?.model,
           "step.retry": restartAttempt > 0,
@@ -851,7 +849,6 @@ export async function runWorkflowQueue(
             assembledArguments,
             upstreamCommunicationIds,
             executionMailbox,
-            mailboxDir,
             ambientManagerContext,
             effectiveAdapter,
             timeoutMs,

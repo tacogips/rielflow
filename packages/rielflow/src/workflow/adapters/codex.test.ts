@@ -35,7 +35,6 @@ const baseInput: AdapterExecutionInput = {
   executionMailbox: {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -47,21 +46,17 @@ const baseInput: AdapterExecutionInput = {
         expectedReturn: "Return JSON.",
         instruction: "test",
       },
-      paths: {
-        inputPath: "inbox/input.json",
-        inputFilesDir: "inbox/files",
-        outputPath: "outbox/output.json",
-        outputFilesDir: "outbox/files",
-      },
       input: {
         kind: "json",
+        source: "resolved-workflow-messages",
+        snapshotPath: "resolved-input/input.json",
         upstreamSources: [],
       },
       output: {
         kind: "json",
         required: true,
-        path: "outbox/output.json",
-        filesDirectory: "outbox/files",
+        publication: "runtime-owned-after-validation",
+        candidateSubmission: "inline-json-or-reserved-candidate-file",
       },
     },
     input: {
@@ -347,7 +342,7 @@ describe("CodexAgentAdapter", () => {
           publication: {
             owner: "runtime",
             finalArtifactWrite: "runtime-only",
-            mailboxWrite: "runtime-only-after-validation",
+            messageWrite: "runtime-only-after-validation",
             candidateSubmission: "inline-json-or-reserved-candidate-file",
             futureCommunicationIdsExposed: false,
           },
@@ -508,38 +503,48 @@ describe("CodexAgentAdapter", () => {
     });
     const priorGraphqlEndpoint = process.env["RIEL_GRAPHQL_ENDPOINT"];
     const priorWorkflowExecutionId = process.env["RIEL_WORKFLOW_EXECUTION_ID"];
-    await adapter.execute(
-      {
-        ...baseInput,
-        rielflowHookContext: {
-          environment: {
-            RIEL_WORKFLOW_ID: "wf",
-            RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
-            RIEL_NODE_ID: "node-1",
-            RIEL_NODE_EXEC_ID: "exec-1",
-            RIEL_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
-            RIEL_AGENT_BACKEND: "codex-agent",
+    const priorMailboxDir = process.env["RIEL_MAILBOX_DIR"];
+    process.env["RIEL_MAILBOX_DIR"] = "/tmp/legacy-mailbox";
+    try {
+      await adapter.execute(
+        {
+          ...baseInput,
+          rielflowHookContext: {
+            environment: {
+              RIEL_WORKFLOW_ID: "wf",
+              RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+              RIEL_NODE_ID: "node-1",
+              RIEL_NODE_EXEC_ID: "exec-1",
+              RIEL_AGENT_BACKEND: "codex-agent",
+            },
+          },
+          ambientManagerContext: {
+            environment: {
+              RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+              RIEL_MANAGER_AUTH_TOKEN: "secret",
+              RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+              RIEL_WORKFLOW_ID: "wf",
+              RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+              RIEL_MANAGER_STEP_ID: "node-1",
+              RIEL_MANAGER_NODE_EXEC_ID: "exec-1",
+            },
           },
         },
-        ambientManagerContext: {
-          environment: {
-            RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-            RIEL_MANAGER_AUTH_TOKEN: "secret",
-            RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-            RIEL_WORKFLOW_ID: "wf",
-            RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
-            RIEL_MANAGER_STEP_ID: "node-1",
-            RIEL_MANAGER_NODE_EXEC_ID: "exec-1",
-          },
-        },
-      },
-      baseContext,
-    );
+        baseContext,
+      );
+    } finally {
+      if (priorMailboxDir === undefined) {
+        delete process.env["RIEL_MAILBOX_DIR"];
+      } else {
+        process.env["RIEL_MAILBOX_DIR"] = priorMailboxDir;
+      }
+    }
 
     expect(observedGraphqlEndpoint).toBe("http://127.0.0.1:43173/graphql");
     expect(observedWorkflowExecutionId).toBe("sess-1");
     expect(observedNodeExecId).toBe("exec-1");
-    expect(observedMailboxDir).toBe("/tmp/node-1/exec-1/mailbox");
+    expect(observedMailboxDir).toBeUndefined();
+    expect(process.env["RIEL_MAILBOX_DIR"]).toBe(priorMailboxDir);
     expect(process.env["RIEL_GRAPHQL_ENDPOINT"]).toBe(priorGraphqlEndpoint);
     expect(process.env["RIEL_WORKFLOW_EXECUTION_ID"]).toBe(
       priorWorkflowExecutionId,
@@ -569,7 +574,7 @@ describe("CodexAgentAdapter", () => {
             publication: {
               owner: "runtime",
               finalArtifactWrite: "runtime-only",
-              mailboxWrite: "runtime-only-after-validation",
+              messageWrite: "runtime-only-after-validation",
               candidateSubmission: "inline-json-or-reserved-candidate-file",
               futureCommunicationIdsExposed: false,
             },

@@ -2,13 +2,8 @@
 
 set -eu
 
-mailbox_dir="${RIEL_MAILBOX_DIR:?RIEL_MAILBOX_DIR is required}"
-output_path="${mailbox_dir}/outbox/output.json"
-
-mkdir -p "$(dirname "$output_path")"
-
 if [ "$#" -lt 2 ]; then
-  printf '%s\n' '{"operation":"divide","note":"expected two numeric args","result":null}' > "$output_path"
+  printf '%s\n' '{"operation":"divide","note":"expected two numeric args","result":null}'
   exit 0
 fi
 
@@ -22,4 +17,4 @@ awk -v dividend="$dividend" -v divisor="$divisor" 'BEGIN {
   }
   result = dividend / divisor;
   printf("{\"operation\":\"divide\",\"operands\":[%s,%s],\"result\":%s}\n", dividend, divisor, result);
-}' > "$output_path"
+}'

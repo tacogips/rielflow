@@ -1,9 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 
-mailbox_dir="${RIEL_MAILBOX_DIR:?RIEL_MAILBOX_DIR is required}"
-mkdir -p "$mailbox_dir/outbox"
-
 node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
@@ -43,7 +40,7 @@ function assertPrivateRuntimePath(filePath) {
     "tmp/",
     "temp/",
   ];
-  const allowedAbsolutePrefixes = ["/tmp/", "/var/tmp/"];
+  const allowedAbsolutePrefixes = ["/tmp/", "/var/tmp/", "/var/folders/"];
   const isAllowed =
     allowedRelativePrefixes.some((prefix) => normalized.startsWith(prefix)) ||
     allowedAbsolutePrefixes.some((prefix) => resolved.startsWith(prefix));
@@ -54,7 +51,6 @@ function assertPrivateRuntimePath(filePath) {
   }
 }
 
-const mailboxDir = process.env.RIEL_MAILBOX_DIR;
 const stateFile =
   process.env.RIEL_X_DIGEST_STATE_FILE ||
   ".rielflow-data/x-follower-ai-business-digest/state.json";
@@ -94,8 +90,5 @@ const output = {
     previousState: state,
   },
 };
-fs.writeFileSync(
-  path.join(mailboxDir, "outbox", "output.json"),
-  `${JSON.stringify(output, null, 2)}\n`,
-);
+process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 NODE

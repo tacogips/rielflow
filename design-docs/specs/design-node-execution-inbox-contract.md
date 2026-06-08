@@ -1,205 +1,34 @@
-# Node Execution Inbox Contract
+# Node Execution I/O Contract
 
 This document defines the worker-facing execution contract that the runtime
 materializes for every node execution.
 
 ## Overview
 
-Canonical mailbox transport remains manager-owned and lives under
-`communications/{communicationId}/...`.
-
-That transport shape is not the primary API for worker implementations.
-Instead, before a node executes, the runtime compiles workflow metadata,
-resolved input, and output expectations into one execution-local inbox/outbox
-contract.
+SQLite `workflow_messages` is the canonical workflow communication path. The
+old execution-local mailbox file ABI based on `RIEL_MAILBOX_DIR`,
+`inbox/input.json`, and `outbox/output.json` is removed and must not be kept as
+a compatibility path for node message handoff.
 
 Goals:
 
-- give `agent`, `command`, and `container` nodes one shared worker-facing ABI
-- remove implicit dependence on workflow graph or canonical mailbox layout
-- let node implementations read one metadata file and one input payload file
-- keep canonical mailbox publication, routing, and validation runtime-owned
-- keep host filesystem paths out of container-facing metadata
-- make the worker-facing execution boundary format-stable and machine-readable
+- give `agent`, `command`, `container`, and `addon` nodes one shared semantic
+  input/output contract
+- keep workflow message reads, replay, retry, and routing backed by
+  `workflow_messages`
+- keep final node artifact publication runtime-owned
+- avoid worker-visible message mailbox files for structured node input or
+  output
+- preserve file and binary handoff only through attachment descriptors rooted at
+  `RIEL_ATTACHMENT_ROOT`
+- keep backend-specific transport details behind adapter or native executor
+  modules
 
-## Execution-Local Layout
+## Contract Shape
 
-Each node execution artifact directory gains a worker-facing mailbox subtree:
-
-```text
-{artifact-root}/{workflowId}/executions/{workflowExecutionId}/nodes/{nodeId}/{nodeExecId}/
-  input.json
-  output.json
-  meta.json
-  handoff.json
-  mailbox/
-    inbox/
-      meta.json
-      input.json
-      files/
-    outbox/
-      output.json        # worker target path; runtime-owned publication still applies
-      files/
-```
-
-Rules:
-
-- `mailbox/inbox/meta.json` is the primary worker-facing execution contract
-- `mailbox/inbox/input.json` contains the resolved execution-local input payload
-- `mailbox/inbox/files/` contains worker-visible input files for that execution
-- `mailbox/outbox/output.json` is the preferred worker write location for
-  candidate output; after runtime validation and publication, the runtime
-  overwrites this file with the runtime-published envelope so that the
-  execution-local outbox always reflects the final published state
-- for structured-output nodes, the adapter uses a reserved staging path for
-  candidate submission rather than writing directly to `mailbox/outbox/output.json`;
-  the runtime still copies the published envelope to `mailbox/outbox/output.json`
-  after validation
-- `mailbox/outbox/files/` is the preferred worker output-files directory
-- worker-facing mailbox paths are execution-local and must not be treated as the
-  canonical routed mailbox store
-- worker-facing `inbox/input.json` and `outbox/output.json` are always JSON
-  files; workers do not need to branch on plain text versus JSON at this ABI
-
-## JSON Boundary Rule
-
-The execution-local inbox/outbox ABI is JSON-only.
-
-Rule:
-
-- plain text may appear at ingress edges such as CLI/user input, GraphQL string
-  fields, or raw backend/model responses
-- the runtime must normalize those values into canonical JSON before writing
-  `mailbox/inbox/input.json`
-- workers may return plain text to an adapter-specific boundary; output
-  normalization rules are defined in `design-node-output-contract.md`
-- workers must not be required to guess whether `inbox/input.json` is text or
-  JSON based on node type, backend, or manager behavior
-
-Input normalization shape:
-
-- `mailbox/inbox/input.json` always retains the top-level resolved-execution
-  structure with fields such as `arguments`, `humanInput`, `upstream`,
-  `runtimeVariables`, and `managerMessage`; plain-text normalization never
-  replaces the whole document
-- normalization applies at the leaf payload position within each field:
-  - `humanInput` value becomes `{"text":"..."}` when the source was plain text
-  - each `upstream[].payload` item becomes `{"text":"..."}` when the upstream
-    node produced semantically plain-text output
-  - `managerMessage.payload` becomes `{"text":"..."}` when the manager message
-    body was plain text
-  - `arguments` and `runtimeVariables` are always structured by definition and
-    are never subject to plain-text wrapping
-- the canonical plain-text wrapper is `{"text":"..."}`, consistent with the
-  output-side canonical shape defined in `design-node-output-contract.md`
-
-Output normalization:
-
-- output normalization rules and the canonical published output shape are defined
-  in `design-node-output-contract.md`; this document does not override those
-  rules
-
-Rationale:
-
-- a fixed JSON ABI keeps `agent`, `command`, and `container` execution aligned
-- runtime validation, replay, and inspection remain uniform
-- future non-agent managers or command-driven managers can rely on the same
-  contract without hidden prompt conventions
-
-## Path Contract
-
-Worker-visible metadata must use mailbox-root-relative paths, not host absolute
-paths.
-
-The runtime may mount or expose the mailbox root differently per executor.
-
-Preferred rule:
-
-- the executor sets `RIEL_MAILBOX_DIR`
-- metadata paths are relative to that directory
-- worker code joins `RIEL_MAILBOX_DIR` with the relative paths declared in
-  `mailbox/inbox/meta.json`
-
-Example:
-
-```json
-{
-  "protocolVersion": 1,
-  "mailboxDirEnvVar": "RIEL_MAILBOX_DIR",
-  "paths": {
-    "inputPath": "inbox/input.json",
-    "inputFilesDir": "inbox/files",
-    "outputPath": "outbox/output.json",
-    "outputFilesDir": "outbox/files"
-  }
-}
-```
-
-This keeps host/container path differences out of the public worker contract.
-
-## `mailbox/inbox/meta.json`
-
-`meta.json` answers four worker questions:
-
-1. Why is this node running?
-2. What input did it receive?
-3. What files are available?
-4. What output should it produce and where should it write it?
-
-Example shape:
-
-```json
-{
-  "protocolVersion": 1,
-  "mailboxDirEnvVar": "RIEL_MAILBOX_DIR",
-  "node": {
-    "workflowId": "release",
-    "workflowDescription": "Ship a release safely.",
-    "nodeId": "implement",
-    "nodeKind": "task"
-  },
-  "objective": {
-    "reason": "Execute the assigned work step because it contributes a required intermediate result in the workflow.",
-    "expectedReturn": "Return the business JSON object produced by this work step for downstream consumers.",
-    "instruction": "Implement the release step."
-  },
-  "paths": {
-    "inputPath": "inbox/input.json",
-    "inputFilesDir": "inbox/files",
-    "outputPath": "outbox/output.json",
-    "outputFilesDir": "outbox/files"
-  },
-  "input": {
-    "kind": "json",
-    "upstreamSources": [
-      {
-        "fromNodeId": "workflow-input",
-        "communicationId": "comm-000014",
-        "transitionWhen": "always"
-      }
-    ]
-  },
-  "output": {
-    "kind": "json",
-    "required": true,
-    "path": "outbox/output.json",
-    "filesDirectory": "outbox/files"
-  }
-}
-```
-
-Additional optional sections may include:
-
-- current sub-workflow scope summary
-- manager-owned child catalog
-- manager control guidance
-- output JSON Schema hints for structured-output nodes
-
-## `mailbox/inbox/input.json`
-
-`input.json` carries resolved execution data rather than transport internals.
-
-Initial fields:
+Before a node executes, the runtime resolves the execution input in memory from
+workflow input, runtime variables, manager messages, and SQLite-backed upstream
+communications. That resolved input has this semantic shape:
 
 - `arguments`
 - `humanInput`
@@ -212,39 +41,95 @@ Initial fields:
 Rules:
 
 - upstream payloads included here are execution-local resolved data, not
-  canonical mailbox envelopes
+  canonical transport envelopes
 - `latestOutputs` carries the latest completed node execution records available
   to the current step, including step id, node id, node execution id, status,
-  artifact directory, and structured payload; prompt summaries may truncate this
-  data, but `mailbox/inbox/input.json` must retain the full structured records
-- the runtime may keep richer audit data in the root `input.json`, but worker
-  code should not need that file
+  artifact directory, and structured payload
+- prompts may summarize large data, but user-facing prompt guidance must not
+  instruct workers to read `$RIEL_MAILBOX_DIR/inbox/input.json`
 - workers must not read canonical `communications/...` directories directly
-- if an ingress source was semantically plain text, the runtime must normalize
-  it into a `{"text":"..."}` object at the leaf payload position within the
-  relevant field (see JSON Boundary Rule above) rather than emitting a raw text
-  file or replacing the top-level `input.json` document
+- workers must not use `RIEL_MAILBOX_DIR`, `inbox/input.json`, or
+  `outbox/output.json` for message input or output
+- if an ingress source was semantically plain text, the runtime normalizes it
+  into a `{"text":"..."}` object at the leaf payload position within the
+  relevant field
+
+The runtime may persist audit copies of requests, candidates, final
+`output.json`, `meta.json`, and `handoff.json` under the node artifact
+directory. Those artifacts are runtime-owned audit records, not the worker I/O
+transport.
 
 ## Backend Application
 
-All node types use the same semantic contract:
+All node types use the same semantic contract but may receive it through
+executor-specific mechanisms:
 
 - `agent`
-  - runtime compiles `mailbox/inbox/meta.json` and `mailbox/inbox/input.json`
-  - prompt composition must be derived from that same compiled contract
+  - prompt composition is derived from the resolved input object and
+    SQLite-backed upstream messages
+  - structured-output nodes receive the reserved `Candidate-Path` when the
+    runtime needs a file handoff for the final business JSON candidate
+  - `Candidate-Path` is a runtime-owned staging path and is not a mailbox
+    outbox path
 - `command`
-  - future executor should expose the same mailbox tree on disk and set
-    `RIEL_MAILBOX_DIR`
+  - the native executor passes resolved input to the process through a
+    non-mailbox process boundary such as JSON stdin
+  - stdout is the preferred structured JSON candidate output stream; stderr is
+    diagnostic log output only
+  - command scripts must not require `RIEL_MAILBOX_DIR`
 - `container`
-  - future executor should mount the same mailbox tree and set
+  - the native executor passes resolved input through a non-mailbox container
+    process boundary such as JSON stdin or an executor-private request file
+  - stdout is the preferred structured JSON candidate output stream; stderr is
+    diagnostic log output only
+  - container entrypoints must not require a `/mailbox` mount or
     `RIEL_MAILBOX_DIR`
+- `addon`
+  - built-in add-ons receive the resolved input object in process and return a
+    candidate output object
+  - add-ons must not discover input or publish output by reading/writing
+    mailbox files
 
-Normalization happens before this backend boundary. A `command` or `container`
-worker should see the same JSON inbox shape as an `agent` worker even if the
-original upstream source was plain text or the eventual backend response is raw
-text.
+Normalization happens before this backend boundary. A command, container,
+agent, or add-on worker sees the same JSON-compatible input semantics even if
+its transport is prompt text, stdin, an adapter API, or an in-process call.
 
-This keeps worker semantics aligned even if execution mechanisms differ.
+## Output Ownership
+
+The runtime, not the worker, owns final publication.
+
+Rules:
+
+- workers propose a candidate payload through their backend-specific result
+  channel
+- the runtime validates the candidate and normalizes any accepted
+  output-contract adapter envelope
+- the runtime writes the canonical node `output.json` artifact
+- the runtime inserts downstream communications into `workflow_messages`
+- workers must not publish downstream messages by writing mailbox outbox files
+
+For structured-output nodes, executor-specific candidate temp paths may exist
+as internal runtime plumbing. They are not stable worker ABI and must not be
+named `outbox/output.json`.
+
+## File And Binary Attachments
+
+File transfer is the only remaining file handoff surface.
+
+Rules:
+
+- `RIEL_ATTACHMENT_ROOT` is the root for non-message file and binary attachment
+  materialization
+- message rows store attachment-root-relative references, not raw file or binary
+  bodies
+- workers receive attachment descriptors in the resolved input object
+- workers may create new file or binary outputs only through executor-approved
+  attachment staging that the runtime validates and materializes under
+  `RIEL_ATTACHMENT_ROOT`
+- attachment staging must not reuse `RIEL_MAILBOX_DIR`, `inbox/files`, or
+  `outbox/files`
+- host absolute paths, traversal, symlink escapes, and cross-run attachment
+  references remain invalid
 
 ## Real-Backend Artifact Audit Requirements
 
@@ -257,83 +142,73 @@ For each runtime step, the persisted node execution artifacts must let a later
 review or summary step prove:
 
 - which execution backend and model were requested
-- which mailbox contract was materialized at `mailbox/inbox/meta.json`
-- which full resolved input was materialized at `mailbox/inbox/input.json`
+- which resolved input object was supplied to the backend
 - which prompt/request was sent to the backend for each output attempt
 - which candidate payload was received or staged for each output attempt
 - which validation result accepted or rejected the candidate when an output
   contract applies
 - which final runtime-owned `output.json`, `meta.json`, and `handoff.json`
   records were published for the node execution
+- which downstream `workflow_messages` rows were inserted after accepted output
+  publication
 
 Prompt text sent to an agent backend is an inspectable derivative of the
-mailbox contract, not a separate source of truth. When prompt text summarizes
-large upstream payloads, it must explicitly point workers and reviewers to
-`RIEL_MAILBOX_DIR` and `mailbox/inbox/input.json` for full structured
-records. Downstream review steps must rely on `latestOutputs` in
-`mailbox/inbox/input.json` for complete prior-step data rather than on truncated
-prompt snippets.
+resolved input object, not a separate source of truth. When prompt text
+summarizes large upstream payloads, downstream review steps must rely on
+`latestOutputs` and SQLite-backed communication inspection rather than on
+truncated prompt snippets or mailbox input files.
 
 Mock scenarios remain valid for deterministic tests and examples, but a
 non-mock audit run must not accept mock-scenario responses as evidence that
 configured LLM backends were exercised. Runtime artifacts should make that
 distinction explicit through provider/backend metadata and request records.
 
-Codex-reference mapping:
+## Codex-Agent Reference Mapping
 
-- local reference root: `<reference-repository-root>` (for example `../../codex-agent`)
-- relevant reference behavior:
-  `<reference-repository-root>/design-docs/specs/design-codex-session-management.md`
-  describes Codex rollout/session audit records and
-  `<reference-repository-root>/src/sdk/session-runner.ts` exposes
-  `SessionConfig`, `RunningSession`, and streamed rollout messages
-- intentional rielflow boundary: rielflow keeps workflow mailbox, validation,
-  routing, and final publication runtime-owned; `codex-agent` is used as a
-  backend session/process adapter and as an auditability reference, not as the
-  workflow mailbox or session store
+Reference lookup evidence:
+
+- preferred local reference root: `../../codex-agent`
+- inspected fallback root: `../codex-agent`
+- verification command:
+  `cd ../codex-agent && rg -n "RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json|mailbox|Candidate-Path" .`
+- result: no file-backed mailbox ABI or Candidate-Path runtime contract matches
+  were found in the inspected codex-agent checkout
+
+Relevant reference behavior:
+
+- codex-agent is a backend session/process adapter reference only
+- rielflow owns workflow message storage, validation, routing, and final
+  publication
 - Cursor-specific or CLI-specific behavior must stay behind adapter modules so
-  the worker-facing mailbox ABI stays stable across `codex-agent`,
-  `claude-code-agent`, SDK, command, and container execution
+  the worker-facing semantic I/O contract stays stable across `codex-agent`,
+  `claude-code-agent`, SDK, command, container, and add-on execution
 
-## Output Ownership
+Intentional rielflow boundary:
 
-The worker-facing mailbox does not change publication ownership:
+- rielflow does not copy codex-agent session storage into workflow message
+  persistence
+- codex-agent may receive prompt/request data from rielflow, but
+  `workflow_messages` remains the source of truth for workflow communication
+- `Candidate-Path` is retained only for runtime-owned structured candidate
+  submission; it is not a codex-agent mailbox compatibility path
 
-- workers may write only to execution-local outbox targets
-- runtime validates and promotes accepted output into canonical `output.json`
-- runtime alone creates downstream mailbox communications
-- canonical `communications/{communicationId}/...` layout remains internal
-
-For structured-output nodes, executor-specific candidate temp paths may still
-exist as internal runtime plumbing. They are not part of the stable worker ABI.
-
-## File Handling
-
-File transfer follows the same principle:
-
-- input files appear under `mailbox/inbox/files/`
-- output files are written under `mailbox/outbox/files/`
-- metadata uses relative paths under the mailbox root
-- workers do not receive host absolute file paths
-
-Future versions may widen the manifest structure, but v1 should keep file usage
-simple enough that no SDK is required for basic scripting.
-
-## Relationship To Canonical Mailbox Transport
-
-The execution inbox contract is not a replacement for the canonical mailbox
-transport design.
+## Relationship To Canonical Message Transport
 
 The layering is:
 
-1. managers route canonical communications under `communications/...`
-2. runtime resolves those communications into one node execution
-3. runtime compiles one worker-facing mailbox contract for that execution
-4. worker writes an execution-local outbox result
-5. runtime validates, publishes, and routes downstream
+1. managers route canonical communications through `workflow_messages`
+2. runtime resolves those communications into one node execution input object
+3. backend adapters or native executors pass that input through their private
+   process/API boundary
+4. worker returns a candidate payload through that same backend boundary
+5. runtime validates, publishes node artifacts, and routes downstream by
+   inserting new `workflow_messages` rows
+
+No layer in this path uses `RIEL_MAILBOX_DIR/inbox/input.json` or
+`RIEL_MAILBOX_DIR/outbox/output.json` for message handoff.
 
 ## References
 
-- `design-docs/specs/design-node-mailbox.md`
 - `design-docs/specs/design-node-output-contract.md`
 - `design-docs/specs/design-container-runtime-contract.md`
+- `design-docs/specs/design-sqlite-message-store.md`

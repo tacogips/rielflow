@@ -772,7 +772,7 @@ describe("callStep", () => {
     expect(result.error.message).not.toContain("cannot call node");
   });
 
-  test("surfaces step-oriented mailbox persistence errors on session lastError", async () => {
+  test("surfaces step-oriented resolved input persistence errors on session lastError", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
@@ -792,7 +792,7 @@ describe("callStep", () => {
     );
     expect(saved.ok).toBe(true);
 
-    const blockedMailboxPath = path.join(
+    const blockedInputPath = path.join(
       artifactsRoot,
       workflowName,
       "executions",
@@ -800,10 +800,10 @@ describe("callStep", () => {
       "nodes",
       "writer-step",
       "exec-000001",
-      "mailbox",
+      "resolved-input",
     );
-    await mkdir(path.dirname(blockedMailboxPath), { recursive: true });
-    await writeFile(blockedMailboxPath, "blocked", "utf8");
+    await mkdir(path.dirname(blockedInputPath), { recursive: true });
+    await writeFile(blockedInputPath, "blocked", "utf8");
 
     const result = await callStep(
       {
@@ -821,13 +821,13 @@ describe("callStep", () => {
     if (result.ok) {
       return;
     }
-    expect(result.error.message).toContain("execution mailbox for step");
-    expect(result.error.message).not.toContain("execution mailbox at");
+    expect(result.error.message).toContain("resolved input snapshot for step");
+    expect(result.error.message).not.toContain("resolved input snapshot at");
     expect(result.error.session.lastError).toContain(
-      "execution mailbox for step",
+      "resolved input snapshot for step",
     );
     expect(result.error.session.lastError).not.toContain(
-      "execution mailbox at",
+      "resolved input snapshot at",
     );
   });
 });

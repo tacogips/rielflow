@@ -341,7 +341,7 @@ multiple posts about the same event/article are merged into one item with
 aggregate views, posting-user count, and up to three linked posting users.
 Provide X credentials through `X_GW_*` environment variables and the Telegram
 target through `RIEL_TELEGRAM_CHAT_ID`; keep live token values out of event and
-workflow files. The binding disables automatic final/error mailbox replies, so
+workflow files. The binding disables automatic final/error replies, so
 Telegram output should come only from the explicit digest reply step. The cursor
 file stores only the latest post id, but raw fetched posts can appear in
 workflow artifacts; for live runs, keep the artifact root under an ignored path

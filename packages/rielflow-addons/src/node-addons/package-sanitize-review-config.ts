@@ -22,7 +22,7 @@ export const WORKFLOW_PACKAGE_SANDBOX_REVIEW_ADDON_VERSION = "1";
 
 export const WORKFLOW_PACKAGE_SANDBOX_REVIEW_OUTPUT: NodeOutputContract = {
   description:
-    "LLM-backed workflow package sandbox review result returned through normal mailbox output.",
+    "LLM-backed workflow package sandbox review result returned through normal runtime output.",
   jsonSchema: {
     type: "object",
     required: [
@@ -357,7 +357,7 @@ export function resolveWorkflowPackageSandboxReviewPayload(input: {
     payload: {
       id: input.nodeId,
       description:
-        "Built-in LLM-backed worker that reviews workflow package evidence and returns a normal mailbox output.",
+        "Built-in LLM-backed worker that reviews workflow package evidence and returns a normal runtime output.",
       model: normalized.config.model,
       executionBackend: normalized.config.executionBackend,
       systemPromptTemplate:

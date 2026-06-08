@@ -232,7 +232,10 @@ compatibility or historical references rather than missed primary examples.
   - Show merged step-run history for the workflow execution.
   - For a session id reported by `workflow status` as active in the same storage context, this command must resolve the owning session before listing merged rows.
 - `session inbox <session-id>`
-  - Planned operator/runner-pool inspection surface for mailbox input/output artifacts associated with the active execution. Event-source supervisor commands use this or equivalent artifact inspection to answer inbox requests without invoking target workflow code.
+  - Planned operator/runner-pool inspection surface for runtime-owned input,
+    output, and SQLite message artifacts associated with the active execution.
+    Event-source supervisor commands use this or equivalent artifact inspection
+    to answer inbox requests without invoking target workflow code.
 - `session logs <session-id>`
   - Show runtime node logs for the session; supports runner-pool event replies and operator debugging.
 - `session export <session-id>`
@@ -504,14 +507,14 @@ The first local verification path should be:
    privacy-preserving smoke test
 4. optionally rerun with `RIELFLOW_OTEL_EXPORT_MESSAGES=true` only
    against a trusted fixture whose inbox/outbox content is intentionally safe
-5. inspect Jaeger for workflow, step/node, adapter, GraphQL/server, and mailbox
+5. inspect Jaeger for workflow, step/node, adapter, GraphQL/server, and message
    handoff spans
 
 Verification commands for the implementation plan should include:
 
 - `bun run typecheck`
 - focused `bun test` targets for telemetry configuration, redaction, workflow
-  execution instrumentation, mailbox/communication instrumentation, and CLI or
+  execution instrumentation, message/communication instrumentation, and CLI or
   library option propagation
 - `docker compose -f compose.jaeger.yaml up -d`
 - `docker compose -f compose.jaeger.yaml ps`

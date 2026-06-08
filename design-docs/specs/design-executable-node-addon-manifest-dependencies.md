@@ -97,7 +97,7 @@ from `addon.json` for registry indexing and early validation.
   "kind": "node-addon",
   "name": "media/yt-dlp-addon",
   "version": "1.0.0",
-  "description": "Download media into the node mailbox.",
+  "description": "Download media into the runtime attachment root.",
   "tags": ["addon", "media", "yt-dlp"],
   "registry": "https://github.com/tacogips/rielflow-packages",
   "checksum": "...",
@@ -124,7 +124,7 @@ from `addon.json` for registry indexing and early validation.
         },
         {
           "name": "filesystem.write",
-          "scope": "mailbox.outbox",
+          "scope": "attachment.output",
           "required": true
         }
       ],
@@ -158,7 +158,7 @@ capabilities[])` and any package-authored `contentDigest`.
 {
   "name": "media/yt-dlp-download",
   "version": "1",
-  "description": "Download media into the node mailbox.",
+  "description": "Download media into the runtime attachment root.",
   "allowedRoles": ["worker"],
   "resolution": {
     "kind": "node-payload-template",
@@ -210,8 +210,10 @@ Capability fields:
 
 - `name`: supported capability name.
 - `required`: boolean, defaults to `true`.
-- `scope`: optional constrained scope such as `mailbox.inbox`,
-  `mailbox.outbox`, `workspace`, `durable`, `host.path`, or a named env var.
+- `scope`: optional constrained scope such as `attachment.input`,
+  `attachment.output`, `workspace`, `durable`, `host.path`, or a named env var.
+  Message input/output is not a filesystem capability scope; it is delivered
+  through the runtime's resolved input object and executor result channel.
 - `reason`: required non-empty explanation for any capability that reaches
   network, host paths, environment variables, GPU devices, or process spawn.
 - `defaultPolicy`: optional `deny`, `prompt`, or `allow`; registry and install
@@ -252,7 +254,7 @@ and verify executable add-on packages before validating the caller workflow.
             },
             "filesystem.write": {
               "allowed": true,
-              "scope": "mailbox.outbox"
+              "scope": "attachment.output"
             }
           }
         }
@@ -483,11 +485,11 @@ whose worker node references:
 }
 ```
 
-The expected result is an accepted command node output written by the packaged
-script under the runtime-owned mailbox outbox. The smoke proves installed
-node-addon resolution, direct-run grant enforcement, digest-gated executable
-file access, Bash dispatch, and temporary workflow execution without requiring
-credential-backed SDK backends.
+The expected result is an accepted command node output returned through the
+native executor result channel and then published by the runtime. The smoke
+proves installed node-addon resolution, direct-run grant enforcement,
+digest-gated executable file access, Bash dispatch, and temporary workflow
+execution without requiring credential-backed SDK backends.
 
 ## Example: Download And Transcribe
 
@@ -495,10 +497,10 @@ The motivating workflow package depends on two add-on packages:
 
 - `media/yt-dlp-addon` provides `media/yt-dlp-download@1`, a container add-on
   with `network.egress`, `container.build`, and `filesystem.write` to
-  `mailbox.outbox`.
+  `attachment.output`.
 - `media/local-transcriber-addon` provides `media/local-transcribe@1`, a local
-  command or container add-on with `filesystem.read` from `mailbox.inbox`,
-  optional `device.gpu`, and `filesystem.write` to `mailbox.outbox`.
+  command or container add-on with `filesystem.read` from `attachment.input`,
+  optional `device.gpu`, and `filesystem.write` to `attachment.output`.
 
 The workflow package lock grants only those capabilities. If a later
 `media/yt-dlp-download@1` package changes its digest or adds `env.read`, checkout

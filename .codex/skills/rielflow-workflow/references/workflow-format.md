@@ -18,7 +18,7 @@ Optional nested node paths such as `workflows/<lane>/nodes/node-<id>.json` are v
 
 ## `workflow.json`
 
-Required top-level fields for ordinary workflows without `extends`:
+Required top-level fields for ordinary workflows:
 
 - `workflowId`
 - `defaults.nodeTimeoutMs`
@@ -26,10 +26,9 @@ Required top-level fields for ordinary workflows without `extends`:
 - `nodes`
 - `steps`
 
-Required top-level fields for sparse derived workflows with `extends`:
-
-- `workflowId`
-- `extends.workflowId`
+Derived workflows that use `extends` require only `workflowId` and
+`extends.workflowId` in their source `workflow.json`; the loader resolves the
+base graph, prompts, defaults, node payloads, and steps before validation.
 
 Common optional top-level fields:
 
@@ -44,6 +43,23 @@ Common optional top-level fields:
 
 The implementation defaults `maxLoopIterations` when omitted, but examples should usually author it explicitly.
 
+Derived workflow example:
+
+```json
+{
+  "workflowId": "example-derived",
+  "extends": {
+    "workflowId": "example-base",
+    "nodePatch": {
+      "worker": {
+        "executionBackend": "cursor-cli-agent",
+        "model": "claude-sonnet-4-5"
+      }
+    }
+  }
+}
+```
+
 Rejected top-level fields:
 
 - `managerRuntimeId`
@@ -55,55 +71,6 @@ Rejected top-level fields:
 - `edges`
 - `loops`
 - `branching`
-
-## Derived Workflow Inheritance
-
-Use `extends` when a workflow family shares one base graph and a derived
-variant needs a different workflow id, backend/model patch, or same-family
-workflow references.
-
-```json
-{
-  "workflowId": "cursor-demo",
-  "description": "Cursor variant.",
-  "extends": {
-    "workflowId": "codex-demo",
-    "stringReplacements": {
-      "codex-demo": "cursor-demo",
-      "codex-helper": "cursor-helper"
-    },
-    "agentNodePatch": {
-      "executionBackend": "cursor-cli-agent",
-      "model": "claude-sonnet-4-5"
-    },
-    "nodePatch": {
-      "worker": {
-        "model": "claude-sonnet-4-5"
-      }
-    }
-  }
-}
-```
-
-Rules:
-
-- `extends.workflowId` names the base workflow id to load.
-- Derived workflows inherit `defaults`, `entryStepId`, `nodes`, `steps`, prompts,
-  and node payloads from the validated base workflow.
-- The derived `workflowId` and optional `description` override inherited values.
-- `stringReplacements` is an object of non-empty source strings to replacement
-  strings; replacements run recursively over strings in the inherited in-memory
-  bundle.
-- Use `stringReplacements` for same-family workflow ids, transition targets,
-  and backend labels. Keep keys specific to avoid unintended prompt or metadata
-  rewrites.
-- `agentNodePatch` applies to inherited file-backed agent nodes only. It does
-  not patch inline agent nodes or add-on-backed nodes.
-- `nodePatch` applies explicit node-id patches after `agentNodePatch`.
-- Runtime node patches still apply after inheritance and remain non-persistent.
-- Loading validates the resolved derived bundle and does not rewrite base or
-  derived workflow files on disk.
-- Inheritance cycles fail validation.
 
 ## Node Registry Entries
 

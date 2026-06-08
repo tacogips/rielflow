@@ -90,13 +90,13 @@ The workflow is responsible for:
 7. implementation-plan review
 8. implementation work
 9. implementation self-review
-10. implementation review
-11. adversarial implementation review for high-risk accepted changes
-12. user-facing documentation refresh (`README.md`, mandatory workflow skill
+10. test-integrity check for inappropriate test deletion, weakened assertions,
+    test-only hacks, skipped coverage, and verification shortcuts
+11. implementation review
+12. adversarial implementation review for high-risk accepted changes
+13. user-facing documentation refresh (`README.md`, mandatory workflow skill
     docs, and any directly affected user-facing skills such as event-source
     runbooks)
-13. implementation-plan completion/archive check, with a documentation refresh
-    reconciliation pass if plan index files changed after Step 12
 14. staged secret scan with `gitleaks git --pre-commit --redact --staged --verbose`
 15. commit-message generation
 16. built-in git commit and git push add-on steps
@@ -120,9 +120,12 @@ catalog paths, and human-facing documentation should use Rielflow/`rielflow`.
 
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via
-an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; inbox/outbox message payloads
-must remain excluded unless `RIELFLOW_OTEL_EXPORT_MESSAGES=true` is explicitly
-set for trusted fixtures. Jaeger smoke checks should use the repository-owned
+an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; workflow message payloads
+stored in SQLite `workflow_messages.payload_json` must remain excluded unless
+`RIELFLOW_OTEL_EXPORT_MESSAGES=true` is explicitly set for trusted fixtures.
+Do not describe runtime communication payloads as inbox/outbox files; SQLite
+`workflow_messages` is the source of truth. Jaeger smoke checks should use the
+repository-owned
 `compose.jaeger.yaml` file and `docker compose -f compose.jaeger.yaml`.
 
 Workflow package checkout issue-resolution runs should refresh user-facing
@@ -132,32 +135,28 @@ package status/update commands, and vendor-scoped skill layouts. Keep `Issue
 unrelated, and preserve `codex-agent` as an execution-backend identifier while
 documenting Codex skill projection as `.codex/skills/<name>/SKILL.md`.
 
-Workflow definition inheritance issue-resolution runs should refresh
-`README.md`, `.codex/skills/rielflow-workflow/SKILL.md`, the design workflow
-JSON reference, and this workflow skill when shipped behavior changes
-`workflow.json` `extends`, `agentNodePatch`, `nodePatch`,
-`stringReplacements`, or same-family workflow reference rewriting. Keep
-`codex-agent` references explicit as execution-backend references, and document
-the accepted verification commands.
-
 SQLite message-store issue-resolution runs should refresh `README.md`, the
 SQLite message-store design, the node-mailbox design when communication
 semantics change, and this workflow skill. User-facing docs must state that
 `workflow_messages` is the canonical source for communication reads, replay,
-retry, GraphQL inspection, and manager mutations; legacy per-message files and
-session communication arrays are not fallback sources. Also document that
-`RIEL_RUNTIME_DB`, `RIEL_ARTIFACT_DIR`, and `RIEL_ATTACHMENT_ROOT` control the
-runtime database and file/binary handoff roots, that SQLite stores only
-attachment-root-relative references for file/binary handoffs, and that failed
-SQLite writes block message publication. For payload attachment snapshot
-changes, user-facing docs must state that `payload.attachments[]` is a mixed
-descriptor array: non-file descriptors remain in
-`workflow_messages.payload_json`, only safely materialized file-backed
-descriptors are rewritten to normalized `attachment-root` refs, and
+retry, GraphQL inspection, and manager mutations; legacy per-message
+communication files and session communication arrays are not fallback sources.
+For file-mailbox removal runs, also state that `RIEL_MAILBOX_DIR`
+`inbox/input.json` and `outbox/output.json` are not node execution message
+contracts, native command/container/add-on workers receive resolved structured
+input through runtime-managed stdin/request files, and native stdout or
+Candidate-Path output is published by the runtime into `workflow_messages`.
+Also document that `RIEL_RUNTIME_DB`, `RIEL_ARTIFACT_DIR`, and
+`RIEL_ATTACHMENT_ROOT` control the runtime database and file/binary handoff
+roots, that SQLite stores only attachment-root-relative references for
+file/binary handoffs, and that failed SQLite writes block message publication.
+For payload attachment snapshot changes, user-facing docs must state that
+`payload.attachments[]` is a mixed descriptor array: non-file descriptors
+remain in `workflow_messages.payload_json`, only safely materialized
+file-backed descriptors are rewritten to normalized `attachment-root` refs, and
 `workflow_messages.artifact_refs_json` stays limited to materialized file refs.
 When the run hardens runtime JSON TEXT columns, also document that required
-JSON text uses
-`CHECK(json_valid(column))`, nullable JSON text uses
+JSON text uses `CHECK(json_valid(column))`, nullable JSON text uses
 `CHECK(column IS NULL OR json_valid(column))`, malformed historical rows may
 fail rebuild migrations explicitly, and manager/session/event/supervisor
 runtime JSON columns follow the same policy as `workflow_messages`

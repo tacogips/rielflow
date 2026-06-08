@@ -105,14 +105,14 @@ export function resolveOutputValidationAttempts(node: NodePayload): number {
 export function buildOutputPublicationPolicy(): {
   readonly owner: "runtime";
   readonly finalArtifactWrite: "runtime-only";
-  readonly mailboxWrite: "runtime-only-after-validation";
+  readonly messageWrite: "runtime-only-after-validation";
   readonly candidateSubmission: "inline-json-or-reserved-candidate-file";
   readonly futureCommunicationIdsExposed: false;
 } {
   return {
     owner: "runtime",
     finalArtifactWrite: "runtime-only",
-    mailboxWrite: "runtime-only-after-validation",
+    messageWrite: "runtime-only-after-validation",
     candidateSubmission: "inline-json-or-reserved-candidate-file",
     futureCommunicationIdsExposed: false,
   };
@@ -187,8 +187,8 @@ export function buildOutputPromptText(input: {
     "",
     "Output contract:",
     "Return only the business JSON object for output.payload.",
-    "Final output.json publication and mailbox delivery are runtime-owned.",
-    "Do not write mailbox files, output.json, or invent communication ids.",
+    "Final output publication and workflow message delivery are runtime-owned.",
+    "Do not attempt runtime message publication yourself or invent communication ids.",
     "If you choose to submit the final business JSON via a file, write that JSON only to the reserved Candidate-Path.",
     "This Candidate-Path restriction applies only to the final structured output submission; repository edits explicitly requested by the node instructions are still allowed.",
   ];

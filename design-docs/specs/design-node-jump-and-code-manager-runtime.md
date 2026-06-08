@@ -1,6 +1,9 @@
 # Node Jump And Code Manager Runtime Design
 
-This document defines the runtime model that replaces authored `if` / `loop` constructs with step-authored jump directives, moves execution status into the runtime-owned output mail envelope, and introduces a deterministic `code` manager as the default manager execution mode.
+This document defines the runtime model that replaces authored `if` / `loop`
+constructs with step-authored jump directives, moves execution status into the
+runtime-owned output envelope, and introduces a deterministic `code` manager as
+the default manager execution mode.
 
 It updates the design direction currently described across:
 
@@ -15,9 +18,11 @@ It updates the design direction currently described across:
 The authored/runtime direction is:
 
 - authored workflows do not use dedicated `if` / `loop` constructs
-- a step's accepted output mail may declare the next step to run
-- the runtime persists execution status (`success`, `fail`, `timeout`) in that same output mail envelope
-- the same reusable node may be revisited many times in one workflow execution, with distinct mailbox instances for each visit
+- a step's accepted output envelope may declare the next step to run
+- the runtime persists execution status (`success`, `fail`, `timeout`) in that
+  same output envelope
+- the same reusable node may be revisited many times in one workflow execution,
+  with distinct execution instances for each visit
 - node sessions should be resumable with a changed prompt so the same backend session can perform follow-up work such as self-review
 - timeout behavior should be workflow-defined, overridable per node call, and executable by a deterministic engine
 - manager nodes should default to `code`, with `llm` retained as an experimental alternative
@@ -26,7 +31,7 @@ The authored/runtime direction is:
 The target architecture is therefore:
 
 - workflow authoring defines allowed jumps and timeout policy
-- worker nodes return accepted output mail envelopes
+- worker nodes return accepted output envelopes
 - a manager engine reads those envelopes and executes the next transition
 - `code` manager executes those rules deterministically
 - `llm` manager may still propose actions, but only through the same validated control contract
@@ -44,9 +49,11 @@ Supporting design: `design-docs/specs/design-workflow-steps-and-node-reuse.md`.
 ## Goals
 
 - Remove authored `if` / `loop` primitives from the primary workflow schema.
-- Express control flow through node output mail plus workflow-validated jump edges.
-- Persist runtime-generated status metadata in the node output mail envelope.
-- Support repeated visits to the same node without mailbox collision or ambiguous latest-output selection.
+- Express control flow through runtime-owned node output envelopes plus
+  workflow-validated jump edges.
+- Persist runtime-generated status metadata in the node output envelope.
+- Support repeated visits to the same node without artifact collision or
+  ambiguous latest-output selection.
 - Support same-session node continuation with a different prompt variant.
 - Keep workflow-level default timeout plus per-step, per-node, and per-invocation overrides.
 - Make timeout reaction deterministic and policy-driven.
@@ -58,7 +65,7 @@ Supporting design: `design-docs/specs/design-workflow-steps-and-node-reuse.md`.
 ## Non-Goals
 
 - Freeform arbitrary jumps to nodes not declared in the workflow.
-- Letting worker nodes write canonical downstream inboxes directly.
+- Letting worker nodes write canonical downstream messages directly.
 - Guaranteeing backend-session reuse after a hard timeout for every backend.
 - Preserving authored `loops[]`, `branching`, `branch-judge`, or `loop-judge` in the target schema.
 
@@ -155,10 +162,11 @@ Rules:
 - `promptVariants` let the runtime resume or revisit a node with a different prompt while keeping the same node identity
 - if `sessionPolicy.mode = "reuse"` and the backend supports session continuation, a revisit may continue the prior backend session for that node
 
-## Output Mail Contract
+## Output Envelope Contract
 
-The target model does not use a separate authored `system` mailbox for node status.
-Instead, the runtime-owned accepted output mail envelope carries both business payload and system metadata.
+The target model does not use a separate authored `system` mailbox for node
+status. Instead, the runtime-owned accepted output envelope carries both
+business payload and system metadata.
 
 Canonical shape:
 
@@ -169,7 +177,7 @@ Canonical shape:
   "stepId": "implement",
   "nodeId": "coder",
   "nodeExecId": "exec-000014",
-  "mailboxInstanceId": "feature-workflow-implement-20260424T123456789Z-0001",
+  "stepInstanceId": "feature-workflow-implement-20260424T123456789Z-0001",
   "status": "success",
   "reason": "implementation completed",
   "startedAt": "2026-04-24T12:34:00.000Z",
@@ -194,7 +202,7 @@ Canonical shape:
 - `finishedAt`
 - `timeoutMs`
 - `stepId`
-- `mailboxInstanceId`
+- `stepInstanceId`
 
 ### Optional Jump Directive
 
@@ -228,7 +236,7 @@ Examples:
 - validation failure after retry exhaustion writes `status = "fail"`
 - execution timeout writes `status = "timeout"`
 
-When a node times out before producing a valid business payload, the runtime still publishes an output mail envelope with:
+When a node times out before producing a valid business payload, the runtime still publishes an output envelope with:
 
 - `status = "timeout"`
 - `reason` describing the timeout
@@ -237,13 +245,14 @@ When a node times out before producing a valid business payload, the runtime sti
 
 That timeout envelope is then consumed by the manager engine to decide retry, jump, or workflow failure.
 
-## Mailbox Instance Model For Revisited Nodes
+## Execution Instance Model For Revisited Nodes
 
-Repeated visits to the same `nodeId` must never share the same mailbox directory.
+Repeated visits to the same `nodeId` must never share the same execution
+artifact directory.
 
 ### New Identifier
 
-Add `mailboxInstanceId` as the filesystem-visible identity for one node invocation.
+Add `stepInstanceId` as the filesystem-visible identity for one step invocation.
 
 Format:
 
@@ -257,30 +266,29 @@ Rules:
 
 - `timestampCompact` is UTC and sortable
 - `sequenceAbbrev` disambiguates same-timestamp collisions
-- `mailboxInstanceId` is unique within one `workflowExecutionId`
+- `stepInstanceId` is unique within one `workflowExecutionId`
 - `nodeExecId` remains the stable runtime/api execution identifier
-- one `nodeExecId` maps to exactly one `mailboxInstanceId`
+- one `nodeExecId` maps to exactly one `stepInstanceId`
 
 ### Directory Layout
 
 Target execution-local layout:
 
 ```text
-{artifact-root}/{workflowId}/executions/{workflowExecutionId}/nodes/{nodeId}/{mailboxInstanceId}/
+{artifact-root}/{workflowId}/executions/{workflowExecutionId}/steps/{stepId}/{stepInstanceId}/
   input.json
   output.json
   meta.json
-  mailbox/
-    inbox/
-    outbox/
 ```
 
 Consequences:
 
 - the same node may appear multiple times under its own node directory
 - "latest output for node X" becomes policy-driven and cannot rely on one fixed node path
-- mailbox readers must resolve by `nodeExecId`, `mailboxInstanceId`, or an explicit selection policy rather than by plain `nodeId`
-- canonical routed communication artifacts under `communications/{communicationId}/` remain the source of truth for inter-node delivery; `mailboxInstanceId` disambiguates execution-local node artifacts and mailbox views only
+- message readers must resolve by `nodeExecId`, `stepInstanceId`, or an
+  explicit selection policy rather than by plain `nodeId`
+- SQLite `workflow_messages` rows remain the source of truth for inter-node
+  delivery; `stepInstanceId` disambiguates execution-local node artifacts only
 
 ## Same-Session Continuation And Prompt Changes
 
@@ -349,7 +357,7 @@ Rules:
 
 Responsibilities:
 
-- read accepted output mail envelopes
+- read accepted output envelopes
 - validate jump requests against step transitions
 - synthesize timeout recovery from `timeoutPolicy`
 - launch node revisits with explicit `promptVariant`, `sessionMode`, and timeout overrides
@@ -398,9 +406,9 @@ Timeout reaction resolution order:
 Required behaviors:
 
 - the runtime aborts execution at the effective timeout
-- the runtime writes a timeout output mail envelope
+- the runtime writes a timeout output envelope
 - the manager engine evaluates timeout policy after that envelope is persisted
-- timeout retry creates a fresh `nodeExecId` and `mailboxInstanceId`
+- timeout retry creates a fresh `nodeExecId` and `stepInstanceId`
 - timeout retry may increase the timeout
 - timeout retry may target the same node or a fallback jump node depending on policy
 
@@ -428,9 +436,9 @@ Target state (current direction): authored `workflowCalls` is rejected; cross-wo
 
 Add `code` manager coverage for at least:
 
-- valid jump selection from output mail `next.stepId`
+- valid jump selection from output envelope `next.stepId`
 - rejection of undeclared jump targets
-- repeated invocation of the same node with unique `mailboxInstanceId`
+- repeated invocation of the same node with unique `stepInstanceId`
 - same-session revisit with `promptVariant` and `sessionMode = "reuse"`
 - timeout envelope publication
 - timeout retry with increased timeout

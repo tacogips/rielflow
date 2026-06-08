@@ -8,7 +8,7 @@ The current `rielflow` runtime already has strong domain primitives:
 
 - workflow definitions and sub-workflow boundaries,
 - workflow-execution/session persistence,
-- mailbox-backed inter-node communication,
+- SQLite-backed inter-node communication,
 - manager-owned routing and replay constraints,
 - deterministic node execution artifacts.
 
@@ -33,7 +33,8 @@ The requested redesign does not fundamentally conflict with the current runtime 
 
 - `workflow.json` / `node-*.json` remain valid workflow-definition sources.
 - `workflowExecutionId`-scoped artifact directories remain valid.
-- mailbox artifacts under `communications/{communicationId}/` remain the durable source of truth for routed sends.
+- SQLite `workflow_messages` rows remain the durable source of truth for
+  routed sends.
 - manager ownership rules from `design-node-mailbox.md` remain valid.
 - session persistence and node execution artifacts remain valid.
 - sub-workflow and conversation routing models remain valid.
@@ -55,13 +56,14 @@ The redesign resolves the conflict by changing interface layering, not by replac
 - GraphQL becomes the canonical control-plane API for domain operations.
 - long-term, the CLI becomes a thin GraphQL client; `rielflow graphql` is the canonical generic GraphQL command and legacy `gql` compatibility is not retained.
 - manager-output `managerControl.actions` becomes a compatibility mode rather than the long-term primary manager control path.
-- mailbox/session artifacts remain durable runtime state and are not replaced by GraphQL.
+- SQLite message records and session artifacts remain durable runtime state and
+  are not replaced by GraphQL.
 
 ## Design Goals
 
 - Make GraphQL the canonical domain API for workflow execution, communication queries, send/replay, and manager inspection.
 - Allow an `rielflow` manager node to call `rielflow graphql "<graphql document>"` from inside its LLM/tool environment.
-- Preserve current mailbox and execution auditability.
+- Preserve current message and execution auditability.
 - Support communication inspection and communication replay without mutating historical artifacts in place.
 - Keep the existing local-first deployment model.
 
@@ -93,8 +95,8 @@ Argument-shape rule:
   objects, not escaped JSON strings passed through GraphQL `String` fields
 - semantically plain-text inputs should remain plain text at the GraphQL layer
 - if a plain-text GraphQL input later becomes part of node execution input, the
-  runtime normalizes it into canonical JSON before writing execution inbox
-  artifacts
+  runtime normalizes it into canonical JSON before adding it to a resolved
+  execution input audit record or SQLite `workflow_messages` payload snapshot
 
 This keeps GraphQL contracts explicit and avoids forcing callers to manually
 double-encode JSON into string arguments.
@@ -300,15 +302,18 @@ With variables:
 
 ## Manager Control Plane Model
 
-The redesign introduces a manager control plane distinct from mailbox transport.
+The redesign introduces a manager control plane distinct from SQLite message
+transport.
 
 ### Separation of Concerns
 
-- mailbox communication remains runtime-owned node-to-node transport
+- `workflow_messages` communication remains runtime-owned node-to-node transport
 - manager send is a control-plane request from an `rielflow` manager tool session to the orchestration runtime
-- a manager send may result in zero or more mailbox communications, node executions, retries, or planner-state updates
+- a manager send may result in zero or more `workflow_messages`
+  communications, node executions, retries, or planner-state updates
 
-This separation avoids overloading a user- or manager-authored freeform message with the same meaning as a durable mailbox artifact.
+This separation avoids overloading a user- or manager-authored freeform message
+with the same meaning as a durable workflow message row.
 
 ### New Runtime Concepts
 
@@ -494,13 +499,8 @@ Even if `communicationId` is practically unique within a workflow execution, all
 - delivery bookkeeping: `deliveryAttemptIds`, `activeDeliveryAttemptId`
 - timestamps: `createdAt`, `deliveredAt`, `consumedAt`
 - artifact references: `artifactDir`
-- mailbox artifact snapshots:
-  - `message`
-  - `meta`
-  - `outboxMessage`
-  - `outboxOutputRaw`
-  - `inboxMessage`
-  - `attempts[]`
+- SQLite message snapshots derived from `workflow_messages`, including
+  payload, route, lifecycle, and delivery-attempt metadata
 - derived status summary:
   - communication lifecycle status
   - source node execution status
@@ -517,7 +517,8 @@ The GraphQL layer must expose both explicitly and must not flatten them into one
 
 ## Communication Retry and Replay
 
-The current mailbox design already distinguishes retry attempts from re-sends. The GraphQL redesign formalizes that distinction.
+The current message design already distinguishes retry attempts from re-sends.
+The GraphQL redesign formalizes that distinction.
 
 ### Retry Delivery
 
@@ -549,7 +550,8 @@ Effect:
 - set the new communication `deliveryKind` to `manual-rerun`
 - preserve `payloadRef` provenance back to the original source output or explicit replay source
 
-This is aligned with the current mailbox rule that a re-executed/resubmitted send allocates a new `communicationId`.
+This is aligned with the current message rule that a re-executed/resubmitted
+send allocates a new `communicationId`.
 
 ### Manager Scope Enforcement for Replay and Retry
 
@@ -644,7 +646,8 @@ GraphQL manager messaging is downstream of runtime-owned node completion; it is 
 Rules:
 
 - the runtime must receive or await node completion in the node execution path itself
-- accepted node output is published by the runtime before any follow-up manager message, mailbox send, or automatic transition is triggered
+- accepted node output is published by the runtime before any follow-up manager
+  message, `workflow_messages` send, or automatic transition is triggered
 - if a completed node requires manager review, the runtime must start or queue that manager step directly from the execution transition
 - the system must not depend on a periodic filesystem watcher that scans for new `output.json` files in order to wake the manager
 - adapter-local file watching is allowed only as a special ingestion strategy for an external backend that can publish results solely through shared files; it must still hand the final result back into the normal runtime-owned completion path
@@ -655,7 +658,8 @@ Rules:
 
 - the client never supplies `communicationId` to `sendManagerMessage`
 - if a manager message results only in planner-state updates or queue changes, no `communicationId` is allocated
-- if a manager message materializes one or more mailbox sends, the runtime allocates one new `communicationId` per created send event
+- if a manager message materializes one or more `workflow_messages` sends, the
+  runtime allocates one new `communicationId` per created send event
 - fan-out therefore returns multiple created `communicationId` values
 - a replay mutation allocates a new `communicationId`
 - a delivery-retry mutation does not allocate a new `communicationId`; it allocates a new `deliveryAttemptId`
@@ -671,7 +675,8 @@ When `sendManagerMessage` includes image or file attachments:
 
 ### Manager-Originated Payload Provenance Gap
 
-The current mailbox persistence model assumes each durable communication references a published node-output artifact through `payloadRef`.
+The current SQLite message persistence model assumes each durable communication
+references a published node-output artifact through `payloadRef`.
 
 That assumption is valid for:
 
@@ -684,7 +689,11 @@ It is not yet sufficient for a manager-authored `sendManagerMessage` request tha
 Implications:
 
 - `planner-note`, `retry-step`, optional-step actions, and `replay-communication` are implemented on top of the current foundation (node-output and manager-message `payloadRef` shapes as in `design-data-model.md`)
-- historical designs that relied on `deliver-to-child-input` / `start-sub-workflow` as manager-control actions are retired; any future manager-originated mailbox send that is not covered by the current discriminated `payloadRef` union would need an explicit new design slice
+- historical designs that relied on `deliver-to-child-input` /
+  `start-sub-workflow` as manager-control actions are retired; any future
+  manager-originated `workflow_messages` send that is not covered by the
+  current discriminated `payloadRef` union would need an explicit new design
+  slice
 
 Required follow-up design direction:
 
@@ -699,7 +708,8 @@ Concrete direction for the next implementation slice:
 - allocate `managerMessageId` as an opaque collision-safe id for each append-only manager command; do not derive it from the current message count
 - persist both:
   - `message.json` for the audit envelope
-  - `output.json` for the normalized payload handed to downstream mailbox deliveries
+  - `output.json` for the normalized payload handed to downstream
+    `workflow_messages` deliveries
 - normalize manager-message-backed payloads to the same runtime-owned output contract shape used by node executions:
   - `provider: "manager-message"`
   - `completionPassed: true`
@@ -712,7 +722,10 @@ Concrete direction for the next implementation slice:
 - preserve `sourceNodeExecId` on the communication record:
   - for node-output-backed deliveries it remains the producing node execution id
   - for manager-message-backed deliveries it is the active `managerNodeExecId`
-- keep replay/retry compatibility by reading the existing communication outbox payload first and falling back to `payloadRef.artifactDir/output.json`
+- keep replay/retry compatibility by reading the existing
+  `workflow_messages.payload_json` snapshot first and falling back to the
+  runtime-owned `payloadRef.artifactDir/output.json` audit artifact when the
+  snapshot is absent
 
 With that widened provenance model in place, manager-message-backed communications remain replayable using the same artifact tree rules as today; optional future extensions would be new action types and an explicit compatibility plan, not the removed structural control actions.
 
@@ -858,7 +871,8 @@ Added responsibilities:
 
 ## Data Model Extensions
 
-The runtime session and mailbox record model needs additive fields for first-class replay and manager sessions.
+The runtime session and SQLite message record model needs additive fields for
+first-class replay and manager sessions.
 
 ### Communication Record Additions
 
@@ -905,7 +919,10 @@ New persisted concept:
 - worker nodes must not inherit manager-session credentials
 - GraphQL mutations that can alter execution state must validate workflow ownership and manager scope
 - communication replay must be idempotent under a caller-supplied idempotency key when available
-- manager-message and communication artifact writes must use collision-safe same-directory temp files before rename so concurrent control-plane writes cannot clobber each other's staging paths
+- manager-message audit artifact writes must use collision-safe same-directory
+  temp files before rename, and communication state changes must be committed
+  through SQLite `workflow_messages` transactions so concurrent control-plane
+  writes cannot clobber each other's staging paths or transport rows
 - the local-first model remains the deployment assumption for this iteration
 
 ## Migration Plan Direction
@@ -914,7 +931,8 @@ Recommended migration order:
 
 1. Align root-data path resolution so artifact, session, and future attachment paths share one canonical base with migration-safe aliases.
 2. Add shared application services for communication inspection/retry/replay and manager messaging.
-3. Add manager-message provenance support for manager-authored mailbox sends.
+3. Add manager-message provenance support for manager-authored
+   `workflow_messages` sends.
 4. Add GraphQL schema and server integration on top of those services.
 5. Add the generic `rielflow graphql` CLI client.
 6. Inject manager-session environment into manager-node executions and update manager prompt guidance.
@@ -922,13 +940,15 @@ Recommended migration order:
 
 ## Decision
 
-The requested redesign is compatible with the current runtime design if GraphQL is treated as a new canonical control plane layered over the existing execution/mailbox engine.
+The requested redesign is compatible with the current runtime design if GraphQL
+is treated as a new canonical control plane layered over the existing execution
+engine and SQLite message store.
 
 It conflicts with the current CLI/control surface if interpreted as an in-place replacement with no abstraction step.
 
 Therefore the redesign direction is:
 
-- keep execution/mailbox/session artifacts,
+- keep execution/message/session artifacts,
 - introduce a manager control plane,
 - make GraphQL canonical,
 - make CLI a generic client over that control plane,

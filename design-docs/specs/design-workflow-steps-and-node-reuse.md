@@ -28,7 +28,8 @@ This creates a clean separation:
 - Make `node` reusable across multiple steps.
 - Allow different steps to share one LLM/code node definition intentionally.
 - Preserve same-session continuation across steps when requested.
-- Keep routing, mailbox artifacts, and jump validation unambiguous even when many steps point at the same node.
+- Keep routing, SQLite message records, and jump validation unambiguous even
+  when many steps point at the same node.
 
 ## Non-Goals
 
@@ -256,7 +257,8 @@ If multiple steps share one node, node id alone is no longer enough to answer:
 Therefore:
 
 - jumps target `stepId`
-- mailbox artifacts record both `stepId` and the backing registry `nodeId`
+- `workflow_messages` rows and node execution artifacts record both `stepId`
+  and the backing registry `nodeId`
 - scheduling and routing use `stepId` as the canonical execution position; `nodeId` remains the template and backend-session identity for artifacts and reuse
 
 ## Step Reuse And Session Continuation
@@ -314,7 +316,7 @@ Meaning:
 
 With a step-based workflow, the jump contract should become step-addressed.
 
-Target output mail `next` shape:
+Target output envelope `next` shape:
 
 ```json
 {
@@ -347,7 +349,7 @@ Recommended execution-local directory layout:
   input.json
   output.json
   meta.json
-  mailbox/
+  output-attempts/
 ```
 
 `meta.json` should include:

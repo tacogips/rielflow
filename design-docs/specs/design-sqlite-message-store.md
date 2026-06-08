@@ -21,6 +21,8 @@ Design goals:
 - let operators override the runtime database and file roots with environment
   variables
 - fail message publication when the SQLite write fails
+- make `workflow_messages` the only runtime workflow/node handoff source; the
+  old `RIEL_MAILBOX_DIR` inbox/outbox file ABI is removed, not deprecated
 
 ## Storage Roots
 
@@ -45,6 +47,37 @@ Override order:
 
 `RIEL_ARTIFACT_ROOT` still controls non-message workflow artifacts, but it is
 not the canonical message transport root.
+
+## Node Execution I/O Boundary
+
+`workflow_messages` is the only runtime transport for node handoff. Before a
+node executes, the runtime resolves relevant workflow input, manager messages,
+and upstream message rows into one execution input object. Backends receive
+that object through their adapter or native executor boundary, not by reading a
+worker-visible mailbox directory.
+
+Removed compatibility surfaces:
+
+- no `RIEL_MAILBOX_DIR` environment variable for message input or output
+- no `inbox/input.json` worker input contract
+- no `outbox/output.json` worker output contract
+- no command, container, add-on, prompt, skill, or documentation path may
+  instruct workers to publish downstream messages by writing mailbox files
+
+Backend-specific input/output channels remain implementation details:
+
+- agent adapters render prompts from the resolved input object and may expose a
+  reserved `Candidate-Path` for structured business JSON candidates
+- command and container nodes should receive input through JSON stdin or an
+  executor-private request file and return candidate JSON through stdout or the
+  executor result channel
+- in-process add-ons receive the resolved input object directly and return a
+  candidate output object
+
+After candidate validation, the runtime publishes the canonical node
+`output.json` artifact and inserts any downstream `workflow_messages` rows.
+Workers never allocate communication ids and never write message transport
+records directly.
 
 ## Message File Path Shape
 
@@ -279,6 +312,31 @@ replay/retry selection, and consumed-state updates read from
 
 GraphQL inspection surfaces synthesize message snapshots from the SQLite row.
 They do not require per-communication mailbox files.
+
+## File-Mailbox Removal Boundary
+
+The SQLite migration removes the runtime message contract based on
+`RIEL_MAILBOX_DIR`, `inbox/input.json`, and `outbox/output.json`.
+
+Rules:
+
+- no new node execution should receive message input by reading
+  `$RIEL_MAILBOX_DIR/inbox/input.json`
+- no new node execution should publish message output by writing
+  `$RIEL_MAILBOX_DIR/outbox/output.json`
+- native command, container, and add-on execution must use executor-owned
+  process/API result channels instead of mailbox files
+- agent prompt guidance must not tell workers or reviewers to inspect mailbox
+  input files for full structured records
+- legacy mailbox files do not create, repair, or override
+  `workflow_messages` rows
+- deleting legacy mailbox files must not affect SQLite-backed communication
+  reads
+
+`RIEL_ATTACHMENT_ROOT` remains valid for non-message file and binary
+attachments. Attachment descriptors may appear in `payload_json` and
+`artifact_refs_json`, but message bodies and node execution input/output handoff
+must not move back to file-backed mailbox paths.
 
 ## PR #54 Review Boundary
 

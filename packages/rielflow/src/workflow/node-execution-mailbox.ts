@@ -67,7 +67,6 @@ export interface NodeExecutionMailboxStructure {
 
 export interface NodeExecutionMailboxMeta {
   readonly protocolVersion: 1;
-  readonly mailboxDirEnvVar: "RIEL_MAILBOX_DIR";
   readonly mailboxInstanceId?: string;
   readonly node: {
     readonly workflowId: string;
@@ -80,14 +79,10 @@ export interface NodeExecutionMailboxMeta {
     readonly expectedReturn: string;
     readonly instruction: string;
   };
-  readonly paths: {
-    readonly inputPath: "inbox/input.json";
-    readonly inputFilesDir: "inbox/files";
-    readonly outputPath: "outbox/output.json";
-    readonly outputFilesDir: "outbox/files";
-  };
   readonly input: {
     readonly kind: "json";
+    readonly source: "resolved-workflow-messages";
+    readonly snapshotPath: "resolved-input/input.json";
     readonly upstreamSources: readonly {
       readonly fromNodeId: string;
       readonly transitionWhen: string;
@@ -97,8 +92,8 @@ export interface NodeExecutionMailboxMeta {
   readonly output: {
     readonly kind: "json";
     readonly required: true;
-    readonly path: "outbox/output.json";
-    readonly filesDirectory: "outbox/files";
+    readonly publication: "runtime-owned-after-validation";
+    readonly candidateSubmission: "inline-json-or-reserved-candidate-file";
     readonly description?: string;
     readonly jsonSchema?: JsonObject;
   };
@@ -129,10 +124,6 @@ export interface NodeExecutionMailbox {
 
 export interface NodeExecutionMailboxArtifactPaths {
   readonly rootDir: string;
-  readonly inboxDir: string;
-  readonly outboxDir: string;
-  readonly inputFilesDir: string;
-  readonly outputFilesDir: string;
   readonly metaPath: string;
   readonly inputPath: string;
 }
@@ -190,7 +181,7 @@ function buildNodeReason(
 
   switch (nodeRef.kind ?? nodeRef.control) {
     case "input":
-      return "Convert received mailbox/runtime input into a clean workflow-scoped input payload for downstream work.";
+      return "Convert received runtime input into a clean workflow-scoped input payload for downstream work.";
     case "output":
       return "Assemble the final result for the current workflow.";
     case "branch-judge":
@@ -345,7 +336,6 @@ export function buildNodeExecutionMailbox(
   return {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       ...(input.mailboxInstanceId === undefined
         ? {}
         : { mailboxInstanceId: input.mailboxInstanceId }),
@@ -361,14 +351,10 @@ export function buildNodeExecutionMailbox(
         expectedReturn: buildExpectedReturn(input.nodeRef, input.node),
         instruction: input.basePromptText.trim(),
       },
-      paths: {
-        inputPath: "inbox/input.json",
-        inputFilesDir: "inbox/files",
-        outputPath: "outbox/output.json",
-        outputFilesDir: "outbox/files",
-      },
       input: {
         kind: "json",
+        source: "resolved-workflow-messages",
+        snapshotPath: "resolved-input/input.json",
         upstreamSources: input.upstreamInputs.map((entry) => ({
           fromNodeId: entry.fromNodeId,
           transitionWhen: entry.transitionWhen,
@@ -378,8 +364,8 @@ export function buildNodeExecutionMailbox(
       output: {
         kind: "json",
         required: true,
-        path: "outbox/output.json",
-        filesDirectory: "outbox/files",
+        publication: "runtime-owned-after-validation",
+        candidateSubmission: "inline-json-or-reserved-candidate-file",
         ...(input.node.output?.description === undefined
           ? {}
           : { description: input.node.output.description }),
@@ -500,7 +486,7 @@ function renderUpstreamSection(
   upstreamInputs: readonly PromptCompositionUpstreamInput[],
 ): string {
   if (upstreamInputs.length === 0) {
-    return "Upstream data:\n- No mailbox or upstream node payloads were attached to this execution.";
+    return "Upstream data:\n- No upstream workflow message payloads were attached to this execution.";
   }
 
   const lines = ["Upstream data:"];
@@ -527,7 +513,7 @@ function renderLatestOutputsSection(
 
   const lines = [
     "Latest completed step outputs:",
-    "- Full structured records are available in mailbox input field `latestOutputs`.",
+    "- Full structured records are available in resolved input field `latestOutputs`.",
   ];
   for (const entry of latestOutputs) {
     const identityParts = [
@@ -640,17 +626,11 @@ export function renderNodeExecutionMailboxPromptSections(
 export function resolveNodeExecutionMailboxArtifactPaths(
   artifactDir: string,
 ): NodeExecutionMailboxArtifactPaths {
-  const rootDir = path.join(artifactDir, "mailbox");
-  const inboxDir = path.join(rootDir, "inbox");
-  const outboxDir = path.join(rootDir, "outbox");
+  const rootDir = path.join(artifactDir, "resolved-input");
   return {
     rootDir,
-    inboxDir,
-    outboxDir,
-    inputFilesDir: path.join(inboxDir, "files"),
-    outputFilesDir: path.join(outboxDir, "files"),
-    metaPath: path.join(inboxDir, "meta.json"),
-    inputPath: path.join(inboxDir, "input.json"),
+    metaPath: path.join(rootDir, "meta.json"),
+    inputPath: path.join(rootDir, "input.json"),
   };
 }
 
@@ -659,8 +639,7 @@ export async function writeNodeExecutionMailboxArtifacts(
   mailbox: NodeExecutionMailbox,
 ): Promise<NodeExecutionMailboxArtifactPaths> {
   const paths = resolveNodeExecutionMailboxArtifactPaths(artifactDir);
-  await mkdir(paths.inputFilesDir, { recursive: true });
-  await mkdir(paths.outputFilesDir, { recursive: true });
+  await mkdir(paths.rootDir, { recursive: true });
   await writeJsonFile(paths.metaPath, mailbox.meta);
   await writeJsonFile(paths.inputPath, mailbox.input);
   return paths;

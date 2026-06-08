@@ -157,6 +157,29 @@ describe("communication-service", () => {
     expect(view?.artifactSnapshot.attemptFiles[0]?.attemptJson).toContain(
       communication.communicationId,
     );
+    expect(view?.artifactSnapshot.outboxOutputRaw).toContain("payload");
+    await expect(
+      readFile(
+        path.join(
+          communication.artifactDir,
+          "outbox",
+          communication.fromNodeId,
+          "output.json",
+        ),
+        "utf8",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      readFile(
+        path.join(
+          communication.artifactDir,
+          "inbox",
+          communication.toNodeId,
+          "message.json",
+        ),
+        "utf8",
+      ),
+    ).rejects.toThrow();
   });
 
   test("prefers sqlite message rows when session communications are missing", async () => {

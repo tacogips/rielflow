@@ -14,7 +14,7 @@ Bounded fanout/join adds an explicit orchestration primitive while preserving th
 - a join step is queued exactly once after all required branch work completes successfully
 - the join step receives deterministic aggregate inputs ordered by authored branch order or source item order
 
-The current issue scope is to complete the local form of this model. A fanout transition that targets `toStepId` without `toWorkflowId` is an inline local fanout: every branch executes in the parent workflow session, uses the same workflow definition and session store, and still receives branch-scoped runtime variables, mailbox inputs, node execution ids, artifacts, timeout handling, and fanout group records. Cross-workflow fanout remains a separate mode that creates callee workflow executions and then resumes the caller at the same caller-workflow join step.
+The current issue scope is to complete the local form of this model. A fanout transition that targets `toStepId` without `toWorkflowId` is an inline local fanout: every branch executes in the parent workflow session, uses the same workflow definition and session store, and still receives branch-scoped runtime variables, SQLite-backed resolved inputs, node execution ids, artifacts, timeout handling, and fanout group records. Cross-workflow fanout remains a separate mode that creates callee workflow executions and then resumes the caller at the same caller-workflow join step.
 
 This is a workflow-engine feature. It is not a cursor-agent backend feature. Cursor-specific behavior remains isolated to agent adapter modules such as `src/workflow/adapters/*`; the fanout scheduler only sees ordinary step executions and backend-neutral outputs.
 
@@ -199,13 +199,18 @@ TASK-003 lifecycle semantics must be verified against the parent-session local f
 - run-level `maxConcurrency` clamps both authored/default local fanout concurrency and existing cross-workflow fanout concurrency; local lifecycle work must preserve the current effective-concurrency metadata used by status and join records
 - parent-session local fanout may stay serialized while session mutation is single-writer; future parallel local branch execution must report branch lifecycle events back through a serialized reducer before saving session state or publishing communications
 
-Every branch worker execution, including local fanout branches and join steps, must receive the same structured input through both worker-facing input surfaces:
+Every branch worker execution, including local fanout branches and join steps,
+must receive the same structured input through the runtime-resolved semantic I/O
+contract:
 
 - root artifact `input.json` remains the runtime audit record for the node execution
-- `mailbox/inbox/input.json` is the worker-facing resolved input and must contain the same business input shape needed by prompts, commands, and containers
-- `mailbox/inbox/meta.json` declares `mailboxDirEnvVar: "RIEL_MAILBOX_DIR"` and mailbox-root-relative paths such as `inbox/input.json` and `outbox/output.json`
-- prompt guidance for LLM workers must tell the worker where `mailbox/inbox/input.json` is and that `RIEL_MAILBOX_DIR` points at the mailbox root
-- workers must not write canonical mailbox files or final `output.json`; final output publication and downstream mailbox delivery remain runtime-owned
+- backend adapters and native executors receive the resolved input object
+  through non-mailbox process/API boundaries
+- prompt guidance for LLM workers must not reference `RIEL_MAILBOX_DIR`,
+  `mailbox/inbox/input.json`, or `outbox/output.json`
+- workers must not write canonical message rows or final `output.json`; final
+  output publication and downstream `workflow_messages` delivery remain
+  runtime-owned
 
 ## Cross-Workflow Dispatch
 

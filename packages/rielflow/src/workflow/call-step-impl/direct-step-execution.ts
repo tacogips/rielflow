@@ -285,31 +285,27 @@ export class ExecutionDispatcher {
       upstreamInputs: [],
       ...(input.message === undefined ? {} : { managerMessage: input.message }),
     });
-    let mailboxDir: string;
     try {
-      const mailboxPaths = await writeNodeExecutionMailboxArtifacts(
-        artifactDir,
-        executionMailbox,
-      );
-      mailboxDir = mailboxPaths.rootDir;
+      await writeNodeExecutionMailboxArtifacts(artifactDir, executionMailbox);
     } catch (error: unknown) {
       const message =
         error instanceof Error
           ? error.message
-          : "unknown execution mailbox persistence failure";
+          : "unknown resolved input snapshot persistence failure";
       const failedSession: WorkflowSessionState = {
         ...session,
         status: "failed",
         currentNodeId: input.stepId,
         endedAt: nowIso(),
-        lastError: `failed to persist execution mailbox for step '${input.stepId}': ${message}`,
+        lastError: `failed to persist resolved input snapshot for step '${input.stepId}': ${message}`,
       };
       const persisted = await saveSession(failedSession, input);
       return err({
         session: failedSession,
         exitCode: 1,
         message: persisted.ok
-          ? (failedSession.lastError ?? "failed to persist execution mailbox")
+          ? (failedSession.lastError ??
+            "failed to persist resolved input snapshot")
           : persisted.error.message,
       });
     }
@@ -534,7 +530,6 @@ export class ExecutionDispatcher {
                   workflowExecutionId: session.sessionId,
                   nodeId: input.stepId,
                   nodeExecId,
-                  mailboxDir,
                   ...(agentNodePayload.executionBackend === undefined
                     ? {}
                     : { agentBackend: agentNodePayload.executionBackend }),

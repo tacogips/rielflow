@@ -15,6 +15,7 @@ import { validateJsonValueAgainstSchema } from "./json-schema";
 import { executeNativeNode } from "./native-node-executor";
 import { ok } from "./result";
 import { CHAT_REPLY_WORKER_OUTPUT } from "../../../rielflow-addons/src/node-addons/addon-constants-and-agent-config";
+import { buildContainerEnv } from "../../../rielflow-addons/src/native-node-executor/template-env-and-containers";
 import type { SuperviserRuntimeControl } from "./superviser-control";
 import type { ChatReplyDispatchRequest } from "./types";
 
@@ -46,12 +47,7 @@ async function writeReportCwdScript(
   const scriptPath = path.join(scriptDirectory, fileName);
   await writeFile(
     scriptPath,
-    [
-      "#!/bin/sh",
-      'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
-      `printf '{"cwd":"%s"}\n' "$PWD" > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
-      "",
-    ].join("\n"),
+    ["#!/bin/sh", `printf '{"cwd":"%s"}\n' "$PWD"`, ""].join("\n"),
     { encoding: "utf8", mode: 0o755 },
   );
   return path.join(relativeDirectory, fileName);
@@ -129,7 +125,6 @@ function makeExecutionMailbox() {
   return {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -141,21 +136,17 @@ function makeExecutionMailbox() {
         expectedReturn: "Return JSON.",
         instruction: "report cwd",
       },
-      paths: {
-        inputPath: "inbox/input.json",
-        inputFilesDir: "inbox/files",
-        outputPath: "outbox/output.json",
-        outputFilesDir: "outbox/files",
-      },
       input: {
         kind: "json",
+        source: "resolved-workflow-messages",
+        snapshotPath: "resolved-input/input.json",
         upstreamSources: [],
       },
       output: {
         kind: "json",
         required: true,
-        path: "outbox/output.json",
-        filesDirectory: "outbox/files",
+        publication: "runtime-owned-after-validation",
+        candidateSubmission: "inline-json-or-reserved-candidate-file",
       },
     },
     input: {
@@ -166,6 +157,28 @@ function makeExecutionMailbox() {
 }
 
 describe("executeNativeNode", () => {
+  test("strips legacy mailbox env from rendered container env", () => {
+    const env = buildContainerEnv({
+      renderedEnv: {
+        EXPLICIT_ENV: "mapped",
+        RIEL_MAILBOX_DIR: "/mailbox",
+      },
+      workflowId: "wf",
+      workflowExecutionId: "sess-1",
+      nodeId: "node-1",
+      nodeExecId: "exec-1",
+    });
+
+    expect(env).toMatchObject({
+      EXPLICIT_ENV: "mapped",
+      RIEL_WORKFLOW_ID: "wf",
+      RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+      RIEL_NODE_ID: "node-1",
+      RIEL_NODE_EXEC_ID: "exec-1",
+    });
+    expect(env).not.toHaveProperty("RIEL_MAILBOX_DIR");
+  });
+
   test("runs built-in git commit add-on against explicit committed files", async () => {
     const workflowDirectory = await makeTempDir();
     const { repo } = await createGitRepository(workflowDirectory);
@@ -1093,6 +1106,129 @@ describe("executeNativeNode", () => {
     await expectPayloadCwd(output.payload, workflowWorkingDirectory);
   });
 
+  test("passes resolved input JSON to command stdin", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const scriptDirectory = path.join(workflowDirectory, "scripts");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    await mkdir(scriptDirectory, { recursive: true });
+    const capturedStdinPath = path.join(
+      workflowDirectory,
+      "command-stdin.json",
+    );
+    await writeFile(
+      path.join(scriptDirectory, "read-stdin.sh"),
+      [
+        "#!/bin/sh",
+        'cat "$RIEL_RESOLVED_INPUT_PATH" > "$CAPTURED_STDIN_PATH"',
+        `if [ -n "\${RIEL_MAILBOX_DIR:-}" ]; then mailbox_present=true; else mailbox_present=false; fi`,
+        `printf '{"summary":"done","mailboxPresent":%s,"resolvedInputPath":"%s"}\n' "$mailbox_present" "$RIEL_RESOLVED_INPUT_PATH"`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const executionMailbox = {
+      ...makeExecutionMailbox(),
+      input: {
+        arguments: { request: "from-arguments" },
+        upstream: [
+          {
+            fromNodeId: "previous",
+            transitionWhen: "always",
+            communicationId: "comm-000001",
+            output: { value: "from-upstream" },
+          },
+        ],
+        latestOutputs: [
+          {
+            nodeId: "previous",
+            nodeExecId: "exec-previous",
+            status: "succeeded",
+            artifactDir: "/tmp/previous",
+            payload: { summary: "from-latest" },
+          },
+        ],
+      },
+    } as const;
+
+    const priorMailboxDir = process.env["RIEL_MAILBOX_DIR"];
+    process.env["RIEL_MAILBOX_DIR"] = path.join(
+      workflowDirectory,
+      "legacy-mailbox",
+    );
+    let output: Awaited<ReturnType<typeof executeNativeNode>>;
+    try {
+      output = await executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "node-1",
+          nodeExecId: "exec-1",
+          node: {
+            id: "node-1",
+            nodeType: "command",
+            variables: {},
+            command: {
+              scriptPath: "scripts/read-stdin.sh",
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+          executionMailbox,
+          env: {
+            CAPTURED_STDIN_PATH: capturedStdinPath,
+          },
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      );
+    } finally {
+      if (priorMailboxDir === undefined) {
+        delete process.env["RIEL_MAILBOX_DIR"];
+      } else {
+        process.env["RIEL_MAILBOX_DIR"] = priorMailboxDir;
+      }
+    }
+
+    expect(output.payload).toMatchObject({
+      summary: "done",
+      mailboxPresent: false,
+    });
+    expect(output.payload["resolvedInputPath"]).toEqual(
+      expect.stringContaining("resolved-input/native-request.json"),
+    );
+    expect(output.payload["resolvedInputPath"]).not.toEqual(
+      expect.stringContaining("inbox/input.json"),
+    );
+    const capturedInput = JSON.parse(
+      await readFile(capturedStdinPath, "utf8"),
+    ) as {
+      readonly arguments: { readonly request: string };
+      readonly upstream: readonly [
+        { readonly output: { readonly value: string } },
+      ];
+      readonly latestOutputs: readonly [
+        { readonly payload: { readonly summary: string } },
+      ];
+    };
+    expect(capturedInput.arguments.request).toBe("from-arguments");
+    expect(capturedInput.upstream[0].output.value).toBe("from-upstream");
+    expect(capturedInput.latestOutputs[0].payload.summary).toBe("from-latest");
+  });
+
   test("keeps command scriptPath workflow-relative with absolute command workingDirectory", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
@@ -1117,10 +1253,7 @@ describe("executeNativeNode", () => {
             command: {
               scriptPath: "sh",
               workingDirectory: "/bin",
-              argvTemplate: [
-                "-c",
-                'mkdir -p "$RIEL_MAILBOX_DIR/outbox" && printf \'{"bypassed":true}\\n\' > "$RIEL_MAILBOX_DIR/outbox/output.json"',
-              ],
+              argvTemplate: ["-c", "printf '{\"bypassed\":true}\\n'"],
             },
           },
           workflowDefaults: {
@@ -1206,10 +1339,9 @@ describe("executeNativeNode", () => {
       path.join(scriptDirectory, "write-logs.sh"),
       [
         "#!/bin/sh",
-        'echo "native stdout line"',
+        'echo "native diagnostic line" >&2',
         'echo "native stderr line" >&2',
-        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
-        `printf '{"summary":"done"}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
+        `printf '{"summary":"done"}\n'`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -1250,8 +1382,11 @@ describe("executeNativeNode", () => {
     );
 
     expect(output.processLogs).toEqual([
-      { stream: "stdout", text: "native stdout line\n" },
-      { stream: "stderr", text: "native stderr line\n" },
+      { stream: "stdout", text: '{"summary":"done"}\n' },
+      {
+        stream: "stderr",
+        text: "native diagnostic line\nnative stderr line\n",
+      },
     ]);
   });
 
@@ -1265,8 +1400,7 @@ describe("executeNativeNode", () => {
       path.join(scriptDirectory, "write-envelope.sh"),
       [
         "#!/bin/sh",
-        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
-        `printf '{"completionPassed":true,"when":{"needs_item":true},"payload":{"decision":"delegate"}}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
+        `printf '{"completionPassed":true,"when":{"needs_item":true},"payload":{"decision":"delegate"}}\n'`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -1311,7 +1445,70 @@ describe("executeNativeNode", () => {
     expect(output.payload).toEqual({ decision: "delegate" });
   });
 
-  test("attaches command logs to invalid mailbox output failures", async () => {
+  test("accepts pretty-printed JSON stdout from command nodes", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    const scriptDirectory = path.join(workflowDirectory, "scripts");
+    await mkdir(scriptDirectory, { recursive: true });
+    await writeFile(
+      path.join(scriptDirectory, "write-pretty-json.sh"),
+      [
+        "#!/bin/sh",
+        "cat <<'JSON'",
+        "{",
+        '  "summary": "done",',
+        '  "nested": {',
+        '    "ok": true',
+        "  }",
+        "}",
+        "JSON",
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "node-1",
+        nodeExecId: "exec-1",
+        node: {
+          id: "node-1",
+          nodeType: "command",
+          variables: {},
+          command: {
+            scriptPath: "scripts/write-pretty-json.sh",
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+        executionMailbox: makeExecutionMailbox(),
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.payload).toEqual({
+      summary: "done",
+      nested: { ok: true },
+    });
+  });
+
+  test("rejects command stdout diagnostic preamble before JSON output", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
     await mkdir(workflowWorkingDirectory, { recursive: true });
@@ -1319,7 +1516,12 @@ describe("executeNativeNode", () => {
     await mkdir(scriptDirectory, { recursive: true });
     await writeFile(
       path.join(scriptDirectory, "missing-output.sh"),
-      ["#!/bin/sh", 'echo "stdout before invalid output"', ""].join("\n"),
+      [
+        "#!/bin/sh",
+        'echo "stdout diagnostic before invalid output"',
+        'printf \'{"summary":"done"}\\n\'',
+        "",
+      ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
     );
 
@@ -1360,7 +1562,10 @@ describe("executeNativeNode", () => {
     ).rejects.toMatchObject({
       code: "invalid_output",
       processLogs: [
-        { stream: "stdout", text: "stdout before invalid output\n" },
+        {
+          stream: "stdout",
+          text: 'stdout diagnostic before invalid output\n{"summary":"done"}\n',
+        },
       ],
     } satisfies Partial<AdapterExecutionError>);
   });
@@ -1526,12 +1731,128 @@ describe("executeNativeNode", () => {
         "#!/bin/sh",
         "set -eu",
         'printf "%s\\n" "$@" > "$CAPTURED_ARGS_PATH"',
-        'mkdir -p "$RIEL_TEST_MAILBOX_HOST/outbox"',
-        `printf '{"summary":"done"}\n' > "$RIEL_TEST_MAILBOX_HOST/outbox/output.json"`,
+        `if [ -n "\${RIEL_MAILBOX_DIR:-}" ]; then printf "RIEL_MAILBOX_DIR=%s\\n" "$RIEL_MAILBOX_DIR" >> "$CAPTURED_ARGS_PATH"; fi`,
+        `printf '{"summary":"done"}\n'`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
     );
+
+    const priorMailboxDir = process.env["RIEL_MAILBOX_DIR"];
+    process.env["RIEL_MAILBOX_DIR"] = path.join(
+      workflowDirectory,
+      "legacy-mailbox",
+    );
+    let output: Awaited<ReturnType<typeof executeNativeNode>>;
+    try {
+      output = await executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "node-1",
+          nodeExecId: "exec-1",
+          node: {
+            id: "node-1",
+            nodeType: "container",
+            variables: {
+              explicitValue: "mapped",
+            },
+            container: {
+              runnerKind: "docker",
+              runnerPath,
+              image: "example-image",
+              envTemplate: {
+                EXPLICIT_ENV: "{{explicitValue}}",
+                RIEL_MAILBOX_DIR: "{{explicitValue}}",
+              },
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir,
+          executionMailbox: makeExecutionMailbox(),
+          env: {
+            CAPTURED_ARGS_PATH: capturedArgsPath,
+            SHOULD_NOT_ENTER_CONTAINER: "host-secret",
+          },
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      );
+    } finally {
+      if (priorMailboxDir === undefined) {
+        delete process.env["RIEL_MAILBOX_DIR"];
+      } else {
+        process.env["RIEL_MAILBOX_DIR"] = priorMailboxDir;
+      }
+    }
+
+    expect(output.payload).toEqual({ summary: "done" });
+    const capturedArgs = await readFile(capturedArgsPath, "utf8");
+    expect(capturedArgs).toContain("EXPLICIT_ENV=mapped");
+    expect(capturedArgs).not.toContain("RIEL_MAILBOX_DIR");
+    expect(capturedArgs).not.toContain("/mailbox");
+    expect(capturedArgs).not.toContain("SHOULD_NOT_ENTER_CONTAINER");
+    expect(capturedArgs).not.toContain("host-secret");
+  });
+
+  test("passes resolved input JSON to container private request file", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "node-1");
+    const runnerPath = path.join(workflowDirectory, "fake-runner.sh");
+    const capturedArgsPath = path.join(workflowDirectory, "runner-args.txt");
+    const capturedStdinPath = path.join(workflowDirectory, "runner-stdin.json");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    await writeFile(
+      runnerPath,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'printf "%s\\n" "$@" > "$CAPTURED_ARGS_PATH"',
+        "resolved_input_path=",
+        `for arg in "$@"; do case "$arg" in *:/rielflow-input/resolved-input.json:ro) resolved_input_path="\${arg%%:/rielflow-input/resolved-input.json:ro}" ;; esac; done`,
+        'if [ -n "$resolved_input_path" ] && [ -f "$resolved_input_path" ]; then cat "$resolved_input_path" > "$CAPTURED_STDIN_PATH"; else printf "{}\\n" > "$CAPTURED_STDIN_PATH"; fi',
+        `printf '{"summary":"done","resolvedInputPath":"%s","resolvedInputPathExists":%s}\n' "$resolved_input_path" "$([ -f "$resolved_input_path" ] && printf true || printf false)"`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const executionMailbox = {
+      ...makeExecutionMailbox(),
+      input: {
+        arguments: { request: "from-container-arguments" },
+        upstream: [
+          {
+            fromNodeId: "previous",
+            transitionWhen: "always",
+            communicationId: "comm-000001",
+            output: { value: "from-container-upstream" },
+          },
+        ],
+        latestOutputs: [
+          {
+            nodeId: "previous",
+            nodeExecId: "exec-previous",
+            status: "succeeded",
+            artifactDir: "/tmp/previous",
+            payload: { summary: "from-container-latest" },
+          },
+        ],
+      },
+    } as const;
 
     const output = await executeNativeNode(
       {
@@ -1546,16 +1867,11 @@ describe("executeNativeNode", () => {
         node: {
           id: "node-1",
           nodeType: "container",
-          variables: {
-            explicitValue: "mapped",
-          },
+          variables: {},
           container: {
             runnerKind: "docker",
             runnerPath,
             image: "example-image",
-            envTemplate: {
-              EXPLICIT_ENV: "{{explicitValue}}",
-            },
           },
         },
         workflowDefaults: {
@@ -1566,11 +1882,10 @@ describe("executeNativeNode", () => {
         mergedVariables: {},
         arguments: {},
         artifactDir,
-        executionMailbox: makeExecutionMailbox(),
+        executionMailbox,
         env: {
           CAPTURED_ARGS_PATH: capturedArgsPath,
-          RIEL_TEST_MAILBOX_HOST: path.join(artifactDir, "mailbox"),
-          SHOULD_NOT_ENTER_CONTAINER: "host-secret",
+          CAPTURED_STDIN_PATH: capturedStdinPath,
         },
       },
       {
@@ -1579,11 +1894,36 @@ describe("executeNativeNode", () => {
       },
     );
 
-    expect(output.payload).toEqual({ summary: "done" });
+    expect(output.payload).toMatchObject({
+      summary: "done",
+      resolvedInputPathExists: true,
+    });
+    expect(output.payload["resolvedInputPath"]).toEqual(
+      expect.stringContaining("resolved-input/native-request.json"),
+    );
     const capturedArgs = await readFile(capturedArgsPath, "utf8");
-    expect(capturedArgs).toContain("EXPLICIT_ENV=mapped");
-    expect(capturedArgs).toContain("RIEL_MAILBOX_DIR=/mailbox");
-    expect(capturedArgs).not.toContain("SHOULD_NOT_ENTER_CONTAINER");
-    expect(capturedArgs).not.toContain("host-secret");
+    expect(capturedArgs.split("\n")).toContain("-i");
+    expect(capturedArgs).toContain(":/rielflow-input/resolved-input.json:ro");
+    expect(capturedArgs).toContain(
+      "RIEL_RESOLVED_INPUT_PATH=/rielflow-input/resolved-input.json",
+    );
+    const capturedInput = JSON.parse(
+      await readFile(capturedStdinPath, "utf8"),
+    ) as {
+      readonly arguments: { readonly request: string };
+      readonly upstream: readonly [
+        { readonly output: { readonly value: string } },
+      ];
+      readonly latestOutputs: readonly [
+        { readonly payload: { readonly summary: string } },
+      ];
+    };
+    expect(capturedInput.arguments.request).toBe("from-container-arguments");
+    expect(capturedInput.upstream[0].output.value).toBe(
+      "from-container-upstream",
+    );
+    expect(capturedInput.latestOutputs[0].payload.summary).toBe(
+      "from-container-latest",
+    );
   });
 });

@@ -20,8 +20,10 @@ The design goals for this slice are:
 - allow workflow-local build metadata when image publication is not yet part of
   the workflow author's process
 - reject invalid or ambiguous container configuration during workflow validation
-- keep manager-owned mailbox routing separate from worker-visible container I/O surfaces
-- align container worker I/O with the same execution inbox/outbox contract used by other node types
+- keep manager-owned SQLite message routing separate from worker-visible
+  container I/O surfaces
+- align container worker I/O with the same SQLite-backed semantic execution
+  input/output contract used by other node types
 
 ## Authoring Model
 
@@ -70,7 +72,7 @@ or:
       "target": "runtime"
     },
     "entrypoint": ["./entry.sh"],
-    "argsTemplate": ["--mailbox-dir", "/mailbox"],
+    "argsTemplate": [],
     "workspace": {
       "mode": "ephemeral",
       "mountPath": "/workspace"
@@ -110,18 +112,18 @@ or:
   kinds; they are environment/provider details outside this contract
 - container workers must not read canonical cross-node communication directories
   directly
-- instead, the runtime exposes a node-local execution mailbox root, typically at
-  `/mailbox`, and sets `RIEL_MAILBOX_DIR` to that mount path
-- worker-facing metadata under that mailbox root must use relative paths such as
-  `inbox/input.json` and `outbox/output.json`, not host absolute paths
-- managers remain the only components that create or route canonical mailbox
-  artifacts
-- file inputs for `container` nodes use no extra mount mechanism; worker-visible
-  file refs must resolve under `inbox/files/` relative to `RIEL_MAILBOX_DIR`
-- staged output for a container node must be written under `outbox/` relative to
-  `RIEL_MAILBOX_DIR`;
-  only the runtime may promote that staged output into canonical execution
-  artifacts or downstream routed messages
+- the runtime must not expose `RIEL_MAILBOX_DIR`, `/mailbox`,
+  `inbox/input.json`, or `outbox/output.json` as the container message I/O
+  contract
+- managers remain the only components that create or route canonical
+  `workflow_messages` rows
+- resolved node input is delivered to the container through a non-mailbox
+  process boundary such as JSON stdin or an executor-private request file
+- stdout is the preferred structured JSON candidate output stream; stderr is
+  captured as diagnostics only
+- staged output files are allowed only for non-message file or binary
+  attachments and must be materialized under `RIEL_ATTACHMENT_ROOT` after
+  runtime validation
 - `durability.mode = "node-persistent"` mounts a writable host-backed durable
   directory into the container at `durability.mountPath` or `/durable`
 - durable host storage is scoped to workflow id and node id:
@@ -131,9 +133,10 @@ or:
 - `stdout` and `stderr` are captured as logs only
 - container process environment is explicit:
   - the container receives rendered `container.envTemplate` values
-  - the runtime injects `RIEL_MAILBOX_DIR`, `RIEL_WORKFLOW_ID`,
-    `RIEL_WORKFLOW_EXECUTION_ID`, `RIEL_NODE_ID`, and
-    `RIEL_NODE_EXEC_ID`
+  - the runtime injects `RIEL_WORKFLOW_ID`, `RIEL_WORKFLOW_EXECUTION_ID`,
+    `RIEL_NODE_ID`, `RIEL_NODE_EXEC_ID`, and, when attachment handoff is
+    enabled, `RIEL_ATTACHMENT_ROOT`
+  - the runtime must not inject `RIEL_MAILBOX_DIR` for message handoff
   - ambient host environment variables are available to the runner process
     itself, but are not forwarded into the container unless the workflow
     author explicitly maps them through `envTemplate`
@@ -162,7 +165,7 @@ Current runtime behavior:
 - workflow validation accepts and preserves the container metadata
 - `runWorkflow()` and `call-step` execute container nodes through the native
   executor
-- the runtime prepares mailbox bind mounts, optional workspace and durable
+- the runtime prepares resolved input delivery, optional workspace and durable
   mounts, and captures `stdout.log` / `stderr.log`
 - runner availability remains an environment/readiness concern rather than a
   schema concern
@@ -178,9 +181,8 @@ That layer is responsible for:
 - merging workflow-level `defaults.containerRuntime` with node-level
   `container` overrides
 - resolving the runner binary from `runnerKind` and optional `runnerPath`
-- preparing execution-local bind mounts, including `/mailbox/inbox` and
-  `/mailbox/outbox`
-- preparing `RIEL_MAILBOX_DIR` for the container process
+- preparing execution-local non-message bind mounts, including any
+  attachment-staging mount rooted under `RIEL_ATTACHMENT_ROOT`
 - preparing optional scratch workspace mounts such as `/workspace`
 - preparing optional durable mounts such as `/durable` backed by
   `{artifact-root}/{workflow_id}/durable/{node_id}/`

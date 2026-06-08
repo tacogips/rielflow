@@ -28,7 +28,6 @@ const baseInput: AdapterExecutionInput = {
   executionMailbox: {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -40,21 +39,17 @@ const baseInput: AdapterExecutionInput = {
         expectedReturn: "Return JSON.",
         instruction: "test",
       },
-      paths: {
-        inputPath: "inbox/input.json",
-        inputFilesDir: "inbox/files",
-        outputPath: "outbox/output.json",
-        outputFilesDir: "outbox/files",
-      },
       input: {
         kind: "json",
+        source: "resolved-workflow-messages",
+        snapshotPath: "resolved-input/input.json",
         upstreamSources: [],
       },
       output: {
         kind: "json",
         required: true,
-        path: "outbox/output.json",
-        filesDirectory: "outbox/files",
+        publication: "runtime-owned-after-validation",
+        candidateSubmission: "inline-json-or-reserved-candidate-file",
       },
     },
     input: {
@@ -213,6 +208,82 @@ describe("CursorCliAgentAdapter", () => {
     );
   });
 
+  test("injects ambient manager env without exposing legacy mailbox env", async () => {
+    let observedGraphqlEndpoint: string | undefined;
+    let observedWorkflowExecutionId: string | undefined;
+    let observedNodeExecId: string | undefined;
+    let observedMailboxDir: string | undefined;
+    const sessionId = "cursor-session-ambient";
+    const startSession = makeMockCursorSession({
+      sessionId,
+      events: [
+        {
+          type: "session.assistant_message",
+          sessionId,
+          message: {
+            role: "assistant",
+            rawText: "ambient cursor reply",
+            displayText: "ambient cursor reply",
+          },
+        },
+      ],
+    });
+    const runner = makeMockCursorRunner({ start: startSession });
+    runner.start.mockImplementation(() => {
+      observedGraphqlEndpoint = process.env["RIEL_GRAPHQL_ENDPOINT"];
+      observedWorkflowExecutionId = process.env["RIEL_WORKFLOW_EXECUTION_ID"];
+      observedNodeExecId = process.env["RIEL_NODE_EXEC_ID"];
+      observedMailboxDir = process.env["RIEL_MAILBOX_DIR"];
+      return startSession;
+    });
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    const priorMailboxDir = process.env["RIEL_MAILBOX_DIR"];
+    process.env["RIEL_MAILBOX_DIR"] = "/tmp/legacy-mailbox";
+    try {
+      await adapter.execute(
+        {
+          ...baseInput,
+          rielflowHookContext: {
+            environment: {
+              RIEL_WORKFLOW_ID: "wf",
+              RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+              RIEL_NODE_ID: "node-1",
+              RIEL_NODE_EXEC_ID: "exec-1",
+              RIEL_AGENT_BACKEND: "cursor-cli-agent",
+            },
+          },
+          ambientManagerContext: {
+            environment: {
+              RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+              RIEL_MANAGER_AUTH_TOKEN: "secret",
+              RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+              RIEL_WORKFLOW_ID: "wf",
+              RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+              RIEL_MANAGER_STEP_ID: "node-1",
+              RIEL_MANAGER_NODE_EXEC_ID: "exec-1",
+            },
+          },
+        },
+        baseContext,
+      );
+    } finally {
+      if (priorMailboxDir === undefined) {
+        delete process.env["RIEL_MAILBOX_DIR"];
+      } else {
+        process.env["RIEL_MAILBOX_DIR"] = priorMailboxDir;
+      }
+    }
+
+    expect(observedGraphqlEndpoint).toBe("http://127.0.0.1:43173/graphql");
+    expect(observedWorkflowExecutionId).toBe("sess-1");
+    expect(observedNodeExecId).toBe("exec-1");
+    expect(observedMailboxDir).toBeUndefined();
+    expect(process.env["RIEL_MAILBOX_DIR"]).toBe(priorMailboxDir);
+  });
+
   test("forwards image attachments discovered in workflow input", async () => {
     const runner = makeMockCursorRunner({});
     const adapter = new CursorCliAgentAdapter({
@@ -305,7 +376,7 @@ describe("CursorCliAgentAdapter", () => {
           publication: {
             owner: "runtime",
             finalArtifactWrite: "runtime-only",
-            mailboxWrite: "runtime-only-after-validation",
+            messageWrite: "runtime-only-after-validation",
             candidateSubmission: "inline-json-or-reserved-candidate-file",
             futureCommunicationIdsExposed: false,
           },
@@ -459,7 +530,7 @@ describe("CursorCliAgentAdapter", () => {
             publication: {
               owner: "runtime",
               finalArtifactWrite: "runtime-only",
-              mailboxWrite: "runtime-only-after-validation",
+              messageWrite: "runtime-only-after-validation",
               candidateSubmission: "inline-json-or-reserved-candidate-file",
               futureCommunicationIdsExposed: false,
             },

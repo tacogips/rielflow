@@ -4,10 +4,10 @@ export function appendMailboxPromptGuidance(input: {
   return [
     input.promptText,
     "",
-    "Runtime mailbox:",
-    "- Full structured input is available at $RIEL_MAILBOX_DIR/inbox/input.json.",
-    "- The mailbox root is exported through RIEL_MAILBOX_DIR.",
-    "- Use this file when upstream payload summaries in the prompt are truncated.",
-    "- Do not write mailbox outbox files directly; final output publication remains runtime-owned.",
+    "Runtime input/output:",
+    "- Workflow communication is read from SQLite workflow_messages and supplied as resolved structured input.",
+    "- Do not read legacy execution-local inbox/outbox paths for message input.",
+    "- Return the node result through the adapter response, native stdout JSON, or the reserved Candidate-Path channel.",
+    "- Do not write legacy execution-local inbox/outbox paths; final output publication remains runtime-owned.",
   ].join("\n");
 }

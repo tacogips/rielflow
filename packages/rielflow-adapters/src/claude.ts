@@ -377,6 +377,15 @@ async function runClaudePrintCommand(input: {
   const stdinPath = path.join(captureDir, `${captureId}-stdin.txt`);
   const stdoutPath = path.join(captureDir, `${captureId}-stdout.log`);
   const stderrPath = path.join(captureDir, `${captureId}-stderr.log`);
+  const childEnv: NodeJS.ProcessEnv = {
+    ...(input.env === undefined
+      ? process.env
+      : { ...process.env, ...input.env }),
+    RIEL_CLAUDE_STDIN: stdinPath,
+    RIEL_CLAUDE_STDOUT: stdoutPath,
+    RIEL_CLAUDE_STDERR: stderrPath,
+  };
+  delete childEnv["RIEL_MAILBOX_DIR"];
   await writeFile(stdinPath, input.prompt, "utf8");
   const readCapturedLogs = async (): Promise<{
     readonly stdout: string;
@@ -406,14 +415,7 @@ async function runClaudePrintCommand(input: {
       ],
       {
         cwd: input.cwd,
-        env: {
-          ...(input.env === undefined
-            ? process.env
-            : { ...process.env, ...input.env }),
-          RIEL_CLAUDE_STDIN: stdinPath,
-          RIEL_CLAUDE_STDOUT: stdoutPath,
-          RIEL_CLAUDE_STDERR: stderrPath,
-        },
+        env: childEnv,
         detached: true,
         shell: false,
         stdio: ["ignore", "ignore", "ignore"],

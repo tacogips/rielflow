@@ -1,5 +1,5 @@
 import path from "node:path";
-import { atomicWriteJsonFile, atomicWriteTextFile } from "../shared/fs";
+import { atomicWriteJsonFile } from "../shared/fs";
 import {
   initialDeliveryAttemptId,
   nextCommunicationId,
@@ -94,18 +94,6 @@ export async function persistDeliveredCommunicationArtifacts(
   };
 
   await atomicWriteJsonFile(path.join(artifactDir, "message.json"), envelope);
-  await atomicWriteJsonFile(
-    path.join(artifactDir, "outbox", input.fromNodeId, "message.json"),
-    envelope,
-  );
-  await atomicWriteTextFile(
-    path.join(artifactDir, "outbox", input.fromNodeId, "output.json"),
-    input.outputRaw,
-  );
-  await atomicWriteJsonFile(
-    path.join(artifactDir, "inbox", input.toNodeId, "message.json"),
-    envelope,
-  );
   await atomicWriteJsonFile(
     path.join(artifactDir, "attempts", deliveryAttemptId, "attempt.json"),
     attempt,

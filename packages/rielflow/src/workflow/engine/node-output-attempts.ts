@@ -49,7 +49,6 @@ export interface ResolveNodeExecutionOutputInput {
   readonly assembledArguments: Readonly<Record<string, unknown>> | null;
   readonly upstreamCommunicationIds: readonly string[];
   readonly executionMailbox: NodeExecutionMailbox;
-  readonly mailboxDir: string;
   readonly ambientManagerContext: AdapterAmbientManagerContext | undefined;
   readonly effectiveAdapter: NodeAdapter;
   readonly timeoutMs: number;
@@ -85,7 +84,6 @@ export async function resolveNodeExecutionOutput(
     assembledArguments,
     upstreamCommunicationIds,
     executionMailbox,
-    mailboxDir,
     ambientManagerContext,
     effectiveAdapter,
     timeoutMs,
@@ -157,7 +155,6 @@ export async function resolveNodeExecutionOutput(
                 workflowExecutionId: session.sessionId,
                 nodeId,
                 nodeExecId,
-                mailboxDir,
                 ...(agentNodePayload.executionBackend === undefined
                   ? {}
                   : {

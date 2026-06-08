@@ -332,7 +332,6 @@ function makeExecutionMailbox() {
   return {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -344,21 +343,17 @@ function makeExecutionMailbox() {
         expectedReturn: "Return JSON.",
         instruction: "run native node",
       },
-      paths: {
-        inputPath: "inbox/input.json",
-        inputFilesDir: "inbox/files",
-        outputPath: "outbox/output.json",
-        outputFilesDir: "outbox/files",
-      },
       input: {
         kind: "json",
+        source: "resolved-workflow-messages",
+        snapshotPath: "resolved-input/input.json",
         upstreamSources: [],
       },
       output: {
         kind: "json",
         required: true,
-        path: "outbox/output.json",
-        filesDirectory: "outbox/files",
+        publication: "runtime-owned-after-validation",
+        candidateSubmission: "inline-json-or-reserved-candidate-file",
       },
     },
     input: {
@@ -482,13 +477,7 @@ describe("executeAdapterWithTimeout", () => {
     await mkdir(scriptsDir, { recursive: true });
     await writeFile(
       path.join(scriptsDir, "slow.sh"),
-      [
-        "#!/bin/sh",
-        "sleep 1",
-        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
-        `printf '{"ok":true}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
-        "",
-      ].join("\n"),
+      ["#!/bin/sh", "sleep 1", `printf '{"ok":true}\n'`, ""].join("\n"),
       { encoding: "utf8", mode: 0o755 },
     );
 

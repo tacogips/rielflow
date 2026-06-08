@@ -307,8 +307,8 @@ async function createNodeAddonPackage(input: {
       input.executableAddon === true ? "greeting.bash" : "prompt.md",
     ),
     input.executableAddon === true
-      ? '#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p "$RIEL_MAILBOX_DIR/outbox"\nprintf \'{"greeting":"Hello %s"}\\n\' "$' +
-          '{1:-world}" > "$RIEL_MAILBOX_DIR/outbox/output.json"\n'
+      ? '#!/usr/bin/env bash\nset -euo pipefail\nprintf \'{"greeting":"Hello %s"}\\n\' "$' +
+          '{1:-world}"\n'
       : "Write a release note for {{addon.inputs.topic}}.\n",
     "utf8",
   );
@@ -2746,9 +2746,7 @@ describe("workflow package registry", () => {
                 containerfilePath: "Containerfile",
               },
               entrypoint: ["/bin/sh", "-c"],
-              argsTemplate: [
-                'mkdir -p "$RIEL_MAILBOX_DIR/outbox" && printf \'{"ok":true}\\n\' > "$RIEL_MAILBOX_DIR/outbox/output.json"',
-              ],
+              argsTemplate: ["printf '{\"ok\":true}\\n'"],
             },
           },
           execution: {

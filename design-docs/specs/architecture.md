@@ -13,7 +13,7 @@ under `packages/rielflow/src/`, with reusable package surfaces under
 
 - workflow definition loading and validation
 - queue-based session orchestration
-- mailbox communication artifacts between nodes
+- SQLite-backed workflow message communication between nodes
 - backend adapters for agent execution
 - runtime-owned output validation and publication
 - manager-scoped control-plane access for manager nodes
@@ -32,10 +32,13 @@ Compatibility-removal rule for ongoing refactors:
 
 Current direction:
 
-- workflow authoring uses jump-driven routing via runtime-owned output mail instead of dedicated branch/loop primitives
+- workflow authoring uses jump-driven routing via runtime-owned output envelopes
+  instead of dedicated branch/loop primitives
 - workflows use `workflow -> steps[] + nodes[]`, where steps are the canonical execution addresses and `workflow.json.nodes[]` is a reusable node registry
 - manager nodes should default to a deterministic `code` manager, with `llm` manager retained as experimental
-- repeated visits to the same node should materialize distinct mailbox instances and support same-session continuation with prompt variants
+- repeated visits to the same node should materialize distinct step execution
+  and communication records and support same-session continuation with prompt
+  variants
 - new workflow starts should be supervisor-backed by default at the CLI, GraphQL, and library entrypoint layer. The default supervisor is deterministic in-process runner-pool mode: it represents supervision as a workflow boundary, but the runtime service that owns lifecycle control starts, tracks, cancels, resumes, and reruns target workflows asynchronously in the same process. The supervisor command surface is the default lifecycle boundary for event sources and operators; `runWorkflow()` remains the low-level engine primitive used by the runner pool, tests, and specialized embedding.
 - scheduled workflow sleeps and cron occurrences should share a scheduled event
   manager. Sleep nodes register resumable workflow continuation events instead
@@ -101,8 +104,9 @@ Dispatch rules:
 - the effective working directory is
   `node.workingDirectory ?? command.workingDirectory ?? workflowWorkingDirectory`
 - command environment remains explicit: rendered `command.envTemplate` plus
-  runtime-owned mailbox/workflow identifiers, without implicit workflow package
-  metadata injection
+  runtime-owned workflow identifiers, without implicit workflow package metadata
+  injection. Command input/output must not depend on `RIEL_MAILBOX_DIR`,
+  `inbox/input.json`, or `outbox/output.json`.
 
 Regression coverage must prove both extension-based interpreter selection and
 non-executable package script compatibility. A `.bash` fixture must remain
@@ -707,8 +711,9 @@ behind narrow local modules:
   paused/completed return handling
 - step input (`step-input.ts`): missing-step failures, optional-step decision
   gating, scenario/dry-run payload resolution, execution id and artifact
-  directory setup, workflow-run event emission, upstream/latest-output mailbox
-  input resolution, prompt/input assembly, and output-contract candidate path
+  directory setup, workflow-run event emission, upstream/latest-output
+  `workflow_messages` input resolution, prompt/input assembly, and
+  output-contract candidate path
   preparation
 - node execution (`node-execution.ts`): user-action pauses, optional skips,
   agent/native execution, manager control-plane environment setup, timeout and
@@ -937,9 +942,9 @@ In user-scoped catalog mode, `{rootDataDir}` defaults to `<user-root>/artifacts`
 For direct workflow-definition-dir and other non-scoped runtime entrypoints, the default
 `{rootDataDir}` is `<user-root>/artifacts`.
 
-File artifacts remain the authoritative source for node execution payloads.
-SQLite is the canonical store for workflow communication messages and a query
-index for other runtime inspection data.
+Runtime-owned file artifacts remain authoritative audit records for node
+execution payloads. SQLite is the canonical store for workflow communication
+messages and a query index for other runtime inspection data.
 
 Workflow communication messages are the exception to that index-only rule for
 new writes. New inbound and outbound workflow message records must be durably
@@ -947,6 +952,14 @@ inserted into the runtime SQLite database as part of the same manager-owned
 publication step. Message metadata, delivery state, replay/retry state, and
 structured non-binary payload snapshots are read from SQLite. See
 `design-docs/specs/design-sqlite-message-store.md`.
+
+The node execution mailbox file contract is removed. Runtime and user-facing
+surfaces must not depend on `RIEL_MAILBOX_DIR`, `inbox/input.json`, or
+`outbox/output.json` for message input/output. Native command, container, and
+add-on execution receives resolved input through executor-owned process/API
+channels and returns candidate output through stdout, in-process return values,
+or a runtime-reserved candidate path. Only non-message file and binary
+attachments remain file-backed through `RIEL_ATTACHMENT_ROOT`.
 
 Runtime SQLite JSON text columns are validated at the schema boundary. Required
 JSON text columns use `CHECK(json_valid(column))`; nullable JSON text columns
@@ -1519,7 +1532,7 @@ Responsibilities:
 
 - persist queue and step/node execution history
 - track step visits, restart counts, and transition decisions
-- record mailbox communications and conversation turns
+- record SQLite-backed communications and conversation turns
 - expose stable session identity for CLI, TUI, GraphQL, and library consumers
 
 The queue is deduplicated after each scheduling pass. Multiple valid transition deliveries may still target more than one next execution site, but duplicate queue entries for the same pending execution are collapsed in the queue view.
@@ -1609,11 +1622,11 @@ event source does not mutate `workflow.json`. The current implementation lives
 under `packages/rielflow/src/events/`.
 
 Target architectural direction: event bindings should be understood as bridges
-between provider transports and the runtime-owned `external-mailbox` boundary,
+between provider transports and the runtime-owned external-message boundary,
 not as the only place where workflow execution semantics are defined. External
-input and output mailbox surfaces exist independently of any attached event
-source; adapters normalize inbound provider events into external mailbox input
-and deliver provider-neutral external mailbox output back to the provider. The
+input and output message surfaces exist independently of any attached event
+source; adapters normalize inbound provider events into external input messages
+and deliver provider-neutral external output messages back to the provider. The
 detailed design for that direction is
 `design-docs/specs/design-event-external-mailbox-binding.md`.
 
@@ -1674,9 +1687,9 @@ sequenceDiagram
     loop while queue not empty
         E->>S: load current session state
         E->>C: resolve upstream communications
-        E->>E: compile execution inbox/outbox contract
-        E->>S: persist input.json and mailbox/inbox/*
-        E->>A: execute node
+        E->>E: build resolved execution input object
+        E->>S: persist runtime-owned input audit record
+        E->>A: execute node through adapter/native I/O boundary
         A-->>E: candidate output
         E->>V: validate candidate output if contract exists
         V-->>E: accepted or rejected
@@ -1686,13 +1699,14 @@ sequenceDiagram
         E->>S: persist updated queue and session state
     end
 
-    E->>C: publish final root-scope output to external mailbox
+    E->>C: publish final root-scope output message
     E->>S: mark session completed
 ```
 
-## Mailbox Architecture
+## Message Architecture
 
-The runtime communicates between steps/nodes through persisted communication artifacts, not only in-memory transitions.
+The runtime communicates between steps/nodes through persisted SQLite
+`workflow_messages` rows, not only in-memory transitions.
 
 Each communication records:
 
@@ -1718,9 +1732,11 @@ Delivery kinds:
 - `external-input`
 - `external-output`
 
-This mailbox layer is the architectural boundary that lets one workflow execution, cross-workflow invocation, and external callers use the same handoff model.
+The SQLite workflow message layer is the architectural boundary that lets one
+workflow execution, cross-workflow invocation, and external callers use the
+same handoff model.
 
-New mailbox publications persist the communication as a SQLite message row.
+New message publications persist the communication as a SQLite message row.
 SQLite stores identifiers, routing metadata, lifecycle state, payload
 references, and bounded structured payload JSON when the message is
 JSON-compatible. File or binary handoff content is not stored in SQLite; SQLite
@@ -1730,8 +1746,8 @@ shaped as
 Message JSON columns are schema-validated with SQLite JSON1: non-null
 `delivery_attempt_ids_json` and `payload_ref_json` require valid JSON, while
 nullable `payload_json` and `artifact_refs_json` accept either null or valid
-JSON. Invalid JSON is a failed runtime write, not a value to be repaired by the
-mailbox reader.
+JSON. Invalid JSON is a failed runtime write, not a value to be repaired by a
+legacy file reader.
 
 Planned continuation extension:
 
@@ -1740,12 +1756,13 @@ Planned continuation extension:
   `stepRunId`/`nodeExecId` plus execution ordinal, rather than by step id
   alone; see `design-docs/specs/design-step-run-history-rerun.md`
 
-Worker nodes do not consume that canonical transport layout directly.
-Before each node execution, the runtime compiles a worker-facing execution
-inbox/outbox contract under the node artifact directory. That contract is the
-stable node-facing ABI across `agent`, `command`, `container`, and `addon`
-execution. The current implementation is centered on
-`packages/rielflow/src/workflow/node-execution-mailbox.ts`.
+Worker nodes do not consume canonical transport rows directly. Before each node
+execution, the runtime resolves the SQLite-backed upstream communications into
+one structured execution input object and passes it through the relevant
+adapter or native executor boundary. The removed worker-facing file ABI based
+on `RIEL_MAILBOX_DIR`, `inbox/input.json`, and `outbox/output.json` must not be
+kept for compatibility. See
+`design-docs/specs/design-node-execution-inbox-contract.md`.
 
 ## Output Ownership
 
@@ -1756,14 +1773,17 @@ That means:
 - adapters may propose a candidate payload
 - the runtime validates it
 - the runtime writes canonical `output.json`
-- the runtime publishes downstream mailbox artifacts only after acceptance
+- the runtime publishes downstream `workflow_messages` rows only after
+  acceptance
 - external workflow publication selects the latest accepted root-scope `output`
   node artifact in the current workflow execution rather than any arbitrary
   "last response"
 
-Workers may target execution-local outbox paths such as
-`mailbox/outbox/output.json`, but those paths are staging surfaces only. They do
-not grant authority over canonical mailbox publication.
+Workers return candidate payloads through their backend-specific channel such
+as prompt response, JSON stdin/stdout, an executor-private request file, or an
+in-process add-on return value. Runtime-owned candidate staging paths may exist
+for structured output validation, but they are not a stable mailbox ABI and
+must not be named `outbox/output.json`.
 
 This is especially important for nodes that declare `output.jsonSchema`.
 
@@ -1831,7 +1851,7 @@ Biome, Vitest, or Task.
 Required packages:
 
 - `rielflow-core`: owns workflow definitions, validation, execution engine,
-  runtime DB/session artifacts, mailbox contracts, supervisor primitives,
+  runtime DB/session artifacts, SQLite message contracts, supervisor primitives,
   backend adapter dispatch contracts, dedicated self-improve service contracts,
   and provider-neutral public library API contracts exported through package
   surfaces rather than root source files.
@@ -2038,7 +2058,7 @@ formula behavior.
 ### OpenTelemetry Runtime Instrumentation
 
 Rielflow should support coarse OpenTelemetry tracing for workflow execution,
-server/control-plane entrypoints, backend adapter calls, and mailbox handoff
+server/control-plane entrypoints, backend adapter calls, and message handoff
 without making tracing a required runtime dependency for ordinary local use.
 The tracing boundary is lifecycle visibility, not instruction-level or
 template-level debugging. Instrumentation should describe when a workflow,
@@ -2065,17 +2085,19 @@ Required coarse span boundaries:
 - step/node execution in `packages/rielflow/src/workflow/engine/` and
   `packages/rielflow/src/workflow/call-step-impl/`: one span per executable
   step invocation with `stepId`, reusable `nodeId`, `nodeExecId`,
-  `mailboxInstanceId`, backend name, status, retry/resume flags when present,
-  and duration
+  backend name, status, retry/resume flags when present, and duration. Legacy
+  internal fields named `mailboxInstanceId` may remain readable for historical
+  traces, but new instrumentation must prefer `communicationId` and
+  `nodeExecId`.
 - backend adapter execution under `packages/rielflow/src/workflow/adapters/`:
   one child span per adapter call with backend, model, command/session metadata
   safe for export, and error status
-- communication and mailbox handoff in
+- communication and execution handoff in
   `packages/rielflow/src/workflow/communication-service.ts`,
-  `packages/rielflow/src/workflow/communication-artifact-persistence.ts`, and
-  `packages/rielflow/src/workflow/node-execution-mailbox.ts`: spans or span
-  events for communication creation, delivery, replay, retry, consumption, and
-  execution-local mailbox preparation
+  `packages/rielflow/src/workflow/runtime-db/workflow-message-records.ts`, and
+  the native/adapter execution boundary: spans or span events for
+  `workflow_messages` creation, delivery, replay, retry, consumption,
+  resolved-input construction, and candidate-result capture
 - server and GraphQL control-plane handling in `packages/rielflow-server/src/`
   and `packages/rielflow-graphql/src/`: request spans with operation names,
   workflow/session identifiers when available, and no raw GraphQL variables by

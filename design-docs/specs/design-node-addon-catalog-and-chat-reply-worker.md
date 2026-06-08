@@ -17,7 +17,8 @@ Authors should be able to reference these nodes as built-in add-ons from
 provider-specific operational code in each workflow.
 
 The add-on mechanism is an authoring and resolution layer. It does not replace
-node roles, `nodeType`, output contracts, or the runtime-owned mailbox model.
+node roles, `nodeType`, output contracts, or the runtime-owned SQLite message
+model.
 
 ## Goals
 
@@ -452,7 +453,8 @@ Persistence rules:
 
 - runtime execution artifacts should include the resolved descriptor identity in
   `meta.json`
-- final `output.json` and mailbox outputs stay ordinary node outputs
+- final `output.json` publication and downstream `workflow_messages` insertion
+  stay ordinary runtime-owned node output behavior
 - workflow save/edit APIs preserve `addon` references and do not write generated
   `nodeFile` payloads unless an explicit future `workflow vendor-addon` command
   asks for that
@@ -485,7 +487,7 @@ authors should continue to use `workflow.json.nodes[].addon`.
 
 The executor:
 
-1. reads the execution-local inbox contract
+1. receives the resolved semantic node input object from the runtime
 2. renders `config.textTemplate` against the normal node template context
 3. extracts provider-neutral reply target metadata from
    `runtimeVariables.event`
@@ -512,7 +514,8 @@ interface ChatReplyWorkerConfig {
 
 Authored `addon.inputs`, when present, is copied into the resolved node payload
 `variables`. The chat reply worker can reference those keys from
-`config.textTemplate` alongside normal runtime and inbox template variables.
+`config.textTemplate` alongside normal runtime and resolved input template
+variables.
 
 Defaults:
 
@@ -658,8 +661,9 @@ coverage must remain credential-gated behind `CURSOR_API_KEY` in
 package content with an LLM-backed agent before a package is trusted by a
 workflow. It is intended for sanitize/security review workflows that inspect
 package manifests, workflow JSON, node payloads, prompts, and package-local
-support files and then return a normal mailbox output with findings and a
-decision.
+support files and then return a normal runtime-owned node output with findings
+and a decision. Downstream publication remains a `workflow_messages` insert,
+not an add-on-written mailbox file.
 
 This add-on is not a replacement for checkout integrity validation, static
 pre-install scanning, or no-network container checks. Those checks remain
@@ -778,7 +782,9 @@ an explicit merge mode.
 
 ### Output Contract
 
-The add-on writes the same runtime-owned mailbox envelope as any worker node.
+The add-on returns a candidate object through the native add-on executor. The
+runtime validates and publishes the same `output.json` envelope as any worker
+node, then routes downstream messages by inserting `workflow_messages` rows.
 The node payload should include structured review data inside the normal output
 payload:
 
@@ -793,7 +799,7 @@ payload:
 
 The add-on must not write checkout provenance records or mutate package
 manifests. Workflows that want to enforce the decision should branch on the
-normal mailbox output.
+normal published node output.
 
 ### Fixture Workflow
 
@@ -808,10 +814,10 @@ cover:
 
 The fixture should prefer `promptTemplateFile` for any long prompts or
 case-specific setup. Tests should mock or fixture the selected agent adapter so
-the add-on resolution and mailbox output contract are deterministic. Clean and
-suspicious cases should exercise the same bounded evidence path used by
-ordinary workflows, including at least one `packageRoot` fixture that produces
-package-relative evidence records before mocked `codex-agent`,
+the add-on resolution and runtime-owned output contract are deterministic.
+Clean and suspicious cases should exercise the same bounded evidence path used
+by ordinary workflows, including at least one `packageRoot` fixture that
+produces package-relative evidence records before mocked `codex-agent`,
 `claude-code-agent`, or `cursor-cli-agent` execution.
 
 ### Safety Boundary

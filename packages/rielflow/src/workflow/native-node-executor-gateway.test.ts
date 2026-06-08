@@ -42,12 +42,7 @@ async function writeReportCwdScript(
   const scriptPath = path.join(scriptDirectory, fileName);
   await writeFile(
     scriptPath,
-    [
-      "#!/bin/sh",
-      'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
-      `printf '{"cwd":"%s"}\n' "$PWD" > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
-      "",
-    ].join("\n"),
+    ["#!/bin/sh", `printf '{"cwd":"%s"}\n' "$PWD"`, ""].join("\n"),
     { encoding: "utf8", mode },
   );
   return path.join(relativeDirectory, fileName);
@@ -73,8 +68,7 @@ async function writeBashOnlyReportCwdScript(
       `if [[ ${bashExpansionPrefix}{#cwd_parts[@]} -ne 1 ]]; then`,
       "  exit 42",
       "fi",
-      'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
-      `printf '{"cwd":"%s"}\n' "${bashExpansionPrefix}{cwd_parts[0]}" > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
+      `printf '{"cwd":"%s"}\n' "${bashExpansionPrefix}{cwd_parts[0]}"`,
       "",
     ].join("\n"),
     { encoding: "utf8", mode },
@@ -103,7 +97,6 @@ function makeExecutionMailbox() {
   return {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -115,21 +108,17 @@ function makeExecutionMailbox() {
         expectedReturn: "Return JSON.",
         instruction: "report cwd",
       },
-      paths: {
-        inputPath: "inbox/input.json",
-        inputFilesDir: "inbox/files",
-        outputPath: "outbox/output.json",
-        outputFilesDir: "outbox/files",
-      },
       input: {
         kind: "json",
+        source: "resolved-workflow-messages",
+        snapshotPath: "resolved-input/input.json",
         upstreamSources: [],
       },
       output: {
         kind: "json",
         required: true,
-        path: "outbox/output.json",
-        filesDirectory: "outbox/files",
+        publication: "runtime-owned-after-validation",
+        candidateSubmission: "inline-json-or-reserved-candidate-file",
       },
     },
     input: {

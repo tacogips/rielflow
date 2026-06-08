@@ -1,15 +1,24 @@
 #!/usr/bin/env sh
 set -eu
 
-mailbox_dir="${RIEL_MAILBOX_DIR:?RIEL_MAILBOX_DIR is required}"
-mkdir -p "$mailbox_dir/outbox"
-
 node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function readResolvedInput() {
+  const filePath = process.env.RIEL_RESOLVED_INPUT_PATH;
+  if (typeof filePath === "string" && filePath.length > 0) {
+    return readJson(filePath);
+  }
+  const stdin = fs.readFileSync(0, "utf8").trim();
+  if (stdin.length > 0) {
+    return JSON.parse(stdin);
+  }
+  throw new Error("RIEL_RESOLVED_INPUT_PATH or stdin resolved input JSON is required");
 }
 
 function latestUpstreamPayload(input) {
@@ -46,7 +55,7 @@ function assertPrivateRuntimePath(filePath) {
     "tmp/",
     "temp/",
   ];
-  const allowedAbsolutePrefixes = ["/tmp/", "/var/tmp/"];
+  const allowedAbsolutePrefixes = ["/tmp/", "/var/tmp/", "/var/folders/"];
   const isAllowed =
     allowedRelativePrefixes.some((prefix) => normalized.startsWith(prefix)) ||
     allowedAbsolutePrefixes.some((prefix) => resolved.startsWith(prefix));
@@ -57,8 +66,7 @@ function assertPrivateRuntimePath(filePath) {
   }
 }
 
-const mailboxDir = process.env.RIEL_MAILBOX_DIR;
-const input = readJson(path.join(mailboxDir, "inbox", "input.json"));
+const input = readResolvedInput();
 const payload = latestUpstreamPayload(input);
 const stateFile = readStateFileFromInput(input);
 assertPrivateRuntimePath(stateFile);
@@ -103,8 +111,5 @@ const output = {
     persisted: maxFetchedPostId.length > 0,
   },
 };
-fs.writeFileSync(
-  path.join(mailboxDir, "outbox", "output.json"),
-  `${JSON.stringify(output, null, 2)}\n`,
-);
+process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 NODE

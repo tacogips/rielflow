@@ -372,9 +372,8 @@ describe("callStepExecution", () => {
       path.join(scriptsDir, "write-output.sh"),
       [
         "#!/bin/sh",
-        'echo "call-step command stdout"',
-        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
-        `printf '{"summary":"done"}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
+        'echo "call-step command diagnostic" >&2',
+        `printf '{"summary":"done"}\n'`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -418,12 +417,20 @@ describe("callStepExecution", () => {
         (entry) =>
           entry.nodeId === "writer" &&
           entry.message.includes("stdout") &&
-          entry.message.includes("call-step command stdout"),
+          entry.message.includes("summary"),
+      ),
+    ).toBe(true);
+    expect(
+      logs.some(
+        (entry) =>
+          entry.nodeId === "writer" &&
+          entry.message.includes("stderr") &&
+          entry.message.includes("call-step command diagnostic"),
       ),
     ).toBe(true);
   });
 
-  test("fails deterministically when execution mailbox artifacts cannot be persisted", async () => {
+  test("fails deterministically when resolved input artifacts cannot be persisted", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
@@ -437,7 +444,7 @@ describe("callStepExecution", () => {
       sessionStoreRoot,
     });
 
-    const blockedMailboxPath = path.join(
+    const blockedInputPath = path.join(
       artifactsRoot,
       workflowName,
       "executions",
@@ -445,10 +452,10 @@ describe("callStepExecution", () => {
       "nodes",
       "writer",
       "exec-000001",
-      "mailbox",
+      "resolved-input",
     );
-    await mkdir(path.dirname(blockedMailboxPath), { recursive: true });
-    await writeFile(blockedMailboxPath, "blocked", "utf8");
+    await mkdir(path.dirname(blockedInputPath), { recursive: true });
+    await writeFile(blockedInputPath, "blocked", "utf8");
 
     const result = await callStepExecution(
       {
@@ -469,7 +476,7 @@ describe("callStepExecution", () => {
     }
     expect(result.error.exitCode).toBe(1);
     expect(result.error.message).toContain(
-      "failed to persist execution mailbox",
+      "failed to persist resolved input snapshot",
     );
 
     const persisted = await loadSession(sessionId, { sessionStoreRoot });
@@ -479,7 +486,7 @@ describe("callStepExecution", () => {
     }
     expect(persisted.value.status).toBe("failed");
     expect(persisted.value.lastError).toContain(
-      "failed to persist execution mailbox",
+      "failed to persist resolved input snapshot",
     );
   });
 
@@ -570,7 +577,7 @@ describe("callStepExecution", () => {
     expect(result.error.message).toContain("workflow runtime readiness failed");
   });
 
-  test("normalizes plain-text manager messages in mailbox input artifacts", async () => {
+  test("normalizes plain-text manager messages in resolved input artifacts", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
@@ -620,8 +627,7 @@ describe("callStepExecution", () => {
       await readFile(
         path.join(
           result.value.outputRef.artifactDir,
-          "mailbox",
-          "inbox",
+          "resolved-input",
           "input.json",
         ),
         "utf8",

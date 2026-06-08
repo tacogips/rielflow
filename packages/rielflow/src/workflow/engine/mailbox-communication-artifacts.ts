@@ -14,6 +14,7 @@ import { err, ok, type Result } from "../result";
 import {
   listWorkflowMessagesFromRuntimeDb,
   markWorkflowMessagesConsumedInRuntimeDb,
+  type RuntimeWorkflowMessageRecord,
   saveCommunicationEventToRuntimeDb,
   saveWorkflowMessageToRuntimeDb,
   workflowMessageRecordToCommunication,
@@ -45,21 +46,47 @@ import {
   initialDeliveryAttemptId,
   nextCommunicationId,
   outputArtifactJsonText,
-  readOutputPayloadArtifact,
 } from "./types-and-session-state";
+
+function parseWorkflowMessagePayloadJson(
+  payloadJson: string | null | undefined,
+  communicationId: string,
+  upstreamTargetNoun: string,
+  nodeId: string,
+): Result<Readonly<Record<string, unknown>>, string> {
+  if (payloadJson === undefined || payloadJson === null) {
+    return err(
+      `failed to resolve upstream communication '${communicationId}' for ${upstreamTargetNoun} '${nodeId}': workflow_messages.payload_json is missing`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payloadJson);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    return err(
+      `failed to resolve upstream communication '${communicationId}' for ${upstreamTargetNoun} '${nodeId}': workflow_messages.payload_json must be valid JSON: ${message}`,
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return err(
+      `failed to resolve upstream communication '${communicationId}' for ${upstreamTargetNoun} '${nodeId}': workflow_messages.payload_json must contain a JSON object`,
+    );
+  }
+  return ok(parsed as Readonly<Record<string, unknown>>);
+}
 
 async function buildLocalUpstreamOutputRefsFromRuntimeDb(
   session: WorkflowSessionState,
   nodeId: string,
   options: LoadOptions,
 ): Promise<Result<readonly UpstreamOutputRef[], string>> {
-  let sqliteMessages: readonly CommunicationRecord[];
+  let sqliteMessages: readonly RuntimeWorkflowMessageRecord[];
   try {
-    const rows = await listWorkflowMessagesFromRuntimeDb(
+    sqliteMessages = await listWorkflowMessagesFromRuntimeDb(
       { workflowExecutionId: session.sessionId, toNodeId: nodeId },
       options,
     );
-    sqliteMessages = rows.map(workflowMessageRecordToCommunication);
   } catch (error) {
     return err(
       `failed to load workflow messages for execution '${session.sessionId}': ${
@@ -68,28 +95,29 @@ async function buildLocalUpstreamOutputRefsFromRuntimeDb(
     );
   }
 
-  return ok(
-    sqliteMessages
-      .filter((communication) => communication.status === "delivered")
-      .map((communication) => {
-        const payloadRef = communication.payloadRef;
-        if (payloadRef.kind === "manager-message") {
-          return undefined;
-        }
-        const execution = session.nodeExecutions.find(
-          (candidate) =>
-            candidate.nodeExecId === communication.sourceNodeExecId,
-        );
-        return {
-          fromNodeId: communication.fromNodeId,
-          transitionWhen: communication.transitionWhen,
-          status: execution?.status ?? communication.status,
-          communicationId: communication.communicationId,
-          ...payloadRef,
-        };
-      })
-      .filter((entry): entry is UpstreamOutputRef => entry !== undefined),
-  );
+  const refs: UpstreamOutputRef[] = [];
+  for (const record of sqliteMessages) {
+    if (record.status !== "delivered") {
+      continue;
+    }
+    const communication = workflowMessageRecordToCommunication(record);
+    const payloadRef = communication.payloadRef;
+    if (payloadRef.kind === "manager-message") {
+      continue;
+    }
+    const execution = session.nodeExecutions.find(
+      (candidate) => candidate.nodeExecId === communication.sourceNodeExecId,
+    );
+    refs.push({
+      fromNodeId: communication.fromNodeId,
+      transitionWhen: communication.transitionWhen,
+      status: execution?.status ?? communication.status,
+      communicationId: communication.communicationId,
+      payloadJson: record.payloadJson,
+      ...payloadRef,
+    });
+  }
+  return ok(refs);
 }
 
 export async function buildMergedUpstreamOutputRefs(
@@ -147,14 +175,11 @@ export async function buildMergedUpstreamOutputRefs(
     if (snapshot.sessionId === session.sessionId) {
       continue;
     }
-    let snapshotCommunications: readonly CommunicationRecord[];
+    let snapshotCommunications: readonly RuntimeWorkflowMessageRecord[];
     try {
-      const sqliteMessages = await listWorkflowMessagesFromRuntimeDb(
+      snapshotCommunications = await listWorkflowMessagesFromRuntimeDb(
         { workflowExecutionId: snapshot.sessionId },
         options,
-      );
-      snapshotCommunications = sqliteMessages.map(
-        workflowMessageRecordToCommunication,
       );
     } catch (error) {
       return err(
@@ -163,7 +188,8 @@ export async function buildMergedUpstreamOutputRefs(
         }`,
       );
     }
-    for (const communication of snapshotCommunications) {
+    for (const record of snapshotCommunications) {
+      const communication = workflowMessageRecordToCommunication(record);
       if (
         communication.status !== "delivered" ||
         communication.toNodeId !== nodeId ||
@@ -185,6 +211,7 @@ export async function buildMergedUpstreamOutputRefs(
         transitionWhen: communication.transitionWhen,
         status: execution?.status ?? communication.status,
         communicationId: communication.communicationId,
+        payloadJson: record.payloadJson,
         ...payloadRef,
       });
     }
@@ -231,16 +258,19 @@ export async function buildUpstreamInputs(
 
   const loaded: UpstreamInput[] = [];
   for (const ref of refs) {
-    const output = await readOutputPayloadArtifact(ref.artifactDir);
+    const output = parseWorkflowMessagePayloadJson(
+      ref.payloadJson,
+      ref.communicationId,
+      upstreamTargetNoun,
+      nodeId,
+    );
     if (!output.ok) {
-      return err(
-        `failed to resolve upstream communication '${ref.communicationId}' for ${upstreamTargetNoun} '${nodeId}': ${output.error}`,
-      );
+      return err(output.error);
     }
     loaded.push({
       ...ref,
-      output: output.value.payload,
-      outputRaw: output.value.raw,
+      output: output.value,
+      outputRaw: ref.payloadJson ?? "",
     });
   }
 
@@ -263,6 +293,7 @@ export function resolveMailboxBusinessPayload(
 }
 export async function buildLatestOutputMailboxIndex(
   session: WorkflowSessionState,
+  options: LoadOptions = {},
 ): Promise<Result<readonly PromptCompositionLatestOutput[], string>> {
   const latestByStep = new Map<string, NodeExecutionRecord>();
   for (const execution of session.nodeExecutions) {
@@ -277,11 +308,40 @@ export async function buildLatestOutputMailboxIndex(
       (left.executionOrdinal ?? 0) - (right.executionOrdinal ?? 0),
   );
   const latestOutputs: PromptCompositionLatestOutput[] = [];
+  let messages: readonly RuntimeWorkflowMessageRecord[];
+  try {
+    messages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+  } catch (error) {
+    return err(
+      `failed to load latest completed workflow message context for execution '${session.sessionId}': ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  const messagesBySourceExec = new Map<string, RuntimeWorkflowMessageRecord>();
+  for (const message of messages) {
+    if (message.status !== "delivered") {
+      continue;
+    }
+    messagesBySourceExec.set(message.sourceNodeExecId, message);
+  }
   for (const execution of latestExecutions) {
-    const output = await readOutputPayloadArtifact(execution.artifactDir);
+    const message = messagesBySourceExec.get(execution.nodeExecId);
+    if (message === undefined) {
+      continue;
+    }
+    const output = parseWorkflowMessagePayloadJson(
+      message.payloadJson,
+      message.communicationId,
+      "latest completed output",
+      execution.nodeId,
+    );
     if (!output.ok) {
       return err(
-        `failed to resolve latest completed output '${execution.nodeExecId}' for mailbox context: ${output.error}`,
+        `failed to resolve latest completed output '${execution.nodeExecId}' for resolved workflow message context: ${output.error}`,
       );
     }
     latestOutputs.push({
@@ -289,7 +349,7 @@ export async function buildLatestOutputMailboxIndex(
       nodeExecId: execution.nodeExecId,
       status: execution.status,
       artifactDir: execution.artifactDir,
-      payload: resolveMailboxBusinessPayload(output.value.payload),
+      payload: resolveMailboxBusinessPayload(output.value),
       ...(execution.stepId === undefined ? {} : { stepId: execution.stepId }),
       ...(execution.nodeRegistryId === undefined
         ? {}
@@ -439,7 +499,7 @@ export async function persistExternalMailboxInputCommunication(input: {
   const outputPayload = {
     provider: "external-mailbox",
     model: "workflow-input",
-    promptText: "workflow input mailbox delivery",
+    promptText: "workflow input message delivery",
     completionPassed: true,
     when: { always: true },
     payload: normalizeExternalMailboxBusinessPayload(input.humanInput),

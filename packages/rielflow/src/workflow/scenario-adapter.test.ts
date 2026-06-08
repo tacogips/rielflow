@@ -35,7 +35,7 @@ const adapterContext: AdapterExecutionContext = {
 const outputPublication = {
   owner: "runtime",
   finalArtifactWrite: "runtime-only",
-  mailboxWrite: "runtime-only-after-validation",
+  messageWrite: "runtime-only-after-validation",
   candidateSubmission: "inline-json-or-reserved-candidate-file",
   futureCommunicationIdsExposed: false,
 } as const;

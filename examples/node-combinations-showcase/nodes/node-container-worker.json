@@ -14,7 +14,7 @@
       "-lc"
     ],
     "argsTemplate": [
-      "mkdir -p \"$RIEL_MAILBOX_DIR/outbox\" && printf '%s\\n' '{\"lane\":\"container\",\"summary\":\"node-combinations-showcase container lane placeholder\"}' > \"$RIEL_MAILBOX_DIR/outbox/output.json\""
+      "printf '%s\\n' '{\"lane\":\"container\",\"summary\":\"node-combinations-showcase container lane placeholder\"}'"
     ],
     "envTemplate": {
       "SHOWCASE_LANE": "container"

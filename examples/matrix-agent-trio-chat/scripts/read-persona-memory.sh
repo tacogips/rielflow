@@ -1,12 +1,25 @@
 #!/usr/bin/env sh
 set -eu
 
-mailbox_dir="${RIEL_MAILBOX_DIR:?RIEL_MAILBOX_DIR is required}"
-mkdir -p "$mailbox_dir/outbox"
-
 node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
+
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function readResolvedInput() {
+  const filePath = process.env.RIEL_RESOLVED_INPUT_PATH;
+  if (typeof filePath === "string" && filePath.length > 0) {
+    return readJson(filePath);
+  }
+  const stdin = fs.readFileSync(0, "utf8").trim();
+  if (stdin.length > 0) {
+    return JSON.parse(stdin);
+  }
+  throw new Error("RIEL_RESOLVED_INPUT_PATH or stdin resolved input JSON is required");
+}
 
 function safeSegment(value, fallback) {
   const raw = typeof value === "string" && value.length > 0 ? value : fallback;
@@ -33,21 +46,15 @@ function readRecentMarkdownFiles(directory) {
   }
 }
 
-function readWorkflowMemoryRoot() {
-  try {
-    const input = JSON.parse(
-      fs.readFileSync(path.join(process.env.RIEL_MAILBOX_DIR, "inbox", "input.json"), "utf8"),
-    );
-    const workflowInput = input && input.runtimeVariables && input.runtimeVariables.workflowInput;
-    return workflowInput && typeof workflowInput.memoryRoot === "string"
-      ? workflowInput.memoryRoot
-      : "";
-  } catch {
-    return "";
-  }
+function resolvedMemoryRootFromInput(input) {
+  const workflowInput = input && input.runtimeVariables && input.runtimeVariables.workflowInput;
+  return workflowInput && typeof workflowInput.memoryRoot === "string"
+    ? workflowInput.memoryRoot
+    : "";
 }
 
-const workflowMemoryRoot = readWorkflowMemoryRoot();
+const input = readResolvedInput();
+const workflowMemoryRoot = resolvedMemoryRootFromInput(input);
 const root = workflowMemoryRoot.length > 0
   ? workflowMemoryRoot
   : process.env.RIEL_TRIO_MEMORY_ROOT && process.env.RIEL_TRIO_MEMORY_ROOT.length > 0
@@ -76,8 +83,5 @@ const output = {
   }
 };
 
-fs.writeFileSync(
-  path.join(process.env.RIEL_MAILBOX_DIR, "outbox", "output.json"),
-  `${JSON.stringify(output, null, 2)}\n`,
-);
+process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 NODE

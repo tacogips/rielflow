@@ -370,10 +370,12 @@ describe("callStepExecution", () => {
       managerMessage?: { instruction?: string };
       executionMailbox?: {
         readonly meta: {
-          readonly mailboxDirEnvVar: string;
-          readonly paths: {
-            readonly inputPath: string;
-            readonly outputPath: string;
+          readonly input: {
+            readonly source: string;
+            readonly snapshotPath: string;
+          };
+          readonly output: {
+            readonly publication: string;
           };
         };
       };
@@ -381,10 +383,12 @@ describe("callStepExecution", () => {
     expect(inputJson.managerMessage?.instruction).toBe("produce review json");
     expect(inputJson.executionMailbox).toMatchObject({
       meta: {
-        mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
-        paths: {
-          inputPath: "inbox/input.json",
-          outputPath: "outbox/output.json",
+        input: {
+          source: "resolved-workflow-messages",
+          snapshotPath: "resolved-input/input.json",
+        },
+        output: {
+          publication: "runtime-owned-after-validation",
         },
       },
     });
@@ -393,22 +397,20 @@ describe("callStepExecution", () => {
       await readFile(
         path.join(
           result.value.outputRef.artifactDir,
-          "mailbox",
-          "inbox",
+          "resolved-input",
           "meta.json",
         ),
         "utf8",
       ),
     ) as {
       readonly objective: { readonly instruction: string };
-      readonly paths: { readonly outputPath: string };
+      readonly output: { readonly publication: string };
     };
     const mailboxInput = JSON.parse(
       await readFile(
         path.join(
           result.value.outputRef.artifactDir,
-          "mailbox",
-          "inbox",
+          "resolved-input",
           "input.json",
         ),
         "utf8",
@@ -417,7 +419,9 @@ describe("callStepExecution", () => {
       readonly managerMessage?: { readonly instruction?: string };
     };
     expect(mailboxMeta.objective.instruction).toBe("write a structured review");
-    expect(mailboxMeta.paths.outputPath).toBe("outbox/output.json");
+    expect(mailboxMeta.output.publication).toBe(
+      "runtime-owned-after-validation",
+    );
     expect(mailboxInput.managerMessage?.instruction).toBe(
       "produce review json",
     );

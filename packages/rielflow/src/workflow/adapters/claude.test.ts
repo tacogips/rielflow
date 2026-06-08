@@ -13,6 +13,7 @@ import {
   MockClaudeRunningSession,
   createMockClaudeSessionRunner,
 } from "claude-code-agent/sdk/testing";
+import { withProcessEnvOverride } from "../../../../rielflow-adapters/src/local-agent";
 import { AdapterExecutionError } from "../adapter";
 import type {
   AdapterExecutionContext,
@@ -42,7 +43,6 @@ const baseInput: AdapterExecutionInput = {
   executionMailbox: {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -54,21 +54,17 @@ const baseInput: AdapterExecutionInput = {
         expectedReturn: "Return JSON.",
         instruction: "test",
       },
-      paths: {
-        inputPath: "inbox/input.json",
-        inputFilesDir: "inbox/files",
-        outputPath: "outbox/output.json",
-        outputFilesDir: "outbox/files",
-      },
       input: {
         kind: "json",
+        source: "resolved-workflow-messages",
+        snapshotPath: "resolved-input/input.json",
         upstreamSources: [],
       },
       output: {
         kind: "json",
         required: true,
-        path: "outbox/output.json",
-        filesDirectory: "outbox/files",
+        publication: "runtime-owned-after-validation",
+        candidateSubmission: "inline-json-or-reserved-candidate-file",
       },
     },
     input: {
@@ -175,6 +171,26 @@ function makeClaudeRunnerFixture(
 }
 
 describe("ClaudeCodeAgentAdapter", () => {
+  test("removes blocked worker env even without replacement env", async () => {
+    const priorMailboxDir = process.env["RIEL_MAILBOX_DIR"];
+    process.env["RIEL_MAILBOX_DIR"] = "/tmp/legacy-mailbox";
+    let observedMailboxDir: string | undefined;
+    try {
+      await withProcessEnvOverride(undefined, async () => {
+        observedMailboxDir = process.env["RIEL_MAILBOX_DIR"];
+      });
+    } finally {
+      if (priorMailboxDir === undefined) {
+        delete process.env["RIEL_MAILBOX_DIR"];
+      } else {
+        process.env["RIEL_MAILBOX_DIR"] = priorMailboxDir;
+      }
+    }
+
+    expect(observedMailboxDir).toBeUndefined();
+    expect(process.env["RIEL_MAILBOX_DIR"]).toBe(priorMailboxDir);
+  });
+
   test("runs locally by default and keeps system prompt separate", async () => {
     const fixture = makeClaudeRunnerFixture();
     const adapter = new ClaudeCodeAgentAdapter({
@@ -301,7 +317,7 @@ describe("ClaudeCodeAgentAdapter", () => {
           publication: {
             owner: "runtime",
             finalArtifactWrite: "runtime-only",
-            mailboxWrite: "runtime-only-after-validation",
+            messageWrite: "runtime-only-after-validation",
             candidateSubmission: "inline-json-or-reserved-candidate-file",
             futureCommunicationIdsExposed: false,
           },
@@ -386,7 +402,6 @@ describe("ClaudeCodeAgentAdapter", () => {
             RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
             RIEL_NODE_ID: "node-1",
             RIEL_NODE_EXEC_ID: "exec-1",
-            RIEL_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
             RIEL_AGENT_BACKEND: "claude-code-agent",
           },
         },
@@ -411,7 +426,6 @@ describe("ClaudeCodeAgentAdapter", () => {
           RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
           RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
           RIEL_NODE_EXEC_ID: "exec-1",
-          RIEL_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
         }),
       }),
     );
@@ -437,7 +451,7 @@ describe("ClaudeCodeAgentAdapter", () => {
             publication: {
               owner: "runtime",
               finalArtifactWrite: "runtime-only",
-              mailboxWrite: "runtime-only-after-validation",
+              messageWrite: "runtime-only-after-validation",
               candidateSubmission: "inline-json-or-reserved-candidate-file",
               futureCommunicationIdsExposed: false,
             },
@@ -515,7 +529,7 @@ describe("ClaudeCodeAgentAdapter", () => {
         "const stdin = fs.readFileSync(0, 'utf8');",
         "if (args[0] === '--version') { console.log('2.1.149 (Claude Code)'); process.exit(0); }",
         "if (args[0] === 'auth' && args[1] === 'status') { console.log(JSON.stringify({ loggedIn: true })); process.exit(0); }",
-        `fs.writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({ args, cwd: process.cwd(), stdin }));`,
+        `fs.writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({ args, cwd: process.cwd(), stdin, mailboxDir: process.env.RIEL_MAILBOX_DIR }));`,
         "console.log('print mode reply');",
       ].join("\n"),
     );
@@ -526,33 +540,46 @@ describe("ClaudeCodeAgentAdapter", () => {
         PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
       },
     });
-    const output = await adapter.execute(
-      {
-        ...baseInput,
-        systemPromptText: "system",
-        mergedVariables: {
-          workflowInput: {
-            imagePaths: [path.join(root, "photo-a.png")],
-            attachments: [
-              {
-                kind: "image",
-                mediaType: "image/jpeg",
-                localPath: path.join(root, "nested", "photo-b.jpg"),
-              },
-            ],
+    const priorMailboxDir = process.env["RIEL_MAILBOX_DIR"];
+    process.env["RIEL_MAILBOX_DIR"] = path.join(root, "legacy-mailbox");
+    let output: Awaited<ReturnType<ClaudeCodeAgentAdapter["execute"]>>;
+    try {
+      output = await adapter.execute(
+        {
+          ...baseInput,
+          systemPromptText: "system",
+          mergedVariables: {
+            workflowInput: {
+              imagePaths: [path.join(root, "photo-a.png")],
+              attachments: [
+                {
+                  kind: "image",
+                  mediaType: "image/jpeg",
+                  localPath: path.join(root, "nested", "photo-b.jpg"),
+                },
+              ],
+            },
           },
         },
-      },
-      baseContext,
-    );
+        baseContext,
+      );
+    } finally {
+      if (priorMailboxDir === undefined) {
+        delete process.env["RIEL_MAILBOX_DIR"];
+      } else {
+        process.env["RIEL_MAILBOX_DIR"] = priorMailboxDir;
+      }
+    }
 
     const capture = JSON.parse(await readFile(capturePath, "utf8")) as {
       args: string[];
       cwd: string;
       stdin: string;
+      mailboxDir?: string;
     };
     expect(output.payload).toEqual({ text: "print mode reply" });
     expect(capture.cwd).toBe(await realpath(projectDir));
+    expect(capture.mailboxDir).toBeUndefined();
     expect(capture.args).toEqual(
       expect.arrayContaining([
         "-p",

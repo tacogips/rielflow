@@ -743,6 +743,14 @@ GraphQL inspection, and manager mutation scope checks use SQLite as the message
 source. Legacy per-message files and session communication arrays are not
 fallback sources for new communication reads.
 
+Node execution no longer exposes a `RIEL_MAILBOX_DIR` inbox/outbox message
+contract. Native command, container, and add-on workers receive resolved
+structured input through runtime-managed stdin/request files and
+`RIEL_RESOLVED_INPUT_PATH`, then return JSON through runtime-owned output
+collection for publication into `workflow_messages`. Workers must not read
+`inbox/input.json` or write `outbox/output.json`; those paths are not
+compatibility fallbacks for node message handoff.
+
 Runtime JSON text columns are validated by SQLite. Required JSON values use
 `CHECK(json_valid(column))`, while nullable JSON values use
 `CHECK(column IS NULL OR json_valid(column))`. For message handoffs this covers

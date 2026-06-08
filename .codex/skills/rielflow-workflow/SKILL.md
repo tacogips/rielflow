@@ -101,46 +101,16 @@ Agent node payload:
 }
 ```
 
-Derived workflow variant:
-
-```json
-{
-  "workflowId": "cursor-demo",
-  "description": "Cursor variant of the demo workflow.",
-  "extends": {
-    "workflowId": "codex-demo",
-    "stringReplacements": {
-      "codex-demo": "cursor-demo"
-    },
-    "agentNodePatch": {
-      "executionBackend": "cursor-cli-agent",
-      "model": "claude-sonnet-4-5"
-    }
-  }
-}
-```
-
 ## Authoring Rules
 
 - Node registry ids must match `^[a-z0-9][a-z0-9-]{1,63}$`.
 - Each registry entry declares exactly one of `nodeFile` or `addon`.
-- A workflow with `extends` is a sparse derived workflow: author `workflowId`
-  and `extends.workflowId`; inherit the base workflow graph, prompts, node
-  registry, and node payloads.
-- `extends.stringReplacements` maps non-empty source strings to replacement
-  strings across the inherited in-memory bundle. Use it for same-family workflow
-  ids, transition targets, and labels; keep keys specific.
-- `extends.agentNodePatch` applies one patch to inherited file-backed agent
-  nodes only. It does not patch inline agent nodes or add-on nodes.
-- `extends.nodePatch` applies explicit node-id patches after
-  `agentNodePatch`; runtime `nodePatch` options still apply after inheritance.
-- Derived workflow loading validates the resolved derived bundle and does not
-  rewrite the base or derived workflow files on disk. Inheritance cycles fail
-  validation.
 - Manager steps must reference file-backed nodes; add-on-backed nodes are worker-only.
 - Prefer DRY workflow composition over combined one-off nodes. If behavior can be expressed as reusable primitive nodes chained by `steps[].transitions`, author it that way; for example, model commit-and-push as a git commit step followed by a git push step instead of duplicating commit logic in a separate commit-and-push node.
 - Agent nodes require `executionBackend`, backend-specific `model`, `promptTemplate` or `promptTemplateFile`, and `variables`.
-- Valid `executionBackend` values include `codex-agent`, `claude-code-agent`, `cursor-cli-agent`, `official/openai-sdk`, `official/anthropic-sdk`, and `official/cursor-sdk`.
+- Valid `executionBackend` values are `codex-agent`, `claude-code-agent`,
+  `cursor-cli-agent`, `official/openai-sdk`, `official/anthropic-sdk`, and
+  `official/cursor-sdk`.
 - Do not encode backend identifiers in `model`; `model` should be a provider/backend model name.
 - Valid authored `nodeType` values are `agent`, `command`, `container`, and `user-action`. Do not author `nodeType: "addon"`.
 - A cross-workflow transition uses `toWorkflowId`, `toStepId`, and `resumeStepId`; `resumeStepId` must name a step in the current workflow.

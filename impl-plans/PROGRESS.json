@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-07T19:05:00+09:00",
+  "lastUpdated": "2026-06-08T11:23:01+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -570,6 +570,9 @@
     },
     "193": {
       "status": "COMPLETED"
+    },
+    "194": {
+      "status": "COMPLETED"
     }
   },
   "plans": {
@@ -1049,6 +1052,57 @@
           "parallelizable": false,
           "deps": [
             "TASK-009"
+          ]
+        }
+      }
+    },
+    "completed/sqlite-only-node-io-mailbox-removal": {
+      "phase": 194,
+      "status": "Completed",
+      "path": "impl-plans/completed/sqlite-only-node-io-mailbox-removal.md",
+      "designReference": "design-docs/specs/design-node-execution-inbox-contract.md#contract-shape; design-docs/specs/design-node-execution-inbox-contract.md#backend-application; design-docs/specs/design-node-execution-inbox-contract.md#output-ownership; design-docs/specs/design-sqlite-message-store.md#node-execution-io-boundary; design-docs/specs/design-sqlite-message-store.md#file-mailbox-removal-boundary; design-docs/specs/architecture.md#message-architecture",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-004"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-004",
+            "TASK-005"
           ]
         }
       }

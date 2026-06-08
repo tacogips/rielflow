@@ -68,14 +68,15 @@ document can guide incremental work without implying a full mailbox rewrite.
 
 ## Relationship To Existing Mailbox Model
 
-This design extends the existing mailbox architecture; it does not replace it.
+This design extends the runtime-owned external mailbox boundary for provider
+traffic; it does not restore worker-facing node mailbox files.
 
 Existing distinction:
 
-- canonical routed mailbox under `communications/{communicationId}/...` is the
-  runtime-owned communication store
-- per-node execution-local mailbox under node artifacts is a worker-facing view
-  only
+- SQLite `workflow_messages` is the runtime-owned communication store for
+  workflow and node handoff
+- resolved node input snapshots under node artifacts are runtime-owned
+  inspection/audit views, not worker-authored message stores
 
 This document adds a higher-level interpretation for communications whose
 `routingScope` is `external-mailbox`:
@@ -85,15 +86,16 @@ This document adds a higher-level interpretation for communications whose
 - optional external progress/control messages that are not the final workflow
   business output
 
-Event sources must bind to this external mailbox boundary, not to
-`nodes/.../mailbox/inbox` or `nodes/.../mailbox/outbox`.
+Event sources must bind to this external mailbox boundary and the SQLite-backed
+runtime message store, not to execution-local node artifact directories.
 
 Workflow output mail and external output publication are intentionally separate.
-The internal mailbox/outbox artifacts preserve step execution payloads and
-manager-routed workflow data. They can be the source of a selected workflow
-business result, but they are not provider delivery requests. A provider-facing
-reply exists only after the runtime or supervisor creates an explicit
-`external-output` message and routes it through output-destination policy.
+SQLite `workflow_messages`, runtime-owned node output publication, and selected
+root output state preserve step execution payloads and manager-routed workflow
+data. They can be the source of a selected workflow business result, but they
+are not provider delivery requests. A provider-facing reply exists only after
+the runtime or supervisor creates an explicit `external-output` message and
+routes it through output-destination policy.
 
 The external mailbox boundary is a logical runtime boundary, not one global
 filesystem mailbox shared by all workflow executions. When a workflow execution

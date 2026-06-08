@@ -699,7 +699,8 @@ Recommended mixed-backend reference:
 - implementation planning/finalization stays on `claude-code`
 - the actual coding node uses `codex-agent`
 - the workflow-level `rielflowPromptTemplate` explicitly prefers `rielflow graphql`
-- node prompt templates can read upstream mailbox data through `{{inbox.*}}`
+- node prompt templates can read resolved upstream workflow message data through
+  `{{inbox.*}}`
 - long node prompts live in `prompts/*.md` and are referenced by
   `node-{id}.json.promptTemplateFile`
 
@@ -889,7 +890,8 @@ Reference workflow for the case where one worker node should run twice:
   the second visit
 - the first visit echoes the normalized request
 - the second visit answers using that earlier echo
-- the prompt also reads `{{inbox.latest.output.echoText}}` so the earlier echo is
+- the prompt also reads resolved upstream data through
+  `{{inbox.latest.output.echoText}}` so the earlier echo is
   available explicitly in workflow data, not only via backend memory
 
 Validate it:

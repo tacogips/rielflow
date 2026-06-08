@@ -48,7 +48,7 @@ This keeps derived visualization state out of separate authored files.
 Workflow JSON must make control flow explicit through:
 
 - step-local `transitions[]`
-- runtime-owned output mail status
+- runtime-owned output envelope status
 - optional validated `next.stepId` jump requests
 
 Dedicated branch/loop authoring is removed in favor of jump-driven routing.
@@ -59,11 +59,21 @@ Dedicated branch/loop authoring is removed in favor of jump-driven routing.
 - Completion: auto-complete nodes are allowed; success-judgment-free nodes can be configured.
 - Timeout: each step invocation may use per-invocation, step-local, node-local, or workflow-level timeout defaults in that precedence order.
 - Conversation handoff: `rielflow` routes by explicit `OutputRef` (`workflowExecutionId`, `outputNodeId`, `nodeExecId`) instead of implicit latest-output inference.
-- Node mailbox transport: messages are persisted as hierarchical manager-routed file mailboxes with per-workflow-execution `communicationId` allocation owned by the root workflow manager. Manager-routed sends remain the authoritative cross-step transport, and a re-executed or resubmitted send always allocates a new `communicationId`; delivery retries for an already-created send keep the same `communicationId` and advance `deliveryAttemptId` (and optional `agentSessionId`).
-- Node execution inbox contract: canonical mailbox transport stays manager-owned, but workers receive one compiled execution-local inbox/outbox contract under their node artifact directory. The worker-facing metadata uses mailbox-root-relative paths plus `RIEL_MAILBOX_DIR`, so node implementations do not need hidden knowledge of workflow graph shape or canonical `communications/...` layout.
+- Node message transport: messages are persisted as SQLite
+  `workflow_messages` rows with per-workflow-execution `communicationId`
+  allocation owned by the root workflow manager. Manager-routed sends remain
+  the authoritative cross-step transport, and a re-executed or resubmitted send
+  always allocates a new `communicationId`; delivery retries for an
+  already-created send keep the same `communicationId` and advance
+  `deliveryAttemptId` (and optional `agentSessionId`).
+- Node execution I/O contract: canonical transport stays manager-owned and
+  SQLite-backed, but workers receive a resolved semantic input object through
+  backend-specific non-mailbox boundaries. `RIEL_MAILBOX_DIR`,
+  `inbox/input.json`, and `outbox/output.json` are not valid node message
+  input/output contracts.
 - GraphQL control-plane direction: GraphQL is the canonical served control-plane schema for execution, communication inspection/replay, manager send operations, and workflow/session control flows. CLI remains a thin client surface over GraphQL.
-- Manager control-plane separation: a manager-issued GraphQL manager-message mutation invoked through `rielflow graphql` is not itself a mailbox communication. It is a scoped control-plane request that may cause new mailbox communications, retries, planner-state changes, or node execution requests.
-- Manager-message provenance: manager-authored mailbox sends now use discriminated `payloadRef` provenance so node-output-backed and manager-message-backed communications stay replay/retry compatible under one durable artifact model.
+- Manager control-plane separation: a manager-issued GraphQL manager-message mutation invoked through `rielflow graphql` is not itself a workflow message communication. It is a scoped control-plane request that may cause new `workflow_messages` communications, retries, planner-state changes, or node execution requests.
+- Manager-message provenance: manager-authored `workflow_messages` sends now use discriminated `payloadRef` provenance so node-output-backed and manager-message-backed communications stay replay/retry compatible under one durable artifact model.
 - File/image reference portability: GraphQL must use data-root-relative file references resolved under `RIEL_ARTIFACT_DIR`, never host absolute paths. This is required for future container node execution with bind-mounted or synchronized data volumes regardless of whether the selected runner is Podman, Docker, nerdctl, or Apple container.
 - Manager attachment scope: manager-scoped GraphQL attachments are not just root-data-relative; they must stay inside the authenticated execution's `files/{workflowId}/{workflowExecutionId}/...` namespace so manager messages cannot read unrelated workflow artifacts or session files.
 - Root-data note: `RIEL_ARTIFACT_DIR` is the canonical root data directory for derived workflow artifacts, session state, attachments, and the runtime database.
@@ -73,7 +83,7 @@ Dedicated branch/loop authoring is removed in favor of jump-driven routing.
 - Legacy compatibility removal direction: remaining node-addressed or structural compatibility paths are removal-only work, not precedent for new features. Refactor iterations should delete or collapse those paths rather than preserve aliases, and the active execution tracker is `impl-plans/workflow-legacy-compatibility-removal.md`.
 - Legacy compatibility review note (2026-04-25, updated 2026-04-29): the repository's live runtime/API surface is now step-addressed. The public `call-node` surface is removed; CLI `workflow inspect`, GraphQL workflow views, and `buildInspectionSummary` are step-first (`entryStepId`, `managerStepId`, `stepIds`, node registry ids, `crossWorkflowDispatchIds`, `counts.crossWorkflowDispatches` for step-derived cross-workflow dispatches) without node-addressed entry/manager fields on those summaries. Manager-control no longer includes structural `start-sub-workflow` / `deliver-to-child-input` actions (those types are rejected). Cross-workflow execution uses step transitions and runtime-derived dispatch rows instead of structural child scheduling or authored top-level `workflow.workflowCalls`. Manager-control accepts `planner-note`, `retry-step`, `replay-communication`, `execute-optional-step`, and `skip-optional-step` (retry/optional actions use `stepId`; node-id action aliases are removed). `call-step` direct execution uses a step-addressed internal executor input (`stepId`). Validation rejects top-level authored `workflow.workflowCalls` on all bundles (cross-workflow calls use step transitions only). Runtime/session/output-ref metadata projection is centralized around the shared step-identity and output-ref helpers (`StepIdentityFields`, `toStepIdentityFields(...)`, `buildOutputRefForExecution(...)`). Remaining cleanup is mostly documentation and intentional negative tests for removed authored fields. Auto-improve supervision remediation is step-only (`rerunFromStepId` on the engine); workflow bundles are validated on the same strict step-addressed path as ordinary execution (no runtime projection from legacy node-graph shapes).
 - Step-based workflow direction: workflows contain `steps` as the canonical execution units, while `workflow.json.nodes[]` is a reusable node registry instead of direct execution order. Different steps may intentionally share one node and optionally continue its backend session, which makes patterns such as implementation followed by self-review by the same LLM/code node explicit.
-- Jump-driven routing direction: dedicated authored branch/loop primitives should be removed from the primary workflow schema in favor of runtime-owned output mail envelopes that carry status metadata plus an optional validated next-step jump request. The default manager mode should become deterministic `code`, while `llm` manager remains experimental. Revisited nodes must allocate distinct mailbox instances and may continue the same backend session with a different prompt variant.
+- Jump-driven routing direction: dedicated authored branch/loop primitives should be removed from the primary workflow schema in favor of runtime-owned output envelopes that carry status metadata plus an optional validated next-step jump request. The default manager mode should become deterministic `code`, while `llm` manager remains experimental. Revisited nodes must allocate distinct step execution and communication records and may continue the same backend session with a different prompt variant.
 - Auto-improve supervision direction: `rielflow` supports an `auto improve mode` with two shipped paths: the default engine-owned supervision loop and an opt-in nested superviser workflow path enabled with `--nested-superviser`, both using the same persisted audit model.
 - CLI variables contract: `rielflow graphql --variables` accepts inline JSON or `@path/to/variables.json` for GraphQL variables. `rielflow workflow run --variables` accepts inline JSON object input, explicit `@path/to/variables.json`, and the historical bare file path form such as `./vars.json` for workflow runtime variables. Both commands reject arrays, scalars, malformed JSON, and unreadable file inputs before sending a request or starting execution. `workflow inspect` should use callable input metadata to show concrete `--variables` examples in text output and preserve `callable.input.jsonSchema` as nested JSON in JSON output; this is discoverability, not schema enforcement. First-iteration attachment handling assumes files are pre-placed under the Rielflow root data directory; no upload mutation is introduced yet.
 - GraphQL transport contract: `/graphql` accepts standard JSON request envelopes with `query` and optional `variables`, and `rielflow graphql` executes locally in-process when no endpoint is provided. `--endpoint` or `RIEL_GRAPHQL_ENDPOINT` selects remote HTTP transport.
@@ -108,10 +118,10 @@ This supports quality gates in collaborative writing workflows.
 
 ### GraphQL Redesign Decision
 
-- The requested GraphQL-first redesign does not conflict with the current execution/mailbox architecture.
+- The requested GraphQL-first redesign does not conflict with the current execution/message architecture.
 - It does conflict with the current CLI/control-surface layering if attempted as a direct in-place replacement.
 - The approved direction is therefore additive and layered:
-  - keep workflow/session/mailbox artifacts,
+  - keep workflow/session/message artifacts,
   - introduce GraphQL as the canonical control plane,
   - expose `rielflow graphql` as the manager tool client over that control plane,
   - add first-class communication inspection and replay services,

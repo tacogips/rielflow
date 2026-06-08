@@ -10,12 +10,15 @@ This design introduces an optional per-node output contract with these goals:
 
 - let workflow authors declare the business output shape in `node-{id}.json`
 - provide that contract to the LLM/backend on every execution attempt
-- keep final `output.json` and mailbox publication under runtime ownership
+- keep final `output.json` and SQLite message publication under runtime
+  ownership
 - reject invalid candidate outputs before downstream routing
 - feed validation errors back to the LLM and request a corrected submission
 - preserve deterministic artifact history for every output attempt
 
-The runtime continues to own the execution envelope (`provider`, `model`, `when`, `completionPassed`, timestamps, mailbox writes). The LLM only proposes the business payload.
+The runtime continues to own the execution envelope (`provider`, `model`,
+`when`, `completionPassed`, timestamps, and `workflow_messages` writes). The
+LLM only proposes the business payload.
 
 ## Output-Contract Adapter Envelope Normalization
 
@@ -101,12 +104,13 @@ Rules:
 
 ## Canonical Output Shape Rule
 
-Published execution-local and canonical mailbox outputs remain JSON objects even
-when the originating backend is text-oriented.
+Published node outputs and canonical SQLite message payload snapshots remain
+JSON objects even when the originating backend is text-oriented.
 
 Rules:
 
-- `outbox/output.json` is always a JSON file
+- the worker-facing `outbox/output.json` mailbox path is removed and must not be
+  used as a message output contract
 - published `output.payload` remains a JSON object
 - if a node declares `output.jsonSchema`, the candidate must satisfy that schema
 - if a node does not declare `output.jsonSchema`, the runtime still requires a
@@ -150,7 +154,8 @@ Artifact rules:
 - `output-attempts/*/candidate.json` stores the runtime-copied candidate business payload for that attempt. If a valid adapter envelope was submitted, this artifact stores the normalized nested `payload`, not the outer envelope.
 - `output-attempts/*/validation.json` stores validation result details and retry feedback.
 - `output.json` is written only by the runtime after successful validation, or as a terminal failure envelope when execution fails.
-- mailbox `outbox/*/output.json` is copied from the runtime-published `output.json`, never from an LLM-written file.
+- downstream `workflow_messages` rows are written from the runtime-published
+  `output.json`, never from a worker-written mailbox file.
 - the reserved candidate submission path exposed to adapters should be a dedicated staging path, not a sibling of the final `output.json`, so adapters do not learn the publish location just by walking parent directories from the writable temp file.
 - before each adapter attempt, the runtime clears any pre-existing file at the reserved candidate staging path so stale temp output from a prior run or retry can never be mistaken for the current submission.
 - after each attempt finishes, the runtime deletes the reserved temp staging directory regardless of success or failure because the audited copy lives under `output-attempts/*/candidate.json`; the temp file is execution plumbing, not a durable artifact.
@@ -176,7 +181,8 @@ For a node with `output.jsonSchema`:
 6. If valid, runtime publishes the final `output.json` with normalized `when`,
    `completionPassed`, and business `payload`, then may route it downstream.
 7. If the candidate is malformed, envelope-invalid, or schema-invalid and attempts remain, runtime records the rejection in `validation.json`, feeds a compact error summary back into the next adapter attempt, and requests a corrected payload.
-8. If the final attempt is still invalid, the node execution fails and no downstream mailbox delivery is created.
+8. If the final attempt is still invalid, the node execution fails and no
+   downstream `workflow_messages` delivery is created.
 
 ## Adapter Contract
 
@@ -186,7 +192,8 @@ The adapter input includes:
 - execution artifact directory
 - current output attempt number
 - candidate path reserved for the current attempt
-- explicit publication policy declaring that final `output.json` and mailbox writes are runtime-owned
+- explicit publication policy declaring that final `output.json` and
+  downstream `workflow_messages` writes are runtime-owned
 - optional output contract description
 - optional JSON Schema object
 - prior validation failures for retry feedback
@@ -207,6 +214,9 @@ Backward compatibility:
 - deterministic/mock adapters that simulate repeated responses should key contract retries off the runtime-provided output attempt number rather than only the node execution count.
 - external wrapper adapters that proxy to LLM processes should avoid exposing the final node artifact directory when `output` is configured; the reserved candidate staging path is the only output-write location they need for structured-output publication.
 - in either mode, the runtime remains the only component that publishes final `output.json`.
+- native command and container executors must not read
+  `$RIEL_MAILBOX_DIR/outbox/output.json`; they should return structured JSON
+  through stdout or another executor-private result channel.
 
 ## Validation Scope
 
@@ -254,9 +264,17 @@ The block includes:
 - concise schema excerpt or full schema JSON
 - retry feedback from the previous failed attempt
 
-The runtime does not expose the final publish mailbox/output path in adapter input or in the LLM prompt. The reserved candidate staging path is the only writable output target the adapter should use; runtime publication to `output.json` and mailbox snapshots happens only after successful validation.
+The runtime does not expose the final publish output path or any downstream
+message publication path in adapter input or in the LLM prompt. The reserved
+candidate staging path is the only writable output target the adapter should
+use; runtime publication to `output.json` and SQLite message snapshots happens
+only after successful validation.
 
-The runtime also keeps that execution-only contract block out of the published `output.json` envelope and mailbox snapshots. Downstream nodes may consume the published output envelope, so candidate paths and retry feedback must remain internal to the execution attempt rather than becoming part of downstream-visible artifacts.
+The runtime also keeps that execution-only contract block out of the published
+`output.json` envelope and SQLite message snapshots. Downstream nodes may
+consume the published output envelope, so candidate paths and retry feedback
+must remain internal to the execution attempt rather than becoming part of
+downstream-visible artifacts.
 
 Retry feedback must stay short and machine-actionable, for example:
 
@@ -292,22 +310,22 @@ The adapter/node execution receives enough identity to produce a candidate deter
 The adapter/node execution does not receive future transport identity:
 
 - no future `communicationId`
-- no mailbox publish path
+- no SQLite message publish path
 - no permission to allocate delivery ids
 
 Those identifiers do not exist until the runtime has accepted the candidate payload. This keeps publication authority on the runtime side and prevents adapters from coupling themselves to mailbox implementation details.
 
-## Session and Mailbox Semantics
+## Session and Message Semantics
 
 - the node execution still owns `nodeExecId`
 - the workflow execution still owns `workflowExecutionId`
-- mailbox `communicationId` allocation remains unchanged
+- message `communicationId` allocation remains runtime-owned
 - downstream nodes only see outputs that passed publication
 - failed validation is a node execution failure, not a mailbox failure
 
-This keeps mailbox semantics simple:
+This keeps message semantics simple:
 
-- invalid candidate output never enters mailbox transport
+- invalid candidate output never enters `workflow_messages` transport
 - `communicationId` is allocated only after a node has a publishable output
 
 ## Failure Semantics

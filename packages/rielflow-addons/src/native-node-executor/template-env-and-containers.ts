@@ -30,6 +30,7 @@ export const X_GATEWAY_READ_BINARY = "x-gateway-reader";
 export const X_GATEWAY_BINARY = "x-gateway";
 export const MAIL_GATEWAY_READ_BINARY = "mail-gateway-reader";
 export const MAIL_GATEWAY_BINARY = "mail-gateway";
+const CONTAINER_RESOLVED_INPUT_PATH = "/rielflow-input/resolved-input.json";
 export interface NativeNodeExecutionContext {
   readonly timeoutMs: number;
   readonly signal: AbortSignal;
@@ -96,7 +97,6 @@ export function renderTemplateMap(
   );
 }
 export interface RielflowExecutionEnvInput {
-  readonly mailboxDir: string;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
   readonly nodeId: string;
@@ -106,12 +106,28 @@ export function buildRielflowExecutionEnv(
   input: RielflowExecutionEnvInput,
 ): Readonly<Record<string, string>> {
   return {
-    RIEL_MAILBOX_DIR: input.mailboxDir,
     RIEL_WORKFLOW_ID: input.workflowId,
     RIEL_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
     RIEL_NODE_ID: input.nodeId,
     RIEL_NODE_EXEC_ID: input.nodeExecId,
   };
+}
+async function writeResolvedInputRequestFile(input: {
+  readonly artifactDir: string;
+  readonly executionMailbox: NodeExecutionMailbox;
+}): Promise<{ readonly hostPath: string; readonly json: string }> {
+  const requestPath = path.join(
+    input.artifactDir,
+    "resolved-input",
+    "native-request.json",
+  );
+  const requestJson = `${JSON.stringify(input.executionMailbox.input, null, 2)}\n`;
+  await atomicWriteTextFile(requestPath, requestJson);
+  return { hostPath: requestPath, json: requestJson };
+}
+function removeBlockedWorkerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  delete env["RIEL_MAILBOX_DIR"];
+  return env;
 }
 export function buildCommandEnv(
   input: RielflowExecutionEnvInput & {
@@ -119,30 +135,32 @@ export function buildCommandEnv(
     readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
   },
 ): NodeJS.ProcessEnv {
-  return {
+  return removeBlockedWorkerEnv({
     ...process.env,
     ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
     ...input.renderedEnv,
     ...buildRielflowExecutionEnv(input),
-  };
+  });
 }
 export function buildRunnerEnv(input: {
   readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
 }): NodeJS.ProcessEnv {
-  return {
+  return removeBlockedWorkerEnv({
     ...process.env,
     ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
-  };
+  });
 }
 export function buildContainerEnv(
   input: RielflowExecutionEnvInput & {
     readonly renderedEnv: Readonly<Record<string, string>>;
   },
 ): Readonly<Record<string, string>> {
-  return {
+  const env = {
     ...input.renderedEnv,
     ...buildRielflowExecutionEnv(input),
   };
+  delete env["RIEL_MAILBOX_DIR"];
+  return env;
 }
 export function appendContainerEnvArgs(
   runArgs: string[],
@@ -167,10 +185,12 @@ export async function runSpawnedProcess(input: {
   readonly env: NodeJS.ProcessEnv;
   readonly context: NativeNodeExecutionContext;
   readonly captureDirectory?: string;
+  readonly stdin?: string;
 }): Promise<SpawnedProcessResult> {
   const captureDirectory = input.captureDirectory ?? input.cwd;
   await mkdir(captureDirectory, { recursive: true });
   const captureId = randomUUID();
+  const stdinPath = path.join(captureDirectory, `${captureId}-stdin.json`);
   const stdoutPath = path.join(captureDirectory, `${captureId}-stdout.log`);
   const stderrPath = path.join(captureDirectory, `${captureId}-stderr.log`);
   const readCapturedLogs = async (): Promise<SpawnedProcessResult> => {
@@ -186,7 +206,7 @@ export async function runSpawnedProcess(input: {
       "sh",
       [
         "-c",
-        'exec "$@" >"$RIEL_PROCESS_STDOUT" 2>"$RIEL_PROCESS_STDERR"',
+        "stdin_file=$RIEL_PROCESS_STDIN; stdout_file=$RIEL_PROCESS_STDOUT; stderr_file=$RIEL_PROCESS_STDERR; cat >\"$stdin_file\"; unset RIEL_PROCESS_STDIN RIEL_PROCESS_STDOUT RIEL_PROCESS_STDERR; exec \"$@\" <\"$stdin_file\" >\"$stdout_file\" 2>\"$stderr_file\"",
         "rielflow-process",
         input.command,
         ...input.args,
@@ -195,12 +215,15 @@ export async function runSpawnedProcess(input: {
         cwd: input.cwd,
         env: {
           ...input.env,
+          RIEL_PROCESS_STDIN: stdinPath,
           RIEL_PROCESS_STDOUT: stdoutPath,
           RIEL_PROCESS_STDERR: stderrPath,
         },
-        stdio: ["ignore", "ignore", "ignore"],
+        stdio: ["pipe", "ignore", "ignore"],
       },
     );
+    child.stdin.on("error", () => {});
+    child.stdin.end(input.stdin ?? "");
 
     let settled = false;
     let abortRequested = false;
@@ -275,18 +298,15 @@ export async function runSpawnedProcess(input: {
     });
   });
 }
-export async function readMailboxOutputPayload(
-  mailboxDir: string,
-): Promise<Readonly<Record<string, unknown>>> {
-  const outputPath = path.join(mailboxDir, "outbox", "output.json");
-  let raw: string;
-  try {
-    raw = await readFile(outputPath, "utf8");
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "unknown error";
+export function readStdoutOutputPayload(
+  stdout: string,
+  sourceLabel: string,
+): Readonly<Record<string, unknown>> {
+  const raw = stdout.trim();
+  if (raw.length === 0) {
     throw new AdapterExecutionError(
       "invalid_output",
-      `native node did not produce mailbox output at '${outputPath}': ${message}`,
+      `${sourceLabel} must write a JSON object to stdout`,
     );
   }
 
@@ -298,14 +318,14 @@ export async function readMailboxOutputPayload(
       error instanceof Error ? error.message : "unknown parse error";
     throw new AdapterExecutionError(
       "invalid_output",
-      `mailbox output '${outputPath}' must be valid JSON: ${message}`,
+      `${sourceLabel} stdout must be valid JSON: ${message}`,
     );
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new AdapterExecutionError(
       "invalid_output",
-      `mailbox output '${outputPath}' must be a JSON object`,
+      `${sourceLabel} stdout must be a JSON object`,
     );
   }
   return parsed as Readonly<Record<string, unknown>>;
@@ -319,7 +339,7 @@ export function buildNativeOutput(input: {
 }): AdapterExecutionOutput {
   const normalized = normalizeOutputContractEnvelope(
     input.payload,
-    "native command mailbox output",
+    "native stdout output",
   );
   return {
     provider: input.provider,
@@ -414,6 +434,7 @@ export async function runLoggedSpawnedProcess(input: {
   readonly context: NativeNodeExecutionContext;
   readonly artifactDir: string;
   readonly logPrefix?: string;
+  readonly stdin?: string;
 }): Promise<SpawnedProcessResult> {
   try {
     const result = await runSpawnedProcess({
@@ -423,6 +444,7 @@ export async function runLoggedSpawnedProcess(input: {
       env: input.env,
       context: input.context,
       captureDirectory: input.artifactDir,
+      ...(input.stdin === undefined ? {} : { stdin: input.stdin }),
     });
     await writeProcessLogs({
       artifactDir: input.artifactDir,
@@ -552,13 +574,15 @@ export async function executeCommandNode(
     );
   }
 
-  const mailboxDir = path.join(input.artifactDir, "mailbox");
   const variables = resolveTemplateVariables(input);
   const argv = renderTemplateEntries(commandConfig.argvTemplate, variables);
+  const resolvedInputRequest = await writeResolvedInputRequestFile(input);
   const renderedEnv = renderTemplateMap(commandConfig.envTemplate, variables);
   const childEnv = buildCommandEnv({
-    mailboxDir,
-    renderedEnv,
+    renderedEnv: {
+      ...renderedEnv,
+      RIEL_RESOLVED_INPUT_PATH: resolvedInputRequest.hostPath,
+    },
     workflowId: input.workflowId,
     workflowExecutionId: input.workflowExecutionId,
     nodeId: input.nodeId,
@@ -586,6 +610,7 @@ export async function executeCommandNode(
     env: childEnv,
     context,
     artifactDir: input.artifactDir,
+    stdin: resolvedInputRequest.json,
   });
   const processLogs = buildProcessLogAttachments(result);
 
@@ -594,7 +619,7 @@ export async function executeCommandNode(
       provider: "native-command",
       model: `command:${path.basename(commandConfig.scriptPath)}`,
       promptText: input.executionMailbox.meta.objective.instruction,
-      payload: await readMailboxOutputPayload(mailboxDir),
+      payload: readStdoutOutputPayload(result.stdout, "native command"),
       processLogs,
     });
   } catch (error: unknown) {
@@ -613,12 +638,12 @@ export async function executeContainerNode(
     );
   }
 
-  const mailboxDir = path.join(input.artifactDir, "mailbox");
   const variables = resolveTemplateVariables(input);
   const renderedArgs = renderTemplateEntries(
     containerConfig.argsTemplate,
     variables,
   );
+  const resolvedInputRequest = await writeResolvedInputRequestFile(input);
   const renderedEnv = renderTemplateMap(containerConfig.envTemplate, variables);
   const { runnerKind, runnerCommand } = resolveContainerRunner({
     container: containerConfig,
@@ -626,16 +651,21 @@ export async function executeContainerNode(
   });
 
   const containerEnv = buildContainerEnv({
-    mailboxDir: "/mailbox",
-    renderedEnv,
+    renderedEnv: {
+      ...renderedEnv,
+      RIEL_RESOLVED_INPUT_PATH: CONTAINER_RESOLVED_INPUT_PATH,
+    },
     workflowId: input.workflowId,
     workflowExecutionId: input.workflowExecutionId,
     nodeId: input.nodeId,
     nodeExecId: input.nodeExecId,
   });
 
-  const runArgs = ["run", "--rm"];
-  runArgs.push("-v", `${mailboxDir}:/mailbox`);
+  const runArgs = ["run", "--rm", "-i"];
+  runArgs.push(
+    "-v",
+    `${resolvedInputRequest.hostPath}:${CONTAINER_RESOLVED_INPUT_PATH}:ro`,
+  );
 
   if (containerConfig.workspace?.mode === "ephemeral") {
     const workspaceHostDir = path.join(input.artifactDir, "workspace");
@@ -738,6 +768,7 @@ export async function executeContainerNode(
       }),
       context,
       artifactDir: input.artifactDir,
+      stdin: resolvedInputRequest.json,
     });
   } catch (error: unknown) {
     throw mergeProcessLogsIntoAdapterError(error, buildProcessLogs);
@@ -752,7 +783,7 @@ export async function executeContainerNode(
       provider: `native-container:${runnerKind}`,
       model: image,
       promptText: input.executionMailbox.meta.objective.instruction,
-      payload: await readMailboxOutputPayload(mailboxDir),
+      payload: readStdoutOutputPayload(result.stdout, "native container"),
       processLogs,
     });
   } catch (error: unknown) {
