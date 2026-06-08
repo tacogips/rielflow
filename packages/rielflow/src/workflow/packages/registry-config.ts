@@ -5,10 +5,7 @@ import { resolveConfiguredRootPath } from "../paths";
 import { err, ok, type Result } from "../result";
 import { normalizeWorkflowPackageTrustedSigners } from "./integrity";
 import {
-  DEFAULT_WORKFLOW_PACKAGE_REGISTRY_BRANCH,
   DEFAULT_WORKFLOW_PACKAGE_REGISTRY_ID,
-  DEFAULT_WORKFLOW_PACKAGE_REGISTRY_LOCAL_PATH,
-  DEFAULT_WORKFLOW_PACKAGE_REGISTRY_URL,
   type WorkflowPackageFailure,
   type WorkflowPackageRegistryConfig,
   type WorkflowPackageRegistryConfigOptions,
@@ -61,23 +58,11 @@ export function isSupportedGitHubRepositoryUrl(url: string): boolean {
 }
 
 export function createDefaultWorkflowPackageRegistryConfig(
-  now: Date,
+  _now: Date,
 ): WorkflowPackageRegistryConfig {
-  const timestamp = now.toISOString();
   return {
     defaultRegistryId: DEFAULT_WORKFLOW_PACKAGE_REGISTRY_ID,
-    registries: [
-      {
-        id: DEFAULT_WORKFLOW_PACKAGE_REGISTRY_ID,
-        url: DEFAULT_WORKFLOW_PACKAGE_REGISTRY_URL,
-        defaultBranch: DEFAULT_WORKFLOW_PACKAGE_REGISTRY_BRANCH,
-        localPath: DEFAULT_WORKFLOW_PACKAGE_REGISTRY_LOCAL_PATH,
-        registeredAt: timestamp,
-        updatedAt: timestamp,
-        description: "Default rielflow workflow package registry",
-        priority: 0,
-      },
-    ],
+    registries: [],
   };
 }
 
@@ -180,7 +165,10 @@ export function normalizeWorkflowPackageRegistryConfig(
     }
     registries.push(normalized.value);
   }
-  if (!registries.some((entry) => entry.id === defaultRegistryId)) {
+  if (
+    registries.length > 0 &&
+    !registries.some((entry) => entry.id === defaultRegistryId)
+  ) {
     return err(
       packageFailure(
         "INVALID_REGISTRY",
@@ -301,9 +289,13 @@ export async function registerWorkflowPackageRegistry(input: {
       ? {}
       : { requireSignature: existing.requireSignature }),
   };
+  const defaultRegistryId =
+    loaded.value.registries.length === 0
+      ? input.id
+      : loaded.value.defaultRegistryId;
   return saveWorkflowPackageRegistryConfig(
     {
-      defaultRegistryId: loaded.value.defaultRegistryId,
+      defaultRegistryId,
       registries: [
         nextEntry,
         ...loaded.value.registries.filter((entry) => entry.id !== input.id),

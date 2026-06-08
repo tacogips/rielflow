@@ -543,7 +543,7 @@ describe("CodexAgentAdapter", () => {
     expect(observedGraphqlEndpoint).toBe("http://127.0.0.1:43173/graphql");
     expect(observedWorkflowExecutionId).toBe("sess-1");
     expect(observedNodeExecId).toBe("exec-1");
-    expect(observedMailboxDir).toBeUndefined();
+    expect(observedMailboxDir).toBe("/tmp/legacy-mailbox");
     expect(process.env["RIEL_MAILBOX_DIR"]).toBe(priorMailboxDir);
     expect(process.env["RIEL_GRAPHQL_ENDPOINT"]).toBe(priorGraphqlEndpoint);
     expect(process.env["RIEL_WORKFLOW_EXECUTION_ID"]).toBe(

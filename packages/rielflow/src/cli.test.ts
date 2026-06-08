@@ -965,7 +965,7 @@ describe("runCli", () => {
     );
   });
 
-  test("package registry list reports configured registries", async () => {
+  test("package registry list starts empty until a registry is explicitly added", async () => {
     const userRoot = await makeTempDir();
 
     const packageRegistryCapture = createIoCapture();
@@ -990,8 +990,57 @@ describe("runCli", () => {
       registries: readonly unknown[];
       defaultRegistryId: string;
     };
-    expect(packageRegistryPayload.registries.length).toBeGreaterThan(0);
+    expect(packageRegistryPayload.registries).toEqual([]);
     expect(packageRegistryPayload.defaultRegistryId).toBe("default");
+
+    const registerCapture = createIoCapture();
+    const registerCode = await runCli(
+      [
+        "package",
+        "registry",
+        "add",
+        "default",
+        "--registry-url",
+        "https://github.com/tacogips/rielflow-packages",
+        "--branch",
+        "main",
+        "--user-root",
+        userRoot,
+      ],
+      registerCapture.io,
+      createCliDeps(),
+    );
+    expect(registerCode).toBe(0);
+
+    const afterRegisterCapture = createIoCapture();
+    const afterRegisterCode = await runCli(
+      [
+        "package",
+        "registry",
+        "list",
+        "--output",
+        "json",
+        "--user-root",
+        userRoot,
+      ],
+      afterRegisterCapture.io,
+      createCliDeps(),
+    );
+    expect(afterRegisterCode).toBe(0);
+    const afterRegisterPayload = JSON.parse(
+      afterRegisterCapture.stdout.join("\n"),
+    ) as {
+      registries: readonly Readonly<Record<string, unknown>>[];
+      defaultRegistryId: string;
+    };
+    expect(packageRegistryPayload.defaultRegistryId).toBe("default");
+    expect(afterRegisterPayload.defaultRegistryId).toBe("default");
+    expect(afterRegisterPayload.registries).toHaveLength(1);
+    expect(afterRegisterPayload.registries[0]).toMatchObject({
+      id: "default",
+      url: "https://github.com/tacogips/rielflow-packages",
+      defaultBranch: "main",
+    });
   });
 
   test("workflow-scoped package compatibility commands are not supported", async () => {

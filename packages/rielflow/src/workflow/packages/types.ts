@@ -1,11 +1,6 @@
 import type { Result } from "../result";
 
 export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_ID = "default";
-export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_URL =
-  "https://github.com/tacogips/rielflow-packages";
-export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_LOCAL_PATH =
-  "/Users/taco/gits/tacogips/rielflow-packages";
-export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_BRANCH = "main";
 export const WORKFLOW_PACKAGE_MANIFEST_FILE = "rielflow-package.json";
 
 export type WorkflowPackageChecksumAlgorithm = "md5";

@@ -88,11 +88,14 @@ Homebrew, Nix, or the source-checkout commands above.
 ### Optional LLM Agent Setup
 
 After installing `rielflow`, you can install standard registry skill packages
-so an LLM agent can operate rielflow more easily. These commands install from
-the default public registry:
+so an LLM agent can operate rielflow more easily. Rielflow does not create a
+system default package registry automatically. Register the standard public
+registry explicitly under the `default` id first:
 
-```text
-https://github.com/tacogips/rielflow-packages
+```bash
+rielflow package registry add default \
+  --registry-url https://github.com/tacogips/rielflow-packages \
+  --branch main
 ```
 
 For agent-assisted package use, install the package-management skill package.
@@ -100,7 +103,6 @@ It teaches agents how to search and install rielflow packages from registries:
 
 ```bash
 rielflow package install rielflow-package-manager-skill \
-  --registry https://github.com/tacogips/rielflow-packages \
   --user-scope \
   --pre-install-check
 ```
@@ -112,7 +114,6 @@ Sheet on a schedule, or notifying a chat channel:
 
 ```bash
 rielflow package install rielflow-workflow-creator-skill \
-  --registry https://github.com/tacogips/rielflow-packages \
   --user-scope \
   --pre-install-check
 ```
@@ -125,7 +126,6 @@ Codex:
 
 ```bash
 rielflow package install codex-design-and-implement-review-loop \
-  --registry https://github.com/tacogips/rielflow-packages \
   --user-scope \
   --pre-install-check
 ```
@@ -134,7 +134,6 @@ Claude Code:
 
 ```bash
 rielflow package install claude-code-design-and-implement-review-loop \
-  --registry https://github.com/tacogips/rielflow-packages \
   --user-scope \
   --pre-install-check
 ```
@@ -363,10 +362,13 @@ declarative node add-on packages. Workflow packages can also include agent
 skills. Node add-on packages use `kind: "node-addon"` in
 `rielflow-package.json` and install validated `addon.json` based add-ons under
 project or user add-on roots; they do not execute package lifecycle code or
-download missing add-ons during workflow load. The built-in default registry is:
+download missing add-ons during workflow load. Registry use is explicit:
+register the standard public registry before searching or installing packages:
 
-```text
-https://github.com/tacogips/rielflow-packages
+```bash
+rielflow package registry add default \
+  --registry-url https://github.com/tacogips/rielflow-packages \
+  --branch main
 ```
 
 Use `rielflow package ...` for persistent package lifecycle operations. Direct

@@ -385,7 +385,6 @@ async function runClaudePrintCommand(input: {
     RIEL_CLAUDE_STDOUT: stdoutPath,
     RIEL_CLAUDE_STDERR: stderrPath,
   };
-  delete childEnv["RIEL_MAILBOX_DIR"];
   await writeFile(stdinPath, input.prompt, "utf8");
   const readCapturedLogs = async (): Promise<{
     readonly stdout: string;

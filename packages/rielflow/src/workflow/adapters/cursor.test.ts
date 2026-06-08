@@ -208,7 +208,7 @@ describe("CursorCliAgentAdapter", () => {
     );
   });
 
-  test("injects ambient manager env without exposing legacy mailbox env", async () => {
+  test("injects ambient manager env without adding mailbox env to hook context", async () => {
     let observedGraphqlEndpoint: string | undefined;
     let observedWorkflowExecutionId: string | undefined;
     let observedNodeExecId: string | undefined;
@@ -280,7 +280,7 @@ describe("CursorCliAgentAdapter", () => {
     expect(observedGraphqlEndpoint).toBe("http://127.0.0.1:43173/graphql");
     expect(observedWorkflowExecutionId).toBe("sess-1");
     expect(observedNodeExecId).toBe("exec-1");
-    expect(observedMailboxDir).toBeUndefined();
+    expect(observedMailboxDir).toBe("/tmp/legacy-mailbox");
     expect(process.env["RIEL_MAILBOX_DIR"]).toBe(priorMailboxDir);
   });
 

@@ -15,7 +15,6 @@ import {
 const ALWAYS_TRUE_WHEN: Readonly<Record<string, boolean>> = Object.freeze({
   always: true,
 });
-const BLOCKED_WORKER_ENV_KEYS = new Set(["RIEL_MAILBOX_DIR"]);
 
 let processEnvOverrideQueue: Promise<void> = Promise.resolve();
 
@@ -147,9 +146,6 @@ export function buildAmbientProcessEnv(
       continue;
     }
     for (const [key, value] of Object.entries(source)) {
-      if (BLOCKED_WORKER_ENV_KEYS.has(key)) {
-        continue;
-      }
       if (typeof value === "string" && value.length > 0) {
         merged[key] = value;
       }
@@ -172,19 +168,10 @@ export async function withProcessEnvOverride<T>(
 
   const previousValues = new Map<string, string | undefined>();
   try {
-    for (const key of BLOCKED_WORKER_ENV_KEYS) {
-      previousValues.set(key, process.env[key]);
-      delete process.env[key];
-    }
     for (const [key, value] of Object.entries(env ?? {})) {
-      if (BLOCKED_WORKER_ENV_KEYS.has(key)) {
-        continue;
-      }
       previousValues.set(key, process.env[key]);
       if (typeof value === "string" && value.length > 0) {
         process.env[key] = value;
-      } else {
-        delete process.env[key];
       }
     }
     return await run();

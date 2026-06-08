@@ -171,7 +171,7 @@ function makeClaudeRunnerFixture(
 }
 
 describe("ClaudeCodeAgentAdapter", () => {
-  test("removes blocked worker env even without replacement env", async () => {
+  test("does not scrub existing env when no replacement env is provided", async () => {
     const priorMailboxDir = process.env["RIEL_MAILBOX_DIR"];
     process.env["RIEL_MAILBOX_DIR"] = "/tmp/legacy-mailbox";
     let observedMailboxDir: string | undefined;
@@ -187,7 +187,7 @@ describe("ClaudeCodeAgentAdapter", () => {
       }
     }
 
-    expect(observedMailboxDir).toBeUndefined();
+    expect(observedMailboxDir).toBe("/tmp/legacy-mailbox");
     expect(process.env["RIEL_MAILBOX_DIR"]).toBe(priorMailboxDir);
   });
 
@@ -579,7 +579,7 @@ describe("ClaudeCodeAgentAdapter", () => {
     };
     expect(output.payload).toEqual({ text: "print mode reply" });
     expect(capture.cwd).toBe(await realpath(projectDir));
-    expect(capture.mailboxDir).toBeUndefined();
+    expect(capture.mailboxDir).toBe(path.join(root, "legacy-mailbox"));
     expect(capture.args).toEqual(
       expect.arrayContaining([
         "-p",

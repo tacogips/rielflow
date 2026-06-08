@@ -865,7 +865,7 @@ async function addWorkflowPackageMetadata(input: {
 }
 
 describe("workflow package registry", () => {
-  test("creates default registry config under user root", async () => {
+  test("creates empty registry config until a registry is explicitly added", async () => {
     const userRoot = await makeTempDir();
     const loaded = await loadWorkflowPackageRegistryConfig({
       userRoot,
@@ -875,9 +875,28 @@ describe("workflow package registry", () => {
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
       expect(loaded.value.defaultRegistryId).toBe("default");
-      expect(loaded.value.registries[0]?.url).toBe(
-        "https://github.com/tacogips/rielflow-packages",
-      );
+      expect(loaded.value.registries).toEqual([]);
+    }
+  });
+
+  test("uses the first explicit registry registration as the default", async () => {
+    const userRoot = await makeTempDir();
+    const registered = await registerWorkflowPackageRegistry({
+      id: "default",
+      url: "https://github.com/tacogips/rielflow-packages",
+      branch: "main",
+      options: { userRoot, now: new Date("2026-01-01T00:00:00.000Z") },
+    });
+
+    expect(registered.ok).toBe(true);
+    if (registered.ok) {
+      expect(registered.value.defaultRegistryId).toBe("default");
+      expect(registered.value.registries).toHaveLength(1);
+      expect(registered.value.registries[0]).toMatchObject({
+        id: "default",
+        url: "https://github.com/tacogips/rielflow-packages",
+        defaultBranch: "main",
+      });
     }
   });
 

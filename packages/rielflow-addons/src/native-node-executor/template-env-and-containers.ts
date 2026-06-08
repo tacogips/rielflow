@@ -125,42 +125,36 @@ async function writeResolvedInputRequestFile(input: {
   await atomicWriteTextFile(requestPath, requestJson);
   return { hostPath: requestPath, json: requestJson };
 }
-function removeBlockedWorkerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  delete env["RIEL_MAILBOX_DIR"];
-  return env;
-}
 export function buildCommandEnv(
   input: RielflowExecutionEnvInput & {
     readonly renderedEnv: Readonly<Record<string, string>>;
     readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
   },
 ): NodeJS.ProcessEnv {
-  return removeBlockedWorkerEnv({
+  return {
     ...process.env,
     ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
     ...input.renderedEnv,
     ...buildRielflowExecutionEnv(input),
-  });
+  };
 }
 export function buildRunnerEnv(input: {
   readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
 }): NodeJS.ProcessEnv {
-  return removeBlockedWorkerEnv({
+  return {
     ...process.env,
     ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
-  });
+  };
 }
 export function buildContainerEnv(
   input: RielflowExecutionEnvInput & {
     readonly renderedEnv: Readonly<Record<string, string>>;
   },
 ): Readonly<Record<string, string>> {
-  const env = {
+  return {
     ...input.renderedEnv,
     ...buildRielflowExecutionEnv(input),
   };
-  delete env["RIEL_MAILBOX_DIR"];
-  return env;
 }
 export function appendContainerEnvArgs(
   runArgs: string[],
