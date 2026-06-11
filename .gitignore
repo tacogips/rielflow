@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 ui/dist/
+.build/
 *.tsbuildinfo
 
 # Bun (binary lockfile - we use text lockfile bun.lock instead)

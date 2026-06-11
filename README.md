@@ -13,6 +13,16 @@ Use Rielflow when one prompt is not enough: planning, delegation, review,
 retry, waiting for user input, calling tools, and handing work between agents
 can all be described as a reusable workflow.
 
+Swift native migration work is tracked on the `swift-migration` branch. The
+top-level SwiftPM package mirrors the current package boundaries while the
+existing TypeScript/Bun runtime remains in place until Swift feature parity is
+proven. The branch currently includes Swift targets for `RielflowCore`,
+`RielflowAdapters`, `RielflowAddons`, `RielflowEvents`, `RielflowGraphQL`,
+`RielflowServer`, `RielflowHook`, `CodexAgent`, `ClaudeCodeAgent`,
+`CursorCLIAgent`, and the `rielflow` executable; see
+`design-docs/specs/design-swift-native-migration.md` and
+`impl-plans/active/swift-native-migration.md`.
+
 ## What You Can Do
 
 - Run reusable workflow bundles from a project catalog, user catalog, example
@@ -84,6 +94,30 @@ bun run packages/rielflow/dist/main.js --help
 `bunx rielflow` only works when the `rielflow` npm package is available from
 the npm registry. If Bun reports that the package cannot be found, use
 Homebrew, Nix, or the source-checkout commands above.
+
+### Swift Migration Development
+
+On the `swift-migration` branch, the SwiftPM package is additive and does not
+replace the TypeScript/Bun runtime yet. The repository-owned local agent
+backends remain stable as workflow `executionBackend` strings:
+`codex-agent`, `claude-code-agent`, and `cursor-cli-agent`; the Swift targets
+that currently map them are `CodexAgent`, `ClaudeCodeAgent`, and
+`CursorCLIAgent`.
+
+If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
+toolchain explicitly:
+
+```bash
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test
+```
+
+The accepted workflow verification for this branch used Apple Swift 6.3.2 and
+`swift test` passed 28 tests. Keep using the Bun commands in this README for
+the production runtime until Swift validation, inspect, deterministic run,
+package, event, GraphQL, hook, adapter, and Homebrew parity gates pass.
 
 ### Optional LLM Agent Setup
 

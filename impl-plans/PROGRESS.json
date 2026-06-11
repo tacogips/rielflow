@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-08T11:23:01+09:00",
+  "lastUpdated": "2026-06-12T02:15:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -573,6 +573,9 @@
     },
     "194": {
       "status": "COMPLETED"
+    },
+    "195": {
+      "status": "IN_PROGRESS"
     }
   },
   "plans": {
@@ -7564,6 +7567,276 @@
       "residualRisks": [
         "Malformed historical runtime SQLite JSON rows fail rebuild migration explicitly by design.",
         "Step 7 adversarial review accepted the migration fix before plan archival."
+      ]
+    },
+    "active/swift-native-migration": {
+      "phase": 195,
+      "status": "In Progress",
+      "path": "impl-plans/active/swift-native-migration.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
+      "workflowMode": "issue-resolution",
+      "issueReference": "workflowInput.issueTitle/requestedBehavior; no matching GitHub issue found by Step 1",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastPlanningNode": "step4-impl-plan-create-rerun-after-step5",
+      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use packages/rielflow-adapters/src/codex.ts and pinned package metadata until Swift reference is supplied. Official SDK parity references: packages/rielflow-adapters/src/dispatch.ts, shared.ts, openai-sdk.ts, anthropic-sdk.ts; official/cursor-sdk remains explicitly deferred unless separately scoped.",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "In Progress",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "In Progress",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "In Progress",
+          "parallelizable": false,
+          "deps": [
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003"
+          ]
+        },
+        "TASK-006": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-005"
+          ]
+        },
+        "TASK-007": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": [
+            "TASK-004",
+            "TASK-005",
+            "TASK-006"
+          ]
+        },
+        "TASK-008": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": [
+            "TASK-007"
+          ]
+        },
+        "TASK-009": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": [
+            "TASK-007",
+            "TASK-008"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "git status --short --branch",
+        "git diff --check",
+        "bun run typecheck:server",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "rg -n \"official/openai-sdk|official/anthropic-sdk|openai-sdk.ts|anthropic-sdk.ts|official/cursor-sdk\" impl-plans/active/swift-native-migration.md",
+        "swift --version",
+        "swift test",
+        "rg -n \"requiresOutputContract|redactSensitiveText|testNoOutputContractPreservesJSONLookingTextAsTextPayload|testProviderFailureRedactsSecretsFromStderr\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"inputWriteDescriptor|outputReadDescriptor|errorReadDescriptor|testOutputContractRejectsPlainTextOutput|testFoundationRunnerClosesChildUnusedPipeDescriptorsForStdinEOF\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"normalizeCodexExecJSONStdout|codexAssistantContent|testCodexJSONStreamUsesFinalAssistantContent\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"isCodexJSONEvent|testOutputContractParsesEnvelope|testCodexJSONStreamUsesFinalAssistantContent\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "jq '.plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"], .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
+        "rg -n \"Backend-faithful agent.*IN_PROGRESS|### TASK-004|\\*\\*Status\\*\\*: In Progress|Tasks In Progress\\*\\*: TASK-002, TASK-004\" impl-plans/active/swift-native-migration.md",
+        "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].tasks[\"TASK-003\"], .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"], .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
+        "rg -n \"Prompt and JSON boundary contracts.*IN_PROGRESS|Backend-faithful agent.*IN_PROGRESS|### TASK-003|### TASK-004|\\*\\*Status\\*\\*: In Progress|Tasks In Progress\\*\\*: TASK-002, TASK-003, TASK-004\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"markExited|scheduleKillIfRunning|testLocalProcessHandleCancelsDelayedKillAfterProcessReap\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"LocalProcessHandle|markExited|scheduleKillIfRunning|testLocalProcessHandleCancelsDelayedKillAfterProcessReap\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"], .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
+        "rg -n \"2026-06-12 01:35|cancels delayed SIGKILL escalation|testLocalProcessHandleCancelsDelayedKillAfterProcessReap\" impl-plans/active/swift-native-migration.md Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"processGroupId|markExited(afterTimeout|killScheduledProcessGroup|testLocalProcessHandlePreservesDelayedKillAfterTimeoutReap|testFoundationRunnerTimeoutKillsTermResistantDescendantAfterParentReap\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
+        "rg -n \"preserves timeout SIGKILL escalation|TERM-resistant child|2026-06-12 01:35\" impl-plans/active/swift-native-migration.md Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"processGroupIsLive|testLocalProcessHandleCancelsDelayedKillAfterTimeoutReapWhenGroupIsGone|testLocalProcessHandlePreservesDelayedKillAfterTimeoutReap|testFoundationRunnerTimeoutKillsTermResistantDescendantAfterParentReap\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"still-live process groups|timeout reaps with no live process group|2026-06-12 01:35\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"clearScheduledProcessGroup|processGroupIsLive|testLocalProcessHandleCancelsDelayedKillWhenGroupDiesBeforeEscalation\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"re-checks process-group liveness|immediately before SIGKILL|2026-06-12 01:35\" impl-plans/active/swift-native-migration.md",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "rg -n \"Swift 6.3.2|swift test.*passed 28 tests|2026-06-12 02:15\" impl-plans/active/swift-native-migration.md"
+      ],
+      "residualRisks": [
+        "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select points at a Nix Apple SDK path.",
+        "High-risk runtime migration requires adversarial implementation review before release cutover.",
+        "Preferred local codex-agent reference root ../../codex-agent is unavailable."
+      ],
+      "addressedReviewFindings": [
+        {
+          "nodeId": "step5-impl-plan-review",
+          "severity": "mid",
+          "file": "impl-plans/active/swift-native-migration.md",
+          "finding": "Plan preserved official SDK backend strings but did not explicitly plan or defer official SDK Swift adapter behavior.",
+          "resolution": "Expanded TASK-004 and verification/completion criteria to require official/openai-sdk and official/anthropic-sdk dispatch, request construction, API-key handling, retry/error normalization, output normalization, and no-live-credential tests; official/cursor-sdk remains explicitly deferred unless separately scoped."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid",
+          "file": "Sources/RielflowCore/WorkflowValidation.swift",
+          "finding": "Addon-only registry nodes were materialized with fabricated nodeFile paths even when authored workflow nodes declared only addon metadata.",
+          "resolution": "Updated WorkflowNodeRef.nodeFile to be optional, preserved addon-only runtime nodes without synthesized node JSON files, and added fixture assertions for step10-git-commit and step11-git-push."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid",
+          "file": "Sources/RielflowCore/WorkflowValidation.swift",
+          "finding": "Swift workflow validation accepted unsafe nodeFile and stepFile values without the TypeScript workflow-relative path guard.",
+          "resolution": "Added workflow-relative path validation for nodeFile and stepFile, rejecting absolute paths and '.' / '..' segments before materialization, with RielflowCoreTests regression coverage."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid",
+          "file": "Sources/RielflowCore/WorkflowValidation.swift",
+          "finding": "The public validateAuthoredWorkflowJSON API bypassed raw nodeFile/stepFile safety checks for typed workflows.",
+          "resolution": "Routed validateAuthoredWorkflowJSON through shared typed workflow-relative path validation before materialization and added direct typed API regression tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid",
+          "file": "Sources/RielflowCore/WorkflowValidation.swift",
+          "finding": "Typed workflow validation allowed unsafe synthesized nodeFile paths because validateAuthoredWorkflowJSON did not enforce node id and nodeFile/addon invariants before materialization.",
+          "resolution": "Added typed workflow semantic validation for workflowId, node ids, duplicate ids, required nodeFile/addon bindings, step references, and transition/fanout references before materialization, with direct typed API regression coverage."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "finding": "The real process runner waited for process termination before reading stdout/stderr and ignored AdapterExecutionContext.deadline, allowing verbose local agents to deadlock on full pipes or run without timeout cleanup.",
+          "resolution": "Updated FoundationLocalAgentProcessRunner to drain stdout/stderr concurrently, pass AdapterExecutionContext.deadline through LocalAgentProcessRunning, terminate child processes on deadline, return AdapterExecutionError.timeout, and added AgentAdapterTests coverage for large output and deadline termination."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "finding": "Deadline handling could still hang indefinitely because timeout completion waited for stdout/stderr EOF after process.terminate when a child retained pipe handles or the process ignored SIGTERM.",
+          "resolution": "Made deadline expiry resume AdapterExecutionError.timeout independently of pipe EOF, close pipe handles during timeout cleanup, terminate the direct process, schedule SIGKILL escalation, and added AgentAdapterTests coverage for a TERM-resistant pipe-holding command."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "finding": "Timeout cleanup signaled only the direct Process PID, allowing shell-wrapper descendants with inherited workspace access or stdout/stderr handles to survive after AdapterExecutionError.timeout.",
+          "resolution": "Changed FoundationLocalAgentProcessRunner to launch with posix_spawn and POSIX_SPAWN_SETPGROUP, signal the process group on deadline with direct-PID fallback, schedule SIGKILL escalation, and added AgentAdapterTests coverage that verifies a spawned child process is terminated after timeout."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid",
+          "file": "impl-plans/PROGRESS.json",
+          "finding": "Swift migration progress reused phase 193 and changed the shared phase status from COMPLETED to IN_PROGRESS, conflicting with completed/manager-control-idempotency-atomic-claim.",
+          "resolution": "Restored phase 193 to COMPLETED for completed/manager-control-idempotency-atomic-claim, assigned active/swift-native-migration to distinct phase 195, and added phase 195 with IN_PROGRESS status."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "finding": "Local agent stdout was parsed as JSON whenever it contained braces even when input.node.output was absent, so free-form agent text could fail the step or become an unintended structured payload.",
+          "resolution": "Changed LocalAgentCommandAdapter to parse provider stdout as an envelope only when the node declares an output contract; no-contract stdout now always becomes a text business payload. Added AgentAdapterTests coverage for JSON-looking and fenced no-contract text plus contracted envelope parsing."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "finding": "Provider failure errors included raw stderr without credential redaction, allowing local CLI failures to publish API keys, tokens, or secret-like values.",
+          "resolution": "Added stderr redaction before AdapterExecutionError.providerError construction for secret-like assignments, sk-* tokens, bearer/token values, and sensitive environment values. Added AgentAdapterTests coverage for failing provider stderr with OPENAI_API_KEY, ANTHROPIC_API_KEY, CURSOR_API_KEY, and bearer token material."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "finding": "Nodes with an output contract could still succeed with plain text stdout because normalizeAgentOutput fell back to normalizeTextBusinessPayload when no JSON-looking text was present.",
+          "resolution": "Removed the contracted-output text fallback so output-contracted local agents always parse stdout through parseJSONObjectCandidate and normalizeOutputContractEnvelope, returning invalidOutput for plain text. Added AgentAdapterTests coverage for output-contract plain text failure."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "finding": "spawnProcess did not explicitly close child-unused pipe descriptors, allowing stdin-consuming CLI agents to inherit a write end and potentially hang waiting for EOF.",
+          "resolution": "Passed all pipe descriptors into spawnProcess and added child-side posix_spawn close actions for stdin writer, stdout reader, and stderr reader. Added AgentAdapterTests coverage using /bin/cat to verify stdin EOF is observed before the deadline."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift",
+          "finding": "Codex Swift target invoked codex exec --json but the shared local-process adapter parsed the whole stdout as one business JSON candidate, allowing Codex CLI JSONL/session event metadata to be accepted instead of the final assistant result.",
+          "resolution": "Added codex-agent stdout normalization before shared output-contract parsing: JSONL events are parsed, final assistant content is selected from assistant.snapshot or response_item/message payloads, and non-final metadata no longer becomes the payload. Added AgentAdapterTests coverage for contracted and text payload Codex JSONL streams."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid",
+          "file": "impl-plans/active/swift-native-migration.md",
+          "finding": "TASK-004 and the backend adapter module remained Not Started even though current implementation changed LocalAgentProcess and AgentAdapterTests for local-agent/Codex JSONL hardening.",
+          "resolution": "Marked prompt/output-contract and backend-faithful agent adapter modules IN_PROGRESS, set TASK-003 and TASK-004 to In Progress in the plan and PROGRESS.json, checked off completed local CLI hardening and codex-agent JSONL criteria under TASK-004, and added latest progress log with TASK-002, TASK-003, and TASK-004 in progress."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "exec": "exec-000070",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "line": 196,
+          "finding": "Timeout SIGKILL escalation could signal a stale process id after the original child exited, risking termination of an unrelated reused pid or process group.",
+          "resolution": "LocalProcessHandle now tracks exited state, cancels scheduled kill work in markExited after waitpid reaps the child, no-ops signal attempts after process reap, and AgentAdapterTests adds deterministic coverage for canceling delayed SIGKILL after process reap."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000074",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "line": 230,
+          "finding": "LocalProcessHandle.markExited canceled delayed SIGKILL whenever the direct child was reaped, leaving TERM-resistant descendants alive after timeout.",
+          "resolution": "Split direct pid and process-group tracking. markExited(afterTimeout: true) clears only the direct pid and preserves processGroupId for scheduled SIGKILL; normal reaps still cancel delayed kill. Added handle-level SIGKILL preservation coverage and a Foundation runner test with a TERM-resistant child descendant."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000078",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "line": 232,
+          "finding": "markExited(afterTimeout: true) preserved delayed SIGKILL without proving the process group still contained descendants, reopening stale process-group signaling risk when the group was already empty.",
+          "resolution": "markExited(afterTimeout: true) now probes kill(-processGroupId, 0) through processGroupIsLive before preserving scheduled SIGKILL. Empty process groups clear processGroupId and cancel delayed kill; live groups retain escalation. AgentAdapterTests covers both live and gone timeout-reap cases plus the TERM-resistant descendant runner path."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "exec": "exec-000083",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "line": 251,
+          "finding": "Delayed SIGKILL signaled the stored process group after an earlier liveness probe; descendants could exit before the delayed kill fired and make the process-group id stale.",
+          "resolution": "killScheduledProcessGroup now re-checks processGroupIsLive immediately before SIGKILL and clears stale scheduled process groups without signaling. AgentAdapterTests covers the race where markExited sees a live group but the delayed-kill probe sees it gone."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000087",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "line": 251,
+          "finding": "High-risk Swift process-control changes and delayed-SIGKILL race fix lacked Swift test evidence because default swift lookup failed.",
+          "resolution": "Located Xcode Swift at /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift, ran Swift 6.3.2 with DEVELOPER_DIR and SDKROOT pointed at Xcode, and swift test passed 28 tests."
+        }
       ]
     }
   }

@@ -83,6 +83,12 @@ Current direction:
   server exposes only enabled manifest entries through browser, GraphQL catalog,
   and server-backed start paths. See
   `design-docs/specs/design-server-workflow-manifest.md`.
+- Swift native migration is an additive runtime migration on the
+  `swift-migration` branch. The top-level SwiftPM package mirrors the current
+  package/add-on split and introduces first-class `CodexAgent`,
+  `ClaudeCodeAgent`, and `CursorCLIAgent` targets while TypeScript/Bun remains
+  the production runtime until parity gates pass. See
+  `design-docs/specs/design-swift-native-migration.md`.
 
 ### Native Command Script Dispatch
 

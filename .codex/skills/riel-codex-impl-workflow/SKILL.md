@@ -118,6 +118,37 @@ variables as compatibility/runtime contracts unless a design explicitly
 approves a migration. Product-owned package names, CLI examples, workflow
 catalog paths, and human-facing documentation should use Rielflow/`rielflow`.
 
+Swift native migration issue-resolution runs on the `swift-migration` branch
+should keep the migration additive until parity gates pass. Preserve the
+current TypeScript/Bun runtime as the production fallback, keep public backend
+strings stable (`codex-agent`, `claude-code-agent`, `cursor-cli-agent`,
+`official/openai-sdk`, `official/anthropic-sdk`, and `official/cursor-sdk`),
+and map repository-owned local agent integrations into SwiftPM targets
+`CodexAgent`, `ClaudeCodeAgent`, and `CursorCLIAgent` without leaking
+provider-specific behavior into `RielflowCore`. Keep issue references explicit
+when no GitHub issue exists, keep `codex-agent` as an execution-backend
+identifier, and refresh `README.md`, this skill, the Swift migration design,
+and the active implementation plan when Step 8 documentation updates are part
+of an accepted Swift migration run.
+
+For Swift migration verification, record both the TypeScript/Bun baseline and
+SwiftPM evidence. The default `swift` lookup may point at a Nix Apple SDK path,
+so accepted verification can use Xcode's toolchain explicitly:
+
+```bash
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test
+```
+
+For the 2026-06-12 `swift-migration` run, Step 7 adversarial review accepted
+the implementation after Swift 6.3.2 compiled the SwiftPM scaffold and
+`swift test` passed 28 tests. Residual low risks remained: the preferred local
+`../../codex-agent` reference was unavailable, TASK-003/TASK-004 stayed in
+progress, and default `swift` lookup still required the Xcode
+`DEVELOPER_DIR`/`SDKROOT` override.
+
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via
 an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; workflow message payloads
