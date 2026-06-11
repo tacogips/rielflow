@@ -131,6 +131,17 @@ identifier, and refresh `README.md`, this skill, the Swift migration design,
 and the active implementation plan when Step 8 documentation updates are part
 of an accepted Swift migration run.
 
+For TASK-004 official SDK adapter slices, keep `official/openai-sdk` and
+`official/anthropic-sdk` under `RielflowAdapters` with default
+`DispatchingNodeAdapter` factories. Preserve configured/default API-key
+environment lookup, optional base URL propagation, bounded retry, deadline
+timeouts, provider error normalization, exact credential redaction, response
+text extraction, and output-envelope normalization. Tests must stay
+deterministic through injected request executors or HTTP transports and must
+not require live `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `CURSOR_API_KEY`,
+network access, or live SDK calls. Keep `official/cursor-sdk` explicitly
+deferred unless a later issue-resolution run scopes and reviews it.
+
 For Swift migration verification, record both the TypeScript/Bun baseline and
 SwiftPM evidence. The default `swift` lookup may point at a Nix Apple SDK path,
 so accepted verification can use Xcode's toolchain explicitly:
@@ -143,11 +154,12 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 For the 2026-06-12 `swift-migration` run, Step 7 adversarial review accepted
-the implementation after Swift 6.3.2 compiled the SwiftPM scaffold and
-`swift test` passed 28 tests. Residual low risks remained: the preferred local
-`../../codex-agent` reference was unavailable, TASK-003/TASK-004 stayed in
-progress, and default `swift` lookup still required the Xcode
-`DEVELOPER_DIR`/`SDKROOT` override.
+the TASK-004 official OpenAI and Anthropic SDK parity implementation after
+Swift 6.3.2 compiled the SwiftPM scaffold and `swift test` passed 45 tests.
+Residual low risks remained: the preferred local `../../codex-agent` reference
+was unavailable, remaining TASK-004 command-builder and readiness parity work
+stayed open, `official/cursor-sdk` stayed deferred, and default `swift` lookup
+still required the Xcode `DEVELOPER_DIR`/`SDKROOT` override.
 
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via

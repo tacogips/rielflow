@@ -52,6 +52,7 @@ The preferred `codex-agent` local reference root is `../../codex-agent`, but it 
 - `packages/rielflow-adapters/src/codex.ts` and `packages/rielflow-adapters/src/readiness.ts` define current `codex-agent` adapter execution, auth/readiness probes, output normalization, and failure mapping.
 - `packages/rielflow-adapters/src/claude.ts` and `packages/rielflow-adapters/src/readiness.ts` define current `claude-code-agent` execution, auth/readiness probes, session handling, and failure mapping.
 - `packages/rielflow-adapters/src/cursor.ts` and `packages/rielflow-adapters/src/readiness.ts` define current `cursor-cli-agent` behavior through the Cursor adapter SDK boundary.
+- `packages/rielflow-adapters/src/dispatch.ts`, `packages/rielflow-adapters/src/shared.ts`, `packages/rielflow-adapters/src/openai-sdk.ts`, and `packages/rielflow-adapters/src/anthropic-sdk.ts` define current official SDK dispatch, API-key lookup, retry/error handling, timeout behavior, request construction, response text extraction, and output-envelope normalization.
 - `packages/rielflow-adapters/package.json` pins repository-owned references for `codex-agent`, `claude-code-agent`, and `cursor-cli-agent`; Swift target behavior should be mapped from those package contracts, not copied blindly.
 
 Swift target mapping:
@@ -59,9 +60,42 @@ Swift target mapping:
 - `CodexAgent` maps the `codex-agent` backend only. It owns Codex CLI/session integration, Codex-specific readiness, and Codex-specific output normalization helpers that are not shared with other providers.
 - `ClaudeCodeAgent` maps the `claude-code-agent` backend only. It owns Claude CLI/session integration and any Claude-specific auth/readiness behavior.
 - `CursorCLIAgent` maps the `cursor-cli-agent` backend only. Cursor-specific modes, stream formats, readiness probes, and SDK compatibility must stay inside this target or a Cursor-specific adapter module.
-- `RielflowAdapters` owns provider-neutral adapter contracts, dispatch, retry, prompt preparation, injected subprocess runners, deadline handling, output-envelope parsing, and error categories.
+- `RielflowAdapters` owns provider-neutral adapter contracts, dispatch, retry, prompt preparation, injected subprocess runners, deadline handling, output-envelope parsing, error categories, and the official OpenAI and Anthropic SDK adapter implementations.
 
 Intentional divergence from the reference behavior is allowed only at the adapter boundary and must be documented in this file or the implementation plan. The current accepted divergence is structural: Swift splits the three repository-owned agent integrations into independent SwiftPM targets instead of importing npm packages, while preserving backend strings and normalized adapter envelopes.
+
+## Official SDK Adapter Parity Slice
+
+The next TASK-004 Swift slice ports `official/openai-sdk` and `official/anthropic-sdk` only. Both backends remain provider-neutral official SDK adapters under `RielflowAdapters`; they must not be implemented in, or create dependencies from, `CodexAgent`, `ClaudeCodeAgent`, or `CursorCLIAgent`.
+
+Dispatch requirements:
+
+- `DispatchingNodeAdapter` must offer default Swift adapter factories for `NodeExecutionBackend.officialOpenAISDK` and `NodeExecutionBackend.officialAnthropicSDK`.
+- Public backend strings remain `official/openai-sdk` and `official/anthropic-sdk`.
+- The existing `official/cursor-sdk` enum case and authored backend string remain recognized, but its adapter implementation stays explicitly deferred unless a later, separately reviewed slice scopes it.
+- Tests must prove both registered official SDK backends resolve without live credentials when injected clients or request executors are supplied, and that an intentionally missing registry entry still fails deterministically.
+
+OpenAI parity:
+
+- Build a Responses request with `model: input.node.model`, `input: input.promptText`, and optional system instructions from `input.systemPromptText`.
+- Resolve credentials from configured `apiKeyEnv` or `OPENAI_API_KEY`; missing credentials are `policy_blocked`.
+- Preserve optional base URL propagation, bounded retry defaults, retry delay clamping, context deadline/abort handling, provider-error normalization, and credential redaction in failure surfaces.
+- Extract response text from `output_text` first, then from `output[].content[]` entries with `type: "output_text"`, joined by newline.
+- Return provider `official-openai-sdk` and normalize text payloads or output-contract envelopes through the shared adapter envelope rules.
+
+Anthropic parity:
+
+- Build a Messages request with `model: input.node.model`, default `max_tokens: 1024` clamped to at least `1`, optional system text from `input.systemPromptText`, and one user message from `input.promptText`.
+- Resolve credentials from configured `apiKeyEnv` or `ANTHROPIC_API_KEY`; missing credentials are `policy_blocked`.
+- Preserve optional base URL propagation, bounded retry defaults, retry delay clamping, context deadline/abort handling, provider-error normalization, and credential redaction in failure surfaces.
+- Extract response text from `content[]` entries with `type: "text"`, joined by newline.
+- Return provider `official-anthropic-sdk` and normalize text payloads or output-contract envelopes through the shared adapter envelope rules.
+
+Testing constraints:
+
+- Official SDK tests use injected clients, client factories, or request executors with synthetic responses only.
+- Tests must not require `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `CURSOR_API_KEY`, network access, or live SDK calls.
+- Deterministic coverage must include request shape, configured API-key environment names, base URL forwarding, retry/error normalization, timeout handling, response text extraction, output-envelope normalization, and credential redaction.
 
 ## Cursor CLI Behavior Boundary
 

@@ -497,7 +497,7 @@ public struct LocalAgentCommandAdapter: NodeAdapter {
 
     let result = try await runner.run(configuration: configuration, stdin: prompt, deadline: context.deadline)
     guard result.terminationStatus == 0 else {
-      let detail = redactSensitiveText(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+      let detail = redactAdapterSensitiveText(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
       throw AdapterExecutionError(.providerError, "\(provider) failed with exit code \(result.terminationStatus): \(detail)")
     }
 
@@ -642,59 +642,4 @@ private func objectValue(_ value: JSONValue?) -> JSONObject? {
     return nil
   }
   return object
-}
-
-private func redactSensitiveText(_ text: String) -> String {
-  var redacted = text
-
-  redacted = replacingRegexMatches(
-    in: redacted,
-    pattern: #"\b([A-Za-z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE[_-]?KEY|ACCESS[_-]?KEY)[A-Za-z0-9_]*)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)"#,
-    options: [.caseInsensitive],
-    replacement: #"$1=<redacted>"#
-  )
-  redacted = replacingRegexMatches(
-    in: redacted,
-    pattern: #"\bsk-[A-Za-z0-9_-]{8,}\b"#,
-    replacement: "<redacted-token>"
-  )
-  redacted = replacingRegexMatches(
-    in: redacted,
-    pattern: #"\b(?:Bearer|Token)\s+[A-Za-z0-9._~+/=-]{16,}\b"#,
-    replacement: "<redacted-token>"
-  )
-
-  for (key, value) in ProcessInfo.processInfo.environment where isSensitiveEnvironmentKey(key) && value.count >= 8 {
-    redacted = redacted.replacingOccurrences(of: value, with: "<redacted>")
-  }
-
-  return redacted
-}
-
-private func isSensitiveEnvironmentKey(_ key: String) -> Bool {
-  let normalized = key.uppercased()
-  return [
-    "API_KEY",
-    "APIKEY",
-    "TOKEN",
-    "SECRET",
-    "PASSWORD",
-    "PASSWD",
-    "CREDENTIAL",
-    "PRIVATE_KEY",
-    "ACCESS_KEY"
-  ].contains { normalized.contains($0) }
-}
-
-private func replacingRegexMatches(
-  in text: String,
-  pattern: String,
-  options: NSRegularExpression.Options = [],
-  replacement: String
-) -> String {
-  guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
-    return text
-  }
-  let range = NSRange(text.startIndex..<text.endIndex, in: text)
-  return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: replacement)
 }

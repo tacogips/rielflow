@@ -7,7 +7,7 @@ public struct RetryPolicy: Equatable, Sendable {
 
   public init(maxAttempts: Int = 2, retryDelay: Duration = .milliseconds(50)) {
     self.maxAttempts = max(1, maxAttempts)
-    self.retryDelay = retryDelay
+    self.retryDelay = retryDelay < .zero ? .zero : retryDelay
   }
 }
 
@@ -52,8 +52,63 @@ public func executeWithRetry<T: Sendable>(
 
 public func normalizeAdapterFailure(_ error: Error, fallbackMessage: String) -> AdapterExecutionError {
   if let error = error as? AdapterExecutionError {
-    return error
+    return AdapterExecutionError(error.code, redactAdapterSensitiveText(error.message))
   }
   let message = error.localizedDescription.isEmpty ? fallbackMessage : error.localizedDescription
-  return AdapterExecutionError(.providerError, message)
+  return AdapterExecutionError(.providerError, redactAdapterSensitiveText(message))
+}
+
+public func redactAdapterSensitiveText(_ text: String) -> String {
+  var redacted = text
+
+  redacted = replacingRegexMatches(
+    in: redacted,
+    pattern: #"\b([A-Za-z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE[_-]?KEY|ACCESS[_-]?KEY)[A-Za-z0-9_]*)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)"#,
+    options: [.caseInsensitive],
+    replacement: #"$1=<redacted>"#
+  )
+  redacted = replacingRegexMatches(
+    in: redacted,
+    pattern: #"\bsk-[A-Za-z0-9_-]{8,}\b"#,
+    replacement: "<redacted-token>"
+  )
+  redacted = replacingRegexMatches(
+    in: redacted,
+    pattern: #"\b(?:Bearer|Token)\s+[A-Za-z0-9._~+/=-]{16,}\b"#,
+    replacement: "<redacted-token>"
+  )
+
+  for (key, value) in ProcessInfo.processInfo.environment where isSensitiveEnvironmentKey(key) && value.count >= 8 {
+    redacted = redacted.replacingOccurrences(of: value, with: "<redacted>")
+  }
+
+  return redacted
+}
+
+private func isSensitiveEnvironmentKey(_ key: String) -> Bool {
+  let normalized = key.uppercased()
+  return [
+    "API_KEY",
+    "APIKEY",
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "CREDENTIAL",
+    "PRIVATE_KEY",
+    "ACCESS_KEY"
+  ].contains { normalized.contains($0) }
+}
+
+private func replacingRegexMatches(
+  in text: String,
+  pattern: String,
+  options: NSRegularExpression.Options = [],
+  replacement: String
+) -> String {
+  guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
+    return text
+  }
+  let range = NSRange(text.startIndex..<text.endIndex, in: text)
+  return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: replacement)
 }

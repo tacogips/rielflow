@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-12T02:15:00+09:00",
+  "lastUpdated": "2026-06-12T03:18:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -7575,10 +7575,10 @@
       "path": "impl-plans/active/swift-native-migration.md",
       "designReference": "design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
       "workflowMode": "issue-resolution",
-      "issueReference": "workflowInput.issueTitle/requestedBehavior; no matching GitHub issue found by Step 1",
+      "issueReference": "Port official OpenAI and Anthropic SDK adapters to Swift; workflowInput.requestedBehavior; no matching GitHub issue URL or number supplied",
       "workflowId": "codex-design-and-implement-review-loop",
-      "lastPlanningNode": "step4-impl-plan-create-rerun-after-step5",
-      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use packages/rielflow-adapters/src/codex.ts and pinned package metadata until Swift reference is supplied. Official SDK parity references: packages/rielflow-adapters/src/dispatch.ts, shared.ts, openai-sdk.ts, anthropic-sdk.ts; official/cursor-sdk remains explicitly deferred unless separately scoped.",
+      "lastPlanningNode": "step4-impl-plan-create",
+      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use packages/rielflow-adapters/src/codex.ts and pinned package metadata until Swift reference is supplied. Official SDK parity references: packages/rielflow-adapters/src/dispatch.ts, shared.ts, openai-sdk.ts, anthropic-sdk.ts; implemented TASK-004 official/openai-sdk and official/anthropic-sdk Swift parity slice with default HTTP-backed request executors plus injected test transports; official/cursor-sdk remains explicitly deferred unless separately scoped.",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
@@ -7679,7 +7679,26 @@
         "rg -n \"re-checks process-group liveness|immediately before SIGKILL|2026-06-12 01:35\" impl-plans/active/swift-native-migration.md",
         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
-        "rg -n \"Swift 6.3.2|swift test.*passed 28 tests|2026-06-12 02:15\" impl-plans/active/swift-native-migration.md"
+        "rg -n \"Swift 6.3.2|swift test.*passed 28 tests|2026-06-12 02:15\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"TASK-004A|OpenAiSDKAdapter|AnthropicSDKAdapter|official/cursor-sdk\" impl-plans/active/swift-native-migration.md",
+        "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].lastPlanningNode, .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"]' impl-plans/PROGRESS.json",
+        "rg -n \"officialOpenAISDK|officialAnthropicSDK|officialCursorSDK|openAISDK|anthropicSDK|cursorSDK\" impl-plans/active/swift-native-migration.md Sources/RielflowCore/WorkflowModel.swift",
+        "rg -n \"OfficialSDKAdapterConfiguration|OpenAiSDKAdapter|AnthropicSDKAdapter|OfficialSDKRequestExecuting\" Sources/RielflowAdapters Tests/RielflowAdaptersTests",
+        "rg -n \"officialOpenAISDK|officialAnthropicSDK|officialCursorSDK|includeDefaultOfficialSDKAdapters\" Sources/RielflowAdapters/DispatchingNodeAdapter.swift Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
+        "rg -n \"2026-06-12 02:55|swift test.*passed 37 tests|official OpenAI/Anthropic SDK parity\" impl-plans/active/swift-native-migration.md",
+        "jq empty impl-plans/PROGRESS.json",
+        "rg -n \"RetryPolicy\\(maxAttempts: 0|retryDelay < \\.zero|testRetryPolicyClampsAttemptsAndDelay\" Sources/RielflowAdapters/AdapterUtilities.swift Tests/RielflowAdaptersTests/AdapterUtilitiesTests.swift",
+        "rg -n \"2026-06-12 02:56|swift test.*passed 38 tests|retry delay clamping\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"URLSessionOfficialSDKRequestExecutor|OfficialSDKHTTPTransporting|URLSessionOfficialSDKHTTPTransport|makeURLRequest\" Sources/RielflowAdapters/OfficialSDKAdapters.swift",
+        "rg -n \"testDefaultOpenAIHTTPExecutorBuildsResponsesRequestWithoutInjectedRequestExecutor|testDefaultAnthropicHTTPExecutorBuildsMessagesRequestWithoutInjectedRequestExecutor|testDispatchingNodeAdapterDefaultOfficialFactoriesUseHTTPExecutors\" Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
+        "rg -n \"2026-06-12 03:06|swift test.*passed 42 tests|Step 7 adversarial\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"existingPathComponents|missingPathComponents|https://anthropic.test/v1\" Sources/RielflowAdapters/OfficialSDKAdapters.swift Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
+        "rg -n \"2026-06-12 03:08|base URL edge case|swift test.*passed 42 tests\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"sensitiveValues|redactOfficialSDKSensitiveText|request.apiKey\" Sources/RielflowAdapters/OfficialSDKAdapters.swift",
+        "rg -n \"testDefaultHTTPExecutorRedactsConfiguredAPIKeyValueFromProviderFailures|testInjectedExecutorFailureRedactsConfiguredAPIKeyValue|PROXY_TOKEN|ANTHROPIC_PROXY_TOKEN\" Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
+        "rg -n \"2026-06-12 03:16|swift test.*passed 44 tests|exec-000018\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"request failed with HTTP.*redactOfficialSDKSensitiveText|testURLSessionOfficialSDKRequestExecutorRedactsDirectHTTPFailures\" Sources/RielflowAdapters/OfficialSDKAdapters.swift Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
+        "rg -n \"2026-06-12 03:18|swift test.*passed 45 tests|URLSessionOfficialSDKRequestExecutor\" impl-plans/active/swift-native-migration.md"
       ],
       "residualRisks": [
         "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select points at a Nix Apple SDK path.",
@@ -7836,6 +7855,56 @@
           "line": 251,
           "finding": "High-risk Swift process-control changes and delayed-SIGKILL race fix lacked Swift test evidence because default swift lookup failed.",
           "resolution": "Located Xcode Swift at /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift, ran Swift 6.3.2 with DEVELOPER_DIR and SDKROOT pointed at Xcode, and swift test passed 28 tests."
+        },
+        {
+          "nodeId": "step6-implement",
+          "exec": "exec-000009",
+          "severity": "info",
+          "file": "Sources/RielflowAdapters/OfficialSDKAdapters.swift",
+          "finding": "Implemented the accepted TASK-004 official OpenAI and Anthropic SDK parity slice after Step 5 accepted the plan with no high or mid findings.",
+          "resolution": "Added provider-neutral official SDK DTOs and injected request executor infrastructure, registered official/openai-sdk and official/anthropic-sdk Swift adapter factories, kept official/cursor-sdk deferred, clamped retry delays, added default HTTP-backed production request executors, threaded exact API-key redaction through failures, and verified no-live-credential XCTest coverage with Xcode Swift 6.3.2 swift test passing 44 tests."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "exec": "exec-000010",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAdapters/AdapterUtilities.swift",
+          "finding": "Self-review found RetryPolicy clamped maxAttempts but did not clamp negative retryDelay even though the accepted official SDK parity slice required retry delay clamping.",
+          "resolution": "RetryPolicy now clamps negative retryDelay to .zero and AdapterUtilitiesTests covers maxAttempts plus retryDelay clamping; later Step 7 adversarial fix raised swift test coverage to 42 passing tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "exec": "exec-000013",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/OfficialSDKAdapters.swift",
+          "line": 222,
+          "finding": "Default official OpenAI and Anthropic dispatch factories resolved to adapters whose default executor was MissingOfficialSDKRequestExecutor, so real backend execution could not work without test-only injection even when API keys were present.",
+          "resolution": "Replaced the missing default with URLSessionOfficialSDKRequestExecutor backed by injectable OfficialSDKHTTPTransporting. Default adapters now build OpenAI Responses and Anthropic Messages HTTP requests, decode JSON responses, redact non-2xx failures, and tests prove default DispatchingNodeAdapter factories execute through HTTP transports without injected request executors or live credentials."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "exec": "exec-000015",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAdapters/OfficialSDKAdapters.swift",
+          "finding": "Self-review found configured base URLs that already include shared path prefixes, such as Anthropic /v1, could duplicate path components and produce /v1/v1/messages.",
+          "resolution": "officialSDKEndpoint now appends only missing path components; the default Anthropic HTTP executor test uses https://anthropic.test/v1 and expects https://anthropic.test/v1/messages; swift test passed 42 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "exec": "exec-000018",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/OfficialSDKAdapters.swift",
+          "line": 373,
+          "finding": "Official SDK failure redaction was pattern-based and did not redact exact configured API key values from injected environments or custom apiKeyEnv values, allowing provider or injected-executor errors that echoed arbitrary configured credentials to leak secrets in AdapterExecutionError.message.",
+          "resolution": "Threaded resolved request.apiKey into official SDK failure normalization and redacts exact occurrences after shared redaction. Also redacts exact request.apiKey values in URLSessionOfficialSDKRequestExecutor before direct non-2xx provider errors are thrown. Added deterministic no-live tests for OpenAI HTTP non-2xx body, injected Anthropic executor error, and direct URLSession executor non-2xx error echoing custom configured secrets; swift test passed 45 tests."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "exec": "exec-000020",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAdapters/OfficialSDKAdapters.swift",
+          "finding": "Self-review found URLSessionOfficialSDKRequestExecutor direct non-2xx errors should also redact exact request.apiKey values before throwing, not only rely on adapter-level normalization.",
+          "resolution": "URLSessionOfficialSDKRequestExecutor now redacts exact request.apiKey occurrences in non-2xx detail before throwing; testURLSessionOfficialSDKRequestExecutorRedactsDirectHTTPFailures covers direct executor use; swift test passed 45 tests."
         }
       ]
     }

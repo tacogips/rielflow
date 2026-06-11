@@ -13,6 +13,7 @@ Source of truth:
 - `design-docs/specs/design-swift-native-migration.md#architecture`
 - `design-docs/specs/design-swift-native-migration.md#runtime-contracts-to-preserve`
 - `design-docs/specs/design-swift-native-migration.md#reference-mapping`
+- `design-docs/specs/design-swift-native-migration.md#official-sdk-adapter-parity-slice`
 - `design-docs/specs/design-swift-native-migration.md#cursor-cli-behavior-boundary`
 - `design-docs/specs/design-swift-native-migration.md#migration-strategy`
 - `design-docs/specs/design-swift-native-migration.md#verification-gates`
@@ -59,10 +60,10 @@ Out of scope for this plan:
 
 - Workflow mode: `issue-resolution`
 - Workflow ID: `codex-design-and-implement-review-loop`
-- Workflow session: `riel-codex-design-and-implement-review-loop-1781185324-7579f405`
-- Current queued node after foreground stop: `step6-implement`
+- Workflow session: `riel-codex-design-and-implement-review-loop-1781199313-f6e782b6`
+- Current planning node: `step4-impl-plan-create`
 - Repository: `tacogips/rielflow`
-- Issue title: `Migrate Rielflow to native Swift on swift-migration branch`
+- Issue title: `Port official OpenAI and Anthropic SDK adapters to Swift`
 - GitHub issue: none found by Step 1 exact-title or `Swift migration` search
 - Branch: `swift-migration`
 - Risk level: high; adversarial implementation review required before cutover
@@ -128,9 +129,9 @@ public enum ExecutionBackend: String, Codable, Sendable {
   case codexAgent = "codex-agent"
   case claudeCodeAgent = "claude-code-agent"
   case cursorCliAgent = "cursor-cli-agent"
-  case openAISDK = "official/openai-sdk"
-  case anthropicSDK = "official/anthropic-sdk"
-  case cursorSDK = "official/cursor-sdk"
+  case officialOpenAISDK = "official/openai-sdk"
+  case officialAnthropicSDK = "official/anthropic-sdk"
+  case officialCursorSDK = "official/cursor-sdk"
 }
 ```
 
@@ -220,6 +221,7 @@ public struct OutputContractEnvelope: Codable, Equatable, Sendable {
 
 #### `Sources/RielflowAdapters/DispatchingNodeAdapter.swift`
 #### `Sources/RielflowAdapters/LocalAgentProcess.swift`
+#### `Sources/RielflowAdapters/OfficialSDKAdapters.swift`
 #### `Sources/CodexAgent/CodexAgentAdapter.swift`
 #### `Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift`
 #### `Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift`
@@ -240,6 +242,12 @@ public protocol AgentCommandBuilding: Sendable {
 public protocol OfficialSDKRequestExecuting: Sendable {
   func executeSDKRequest(_ input: AdapterExecutionInput, context: AdapterExecutionContext) async throws -> AdapterExecutionOutput
 }
+
+public struct OfficialSDKAdapterConfiguration: Sendable {
+  public var apiKeyEnv: String?
+  public var baseURL: URL?
+  public var retryPolicy: RetryPolicy
+}
 ```
 
 **Checklist**:
@@ -258,25 +266,52 @@ public protocol OfficialSDKRequestExecuting: Sendable {
       JSON object parsing and output-envelope normalization.
 - [x] Close child-unused pipe descriptors during `posix_spawn` setup so
       stdin-consuming agents can observe EOF.
-- [ ] Register `official/openai-sdk` and `official/anthropic-sdk` in
-      `DispatchingNodeAdapter` with deterministic missing-registration tests.
-- [ ] Port OpenAI Responses request construction, `OPENAI_API_KEY` /
-      configured-env lookup, base URL handling, retry policy, error
-      normalization, timeout handling, response text extraction, and output
-      envelope normalization from `openai-sdk.ts` and `shared.ts`.
-- [ ] Port Anthropic Messages request construction, `ANTHROPIC_API_KEY` /
-      configured-env lookup, max-token defaulting, base URL handling, retry
-      policy, error normalization, timeout handling, response text extraction,
-      and output envelope normalization from `anthropic-sdk.ts` and
-      `shared.ts`.
+- [x] Add provider-neutral official SDK adapter infrastructure under
+      `RielflowAdapters`, with injected request executors/client factories and
+      no dependency from `CodexAgent`, `ClaudeCodeAgent`, or `CursorCLIAgent`.
+- [x] Register `official/openai-sdk` and `official/anthropic-sdk` default Swift
+      adapter factories in `DispatchingNodeAdapter`, while preserving
+      deterministic missing-registration behavior for unregistered backends.
+- [x] Port OpenAI Responses request construction from `openai-sdk.ts`: model
+      from `input.node.model`, `input` from `input.promptText`, optional
+      `instructions` from `input.systemPromptText`, provider
+      `official-openai-sdk`, `OPENAI_API_KEY` / configured-env lookup, optional
+      base URL propagation, retry policy, deadline timeout handling, provider
+      error normalization, credential redaction, response text extraction from
+      `output_text` then `output[].content[].type == "output_text"`, and output
+      envelope normalization.
+- [x] Port Anthropic Messages request construction from `anthropic-sdk.ts`:
+      model from `input.node.model`, default `max_tokens: 1024` clamped to at
+      least `1`, optional `system` from `input.systemPromptText`, one user
+      message from `input.promptText`, provider `official-anthropic-sdk`,
+      `ANTHROPIC_API_KEY` / configured-env lookup, optional base URL
+      propagation, retry policy, deadline timeout handling, provider error
+      normalization, credential redaction, response text extraction from
+      `content[].type == "text"`, and output envelope normalization.
 - [ ] Port readiness and auth failure categories from `readiness.ts`.
 - [ ] Keep Cursor modes, stream formats, probes, and SDK compatibility inside
       `CursorCLIAgent`.
 - [ ] Explicitly keep `official/cursor-sdk` deferred unless a minimal
       compatibility shim is required for parity and separately reviewed.
 - [x] Redact credentials from adapter failures.
-- [ ] Test local agents through injected process runners and official SDKs
-      through injected client factories; no live credentials are required.
+- [x] Test local agents through injected process runners and official SDKs
+      through injected request executors/client factories; no live credentials,
+      network access, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or
+      `CURSOR_API_KEY` are required.
+
+**Next TASK-004 Slice: Official OpenAI And Anthropic SDK Parity**
+
+| Step | Scope | Deliverables | Verification |
+| ---- | ----- | ------------ | ------------ |
+| TASK-004A | Official SDK shared infrastructure | `Sources/RielflowAdapters/OfficialSDKAdapters.swift` with Swift request/response DTOs, environment resolver, bounded retry, deadline-aware request execution, credential-redacted failure normalization, and output-contract/text payload normalization helpers. | Unit tests in `Tests/RielflowAdaptersTests/*` using injected request executors only. |
+| TASK-004B | OpenAI adapter | `OpenAiSDKAdapter` using the Responses request shape and text extraction rules from `packages/rielflow-adapters/src/openai-sdk.ts`; no live OpenAI client required in tests. | Synthetic responses cover request shape, `apiKeyEnv`, base URL, retry, timeout, errors, `output_text`, segmented `output_text`, and output envelopes. |
+| TASK-004C | Anthropic adapter | `AnthropicSDKAdapter` using the Messages request shape and text extraction rules from `packages/rielflow-adapters/src/anthropic-sdk.ts`; no live Anthropic client required in tests. | Synthetic responses cover request shape, `apiKeyEnv`, base URL, max-token clamp, retry, timeout, errors, content text segments, and output envelopes. |
+| TASK-004D | Dispatch registration | `DispatchingNodeAdapter` default registry includes `official/openai-sdk` and `official/anthropic-sdk`; `official/cursor-sdk` remains recognized by `NodeExecutionBackend` but intentionally unimplemented in this slice. | Dispatch tests prove both official SDK backends resolve with injected executors and missing registry entries fail deterministically. |
+
+The implementation step must keep this slice provider-neutral. It may add
+configuration types and test fixtures in `RielflowAdapters`, but it must not
+add official SDK behavior to `CodexAgent`, `ClaudeCodeAgent`, or
+`CursorCLIAgent`, and must not port `official/cursor-sdk`.
 
 ### 5. Runtime Session, Message Store, And Output Publication
 
@@ -386,7 +421,7 @@ public struct SwiftReleaseArtifact: Equatable, Sendable {
 | Swift package boundary scaffold | `Package.swift`, `Sources/*`, `Tests/*` | COMPLETED | Initial scaffold tests present |
 | Core workflow model and validation | `Sources/RielflowCore/WorkflowModel.swift`, `Sources/RielflowCore/WorkflowValidation.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
 | Prompt and JSON boundary contracts | `Sources/RielflowCore/PromptTemplate.swift`, `Sources/RielflowCore/JSONValue.swift`, `Sources/RielflowAdapters/AdapterUtilities.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
-| Backend-faithful agent and official SDK adapters | `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*` | IN_PROGRESS | `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed for current local-agent/Codex JSONL scaffold |
+| Backend-faithful agent and official SDK adapters | `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*` | IN_PROGRESS | `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed 45 tests for current local-agent/Codex JSONL and official OpenAI/Anthropic SDK scaffold |
 | Runtime session and message publication | `Sources/RielflowCore/*`, `Sources/RielflowCLI/*` | NOT_STARTED | `Tests/RielflowCoreTests/*` |
 | Add-on, package, event, hook, GraphQL, and server boundaries | `Sources/RielflowAddons/*`, `Sources/RielflowEvents/*`, `Sources/RielflowHook/*`, `Sources/RielflowGraphQL/*`, `Sources/RielflowServer/*` | NOT_STARTED | `Tests/*` |
 | CLI parity slice | `Sources/RielflowCLI/main.swift` | NOT_STARTED | `Tests/RielflowCLITests/*` |
@@ -480,13 +515,13 @@ Cursor CLI adapters using injected process runners, and port
 - [x] `codex-agent` local stdout normalization handles `codex exec --json` JSONL
       streams by selecting final assistant content before output-contract
       parsing.
-- [ ] `official/openai-sdk` and `official/anthropic-sdk` are registered in
+- [x] `official/openai-sdk` and `official/anthropic-sdk` are registered in
       Swift dispatch with explicit no-live-credential tests.
-- [ ] OpenAI and Anthropic SDK adapters preserve request shape, API-key
+- [x] OpenAI and Anthropic SDK adapters preserve request shape, API-key
       environment handling, base URL handling, retry/error normalization,
       timeout handling, output text extraction, and output envelope
       normalization.
-- [ ] Cursor-specific behavior does not leak into provider-neutral modules.
+- [x] Cursor-specific behavior does not leak into provider-neutral modules.
 - [ ] Readiness tests cover unavailable tools, auth failures, and policy-blocked
       states without credentials.
 
@@ -622,8 +657,8 @@ Swift commands:
 Agent adapter checks:
 
 - Unit tests must use injected process runners.
-- Official SDK unit tests must use injected client factories and synthetic
-  responses.
+- Official SDK unit tests must use injected request executors or client
+  factories and synthetic responses.
 - No live LLM credentials are required.
 - Failure output must redact credentials and command environment secrets.
 - Dispatch tests must prove `codex-agent`, `claude-code-agent`,
@@ -632,6 +667,9 @@ Agent adapter checks:
 - Official SDK tests must cover request construction, configured API-key
   environment names, base URL propagation, retry/error normalization, timeout
   handling, response text extraction, and output envelope normalization.
+- TASK-004 official SDK planning check:
+  `rg -n "TASK-004A|OpenAiSDKAdapter|AnthropicSDKAdapter|official/cursor-sdk"
+  impl-plans/active/swift-native-migration.md`.
 
 Cutover checks:
 
@@ -643,7 +681,7 @@ Cutover checks:
 
 Current environment note:
 
-- Xcode Swift 6.3.2 is available and `swift test` passed 28 tests with
+- Xcode Swift 6.3.2 is available and `swift test` passed 45 tests with
   `DEVELOPER_DIR` and `SDKROOT` pointed at `/Applications/Xcode.app`.
 - Default `swift` lookup can still point at a Nix Apple SDK path, so use the
   explicit Xcode toolchain command above until local toolchain selection is
@@ -949,3 +987,136 @@ toolchain execution evidence for the high-risk local-agent process cleanup path.
 `AgentAdapterTests` coverage for process-group timeout cleanup,
 `codex-agent` JSONL normalization, output-contract parsing, and stderr
 redaction.
+
+### Session: 2026-06-12 02:42
+
+**Tasks Completed**: None
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: None for planning. Implementation still requires the Xcode Swift
+toolchain command for reliable local verification.
+**Review Feedback Addressed**: No new Step 5 feedback in this workflow run;
+the previously addressed Step 5 mid finding for missing official SDK adapter
+planning remains covered.
+**Notes**: Step 4 revised TASK-004 into an implementation-ready official SDK
+slice. Added explicit TASK-004A through TASK-004D substeps for shared official
+SDK infrastructure, OpenAI Responses parity, Anthropic Messages parity, and
+dispatch registration. The next implementation step must keep
+`official/openai-sdk` and `official/anthropic-sdk` in `RielflowAdapters`, use
+injected request executors or client factories for deterministic tests, preserve
+public backend strings, and leave `official/cursor-sdk` explicitly deferred.
+
+### Session: 2026-06-12 02:45
+
+**Tasks Completed**: None
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: None for planning.
+**Review Feedback Addressed**: Step 4 self-review found and fixed a plan-only
+naming drift in the sample backend enum.
+**Notes**: Aligned the plan's illustrative Swift backend enum cases with the
+current `NodeExecutionBackend` names used by the Swift scaffold and accepted
+design: `officialOpenAISDK`, `officialAnthropicSDK`, and
+`officialCursorSDK`. Public backend strings remain unchanged.
+
+### Session: 2026-06-12 02:55
+
+**Tasks Completed**: TASK-004 official OpenAI/Anthropic SDK parity slice
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: Remaining TASK-004 command-builder and readiness parity items are
+still open; `official/cursor-sdk` remains explicitly deferred.
+**Review Feedback Addressed**: Step 5 accepted the implementation plan with no
+high or mid findings; no Step 7 feedback was present for this Step 6 run.
+**Notes**: Added `Sources/RielflowAdapters/OfficialSDKAdapters.swift` with
+provider-neutral request DTOs, injected `OfficialSDKRequestExecuting`
+infrastructure, configured/default API-key lookup, base URL propagation,
+bounded retry, deadline timeout handling, credential-redacted error
+normalization, OpenAI Responses and Anthropic Messages request construction,
+provider text extraction, and shared output-envelope normalization. Updated
+`DispatchingNodeAdapter` to register default Swift factories for
+`official/openai-sdk` and `official/anthropic-sdk` while leaving
+`official/cursor-sdk` unregistered. Added deterministic no-live-credential
+tests in `Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift` for request
+shape, configured env names, base URL forwarding, retry, timeout, terminal
+error redaction, `output_text`, segmented output text, Anthropic text content,
+output envelopes, dispatch registration, and missing-registration behavior.
+Ran Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed
+37 tests.
+
+### Session: 2026-06-12 02:56
+
+**Tasks Completed**: TASK-004 official OpenAI/Anthropic SDK parity slice
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: Remaining TASK-004 command-builder and readiness parity items are
+still open; `official/cursor-sdk` remains explicitly deferred.
+**Review Feedback Addressed**: Step 6 self-review found and fixed missing retry
+delay clamping coverage for the official SDK retry policy.
+**Notes**: Updated `RetryPolicy` to clamp negative retry delays to `.zero` and
+added `AdapterUtilitiesTests.testRetryPolicyClampsAttemptsAndDelay`. Re-ran
+Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 38
+tests.
+
+### Session: 2026-06-12 03:06
+
+**Tasks Completed**: TASK-004 official OpenAI/Anthropic SDK parity slice
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: Remaining TASK-004 command-builder and readiness parity items are
+still open; `official/cursor-sdk` remains explicitly deferred.
+**Review Feedback Addressed**: Step 7 adversarial review `exec-000013` mid
+finding that default `official/openai-sdk` and `official/anthropic-sdk`
+dispatch factories were inert without injected request executors.
+**Notes**: Replaced the default missing official SDK request executor with
+`URLSessionOfficialSDKRequestExecutor`, backed by an injectable
+`OfficialSDKHTTPTransporting` transport and production `URLSession` transport.
+The default executor now builds OpenAI Responses and Anthropic Messages HTTP
+requests, forwards configured base URLs and credentials, decodes provider JSON
+responses, normalizes non-2xx provider failures through shared redaction, and
+keeps deterministic tests on injected HTTP transports without live credentials
+or network. Added no-live tests proving non-injected request-executor paths work
+through both adapters and default `DispatchingNodeAdapter` factories. Re-ran
+Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 42
+tests.
+
+### Session: 2026-06-12 03:08
+
+**Tasks Completed**: TASK-004 official OpenAI/Anthropic SDK parity slice
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: Remaining TASK-004 command-builder and readiness parity items are
+still open; `official/cursor-sdk` remains explicitly deferred.
+**Review Feedback Addressed**: Step 6 self-review fixed an official SDK base
+URL edge case before Step 7 independent review.
+**Notes**: Tightened official SDK endpoint construction so configured base URLs
+that already include shared path prefixes, such as Anthropic `/v1`, append only
+the missing terminal component instead of duplicating path segments. Updated the
+default Anthropic HTTP executor test to use `https://anthropic.test/v1` and
+expect `https://anthropic.test/v1/messages`. Re-ran Xcode Swift 6.3.2 with
+`DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 42 tests.
+
+### Session: 2026-06-12 03:16
+
+**Tasks Completed**: TASK-004 official OpenAI/Anthropic SDK parity slice
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: Remaining TASK-004 command-builder and readiness parity items are
+still open; `official/cursor-sdk` remains explicitly deferred.
+**Review Feedback Addressed**: Step 7 adversarial review `exec-000018` mid
+finding that official SDK failure redaction did not redact exact configured
+API-key values from custom `apiKeyEnv` or injected environment maps.
+**Notes**: Threaded the resolved `request.apiKey` into official SDK failure
+normalization and redact exact occurrences after the shared pattern-based
+redaction. Added no-live tests for an OpenAI HTTP non-2xx body and an injected
+Anthropic executor error that echo arbitrary configured secrets which do not
+match `sk-`, bearer, or key-assignment redaction patterns. Re-ran Xcode Swift
+6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 44 tests.
+
+### Session: 2026-06-12 03:18
+
+**Tasks Completed**: TASK-004 official OpenAI/Anthropic SDK parity slice
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: Remaining TASK-004 command-builder and readiness parity items are
+still open; `official/cursor-sdk` remains explicitly deferred.
+**Review Feedback Addressed**: Step 6 self-review extended exact credential
+redaction to the public `URLSessionOfficialSDKRequestExecutor` non-2xx path.
+**Notes**: Redacted exact `request.apiKey` occurrences before the URLSession
+request executor itself throws non-2xx provider errors, in addition to the
+adapter-level normalization redaction. Added
+`testURLSessionOfficialSDKRequestExecutorRedactsDirectHTTPFailures` for a direct
+executor call whose HTTP body echoes a custom non-pattern secret. Re-ran Xcode
+Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 45 tests.

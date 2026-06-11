@@ -3,6 +3,13 @@ import XCTest
 @testable import RielflowCore
 
 final class AdapterUtilitiesTests: XCTestCase {
+  func testRetryPolicyClampsAttemptsAndDelay() {
+    let policy = RetryPolicy(maxAttempts: 0, retryDelay: .milliseconds(-50))
+
+    XCTAssertEqual(policy.maxAttempts, 1)
+    XCTAssertEqual(policy.retryDelay, .zero)
+  }
+
   func testBuildCombinedPromptTextPreservesSystemPromptBoundary() {
     XCTAssertEqual(
       buildCombinedPromptText(promptText: "Do work", systemPromptText: "Be concise"),

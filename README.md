@@ -104,6 +104,19 @@ backends remain stable as workflow `executionBackend` strings:
 that currently map them are `CodexAgent`, `ClaudeCodeAgent`, and
 `CursorCLIAgent`.
 
+The Swift adapter scaffold also preserves the public official SDK backend
+strings `official/openai-sdk`, `official/anthropic-sdk`, and
+`official/cursor-sdk`. `DispatchingNodeAdapter` now registers default Swift
+adapter factories for `official/openai-sdk` and `official/anthropic-sdk` under
+`RielflowAdapters`, including HTTP-backed request execution, configured or
+default API-key environment lookup, optional base URL propagation, bounded
+retry, deadline timeout handling, provider error normalization, credential
+redaction, provider text extraction, and output-envelope normalization.
+`official/cursor-sdk` remains recognized but intentionally unimplemented in
+this slice. Official SDK tests use injected request executors or HTTP
+transports with synthetic responses; they do not require live provider
+credentials or network access.
+
 If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
 toolchain explicitly:
 
@@ -115,7 +128,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 28 tests. Keep using the Bun commands in this README for
+`swift test` passed 45 tests. Keep using the Bun commands in this README for
 the production runtime until Swift validation, inspect, deterministic run,
 package, event, GraphQL, hook, adapter, and Homebrew parity gates pass.
 
