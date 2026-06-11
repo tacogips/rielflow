@@ -142,6 +142,18 @@ not require live `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `CURSOR_API_KEY`,
 network access, or live SDK calls. Keep `official/cursor-sdk` explicitly
 deferred unless a later issue-resolution run scopes and reviews it.
 
+For TASK-004 local-agent command-builder and readiness slices, keep generic
+subprocess execution in `RielflowAdapters` provider-neutral and put
+backend-faithful argv/auth/model/readiness behavior in `CodexAgent`,
+`ClaudeCodeAgent`, and `CursorCLIAgent`. Preserve public backend strings, use
+injected process runners and readiness probes for deterministic tests, map
+unavailable tools/auth/model probes to redacted `policy_blocked` preflight
+failures, model readiness states as `available`, `unavailable`, `unknown`, and
+`not_checked`, keep Cursor CLI concepts out of `RielflowCore` and
+provider-neutral targets, and do not require live `codex`, `claude`,
+`cursor-agent`, LLM credentials, network access, or npm package installs in
+tests.
+
 For Swift migration verification, record both the TypeScript/Bun baseline and
 SwiftPM evidence. The default `swift` lookup may point at a Nix Apple SDK path,
 so accepted verification can use Xcode's toolchain explicitly:
@@ -154,12 +166,17 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 For the 2026-06-12 `swift-migration` run, Step 7 adversarial review accepted
-the TASK-004 official OpenAI and Anthropic SDK parity implementation after
-Swift 6.3.2 compiled the SwiftPM scaffold and `swift test` passed 45 tests.
-Residual low risks remained: the preferred local `../../codex-agent` reference
-was unavailable, remaining TASK-004 command-builder and readiness parity work
-stayed open, `official/cursor-sdk` stayed deferred, and default `swift` lookup
-still required the Xcode `DEVELOPER_DIR`/`SDKROOT` override.
+the TASK-004 local-agent command-builder and readiness parity implementation
+after Swift 6.3.2 compiled the SwiftPM scaffold and `swift test` passed 65
+tests. The accepted slice includes backend-owned Codex, Claude, and Cursor CLI
+command builders; bounded default auth/model preflights; runtime-readiness-
+style Swift validation APIs; Cursor/Codex stream normalization; Codex argv
+option termination; child descriptor isolation; configured-secret redaction;
+and the previously accepted official OpenAI/Anthropic SDK scaffold. Residual
+low risks remained: the preferred local `../../codex-agent` reference was
+unavailable, `official/cursor-sdk` stayed deferred, TASK-002 and TASK-003
+remained in progress, and default `swift` lookup still required the Xcode
+`DEVELOPER_DIR`/`SDKROOT` override.
 
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via

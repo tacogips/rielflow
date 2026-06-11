@@ -106,16 +106,31 @@ that currently map them are `CodexAgent`, `ClaudeCodeAgent`, and
 
 The Swift adapter scaffold also preserves the public official SDK backend
 strings `official/openai-sdk`, `official/anthropic-sdk`, and
-`official/cursor-sdk`. `DispatchingNodeAdapter` now registers default Swift
-adapter factories for `official/openai-sdk` and `official/anthropic-sdk` under
-`RielflowAdapters`, including HTTP-backed request execution, configured or
-default API-key environment lookup, optional base URL propagation, bounded
-retry, deadline timeout handling, provider error normalization, credential
-redaction, provider text extraction, and output-envelope normalization.
-`official/cursor-sdk` remains recognized but intentionally unimplemented in
-this slice. Official SDK tests use injected request executors or HTTP
-transports with synthetic responses; they do not require live provider
-credentials or network access.
+`official/cursor-sdk`. The local-agent Swift targets now own backend-faithful
+command builders for `codex-agent`, `claude-code-agent`, and
+`cursor-cli-agent` instead of relying on a generic subprocess argv shape.
+`RielflowAdapters` provides the shared injected process runner, deadline
+handling, output-contract parsing, image-path resolution, descriptor isolation,
+and redacted failure handling; provider-specific argv, auth/model preflights,
+stream normalization, and readiness interpretation stay in `CodexAgent`,
+`ClaudeCodeAgent`, and `CursorCLIAgent`.
+
+Swift readiness APIs model tool, auth, and model states as `available`,
+`unavailable`, `unknown`, or `not_checked`, matching the practical behavior
+from the TypeScript readiness and runtime-readiness probes. Adapter preflights
+map unavailable local tools, failed auth checks, and failed model probes to
+redacted `policy_blocked` failures without requiring a workflow execution.
+
+`DispatchingNodeAdapter` also registers default Swift adapter factories for
+`official/openai-sdk` and `official/anthropic-sdk` under `RielflowAdapters`,
+including HTTP-backed request execution, configured or default API-key
+environment lookup, optional base URL propagation, bounded retry, deadline
+timeout handling, provider error normalization, credential redaction, provider
+text extraction, and output-envelope normalization. `official/cursor-sdk`
+remains recognized but intentionally unimplemented in this slice. Local-agent
+and official SDK adapter tests use injected process runners, readiness probes,
+request executors, or HTTP transports with synthetic responses; they do not
+require live local CLI tools, provider credentials, or network access.
 
 If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
 toolchain explicitly:
@@ -128,9 +143,12 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 45 tests. Keep using the Bun commands in this README for
-the production runtime until Swift validation, inspect, deterministic run,
-package, event, GraphQL, hook, adapter, and Homebrew parity gates pass.
+`swift test` passed 65 tests for the current local-agent command-builder,
+bounded preflight, readiness, redaction, descriptor-isolation, and official
+OpenAI/Anthropic SDK scaffold coverage. Keep using the Bun commands in this
+README for the production runtime until Swift validation, inspect,
+deterministic run, package, event, GraphQL, hook, adapter, and Homebrew parity
+gates pass.
 
 ### Optional LLM Agent Setup
 

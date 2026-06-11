@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-12T03:18:00+09:00",
+  "lastUpdated": "2026-06-12T05:35:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -7575,10 +7575,10 @@
       "path": "impl-plans/active/swift-native-migration.md",
       "designReference": "design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
       "workflowMode": "issue-resolution",
-      "issueReference": "Port official OpenAI and Anthropic SDK adapters to Swift; workflowInput.requestedBehavior; no matching GitHub issue URL or number supplied",
+      "issueReference": "Port Swift local agent command builders and readiness parity; workflowInput.requestedBehavior; no matching GitHub issue URL or number supplied",
       "workflowId": "codex-design-and-implement-review-loop",
       "lastPlanningNode": "step4-impl-plan-create",
-      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use packages/rielflow-adapters/src/codex.ts and pinned package metadata until Swift reference is supplied. Official SDK parity references: packages/rielflow-adapters/src/dispatch.ts, shared.ts, openai-sdk.ts, anthropic-sdk.ts; implemented TASK-004 official/openai-sdk and official/anthropic-sdk Swift parity slice with default HTTP-backed request executors plus injected test transports; official/cursor-sdk remains explicitly deferred unless separately scoped.",
+      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use packages/rielflow-adapters/src/codex.ts, packages/rielflow-adapters/src/claude.ts, packages/rielflow-adapters/src/cursor.ts, packages/rielflow-adapters/src/readiness.ts, packages/rielflow/src/workflow/runtime-readiness-agent-probes.ts, and pinned package metadata until Swift references are supplied. Official SDK parity for official/openai-sdk and official/anthropic-sdk is complete; remaining TASK-004 scope is local-agent command builders and readiness parity; official/cursor-sdk remains explicitly deferred unless separately scoped.",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
@@ -7601,7 +7601,7 @@
           ]
         },
         "TASK-004": {
-          "status": "In Progress",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "TASK-003"
@@ -7698,12 +7698,36 @@
         "rg -n \"testDefaultHTTPExecutorRedactsConfiguredAPIKeyValueFromProviderFailures|testInjectedExecutorFailureRedactsConfiguredAPIKeyValue|PROXY_TOKEN|ANTHROPIC_PROXY_TOKEN\" Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
         "rg -n \"2026-06-12 03:16|swift test.*passed 44 tests|exec-000018\" impl-plans/active/swift-native-migration.md",
         "rg -n \"request failed with HTTP.*redactOfficialSDKSensitiveText|testURLSessionOfficialSDKRequestExecutorRedactsDirectHTTPFailures\" Sources/RielflowAdapters/OfficialSDKAdapters.swift Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
-        "rg -n \"2026-06-12 03:18|swift test.*passed 45 tests|URLSessionOfficialSDKRequestExecutor\" impl-plans/active/swift-native-migration.md"
+        "rg -n \"2026-06-12 03:18|swift test.*passed 45 tests|URLSessionOfficialSDKRequestExecutor\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"TASK-004E|TASK-004F|TASK-004G|TASK-004H|runtime-readiness-agent-probes|AgentCommandBuilding|LocalAgentCommand\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"AgentCommandBuilding|Readiness|policy_blocked|codex exec|--output-format|cursor-cli-agent\" Sources Tests",
+        "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].issueReference, .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"]' impl-plans/PROGRESS.json",
+        "rg -n \"LocalAgentCommandBuilding|CodexAgentCommandBuilder|ClaudeCodeAgentCommandBuilder|CursorCLIAgentCommandBuilder\" Sources Tests",
+        "rg -n \"AgentProbeStatus|CodexAgentReadiness|ClaudeCodeAgentReadiness|CursorCLIAgentReadiness|policyBlocked|policy_blocked\" Sources Tests",
+        "sed -n '450,525p' impl-plans/active/swift-native-migration.md",
+        "jq '.plans[\"active/swift-native-migration\"].tasks[\"TASK-002\"], .plans[\"active/swift-native-migration\"].tasks[\"TASK-003\"], .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"]' impl-plans/PROGRESS.json",
+        "rg -n \"AgentBackendProbeOptions|CodexAgentReadinessOperations|ClaudeCodeAgentReadinessOperations|CursorCLIAgentReadinessOperations|testReadinessAPIsUseInjectedProbeOperations\" Sources Tests",
+        "rg -n \"DefaultAuthPreflight|testCodexDefaultAuthPreflight|testClaudeDefaultPreflight|testCursorDefaultPreflight|policyBlocked\" Sources/CodexAgent Sources/ClaudeCodeAgent Sources/CursorCLIAgent Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "sed -n '438,525p' impl-plans/active/swift-native-migration.md",
+        "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].tasks[\"TASK-001\"], .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"], .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
+        "gitleaks git --pre-commit --redact --staged --verbose",
+        "rg -n \"CodexAgentCommandBuilder|buildCombinedPromptText|imagePaths|runCodexDefaultAuthPreflight\" Sources/CodexAgent/CodexAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"CursorCLIAgentCommandBuilder|--output-format|Reply with exactly OK|runCursorDefaultAuthPreflight\" Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"CLAUDE_CONFIG_DIR|CURSOR_CONFIG_DIR|CODEX_HOME|DefaultPreflight\" Tests/AgentAdapterTests/AgentAdapterTests.swift Sources/CodexAgent Sources/ClaudeCodeAgent Sources/CursorCLIAgent",
+        "rg -n \"login.*status|auth.*status|testCodexDefaultAuthPreflight|testCodexCommandBuilderOwnsExactArgvAndPromptBoundary\" Sources/CodexAgent/CodexAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"resolveAdapterImagePaths|forwardImageAttachments|mergedVariables|arguments|testResolveAdapterImagePaths|testForwardImageAttachmentsFalse\" Sources/RielflowAdapters/AdapterUtilities.swift Sources/CodexAgent/CodexAgentAdapter.swift Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"authPreflight|checkAuthPreflight|testAuthPreflightFalseSkipsInjectedPreflightForLocalAgents\" Sources/CodexAgent/CodexAgentAdapter.swift Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"normalizeCursorStreamJSONStdout|cursorAssistantText|testCursorStreamJSONUses\" Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"defaultAgentPreflightDeadline|agentPreflightErrorDetail|testDefaultAuthPreflightsUseBoundedDeadline|testDefaultAuthPreflightTimeoutsMapToPolicyBlocked|defaultCodexAuthPreflightTimeout|defaultClaudeAuthPreflightTimeout|defaultCursorAuthPreflightTimeout\" Sources Tests",
+        "rg -n \"testCodexCommandBuilderTerminatesOptionsBeforeFlagLikePrompt|arguments.append\\(\\\"--\\\"\\)|promptText: String = \\\"hello\\\"\" Sources/CodexAgent/CodexAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"POSIX_SPAWN_CLOEXEC_DEFAULT|sensitiveAdapterEnvironmentValues|additionalSensitiveValues|testFoundationRunnerClosesUnrelatedInheritedFileDescriptors|testProviderFailureRedactsConfiguredEnvironmentSecretValue|testDefaultPreflightRedactsConfiguredEnvironmentSecretValue\" Sources Tests",
+        "rg -n \"2026-06-12 05:35|exec-000046|passed 65 tests|descriptor isolation|configured-secret redaction\" impl-plans/active/swift-native-migration.md impl-plans/PROGRESS.json"
       ],
       "residualRisks": [
         "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select points at a Nix Apple SDK path.",
         "High-risk runtime migration requires adversarial implementation review before release cutover.",
-        "Preferred local codex-agent reference root ../../codex-agent is unavailable."
+        "Preferred local codex-agent reference root ../../codex-agent is unavailable.",
+        "Swift local-agent command/readiness parity maps current TypeScript adapter behavior because dedicated Swift references for codex-agent, claude-code-agent, and cursor-cli-agent are not supplied; preferred ../../codex-agent remains unavailable."
       ],
       "addressedReviewFindings": [
         {
@@ -7905,6 +7929,153 @@
           "file": "Sources/RielflowAdapters/OfficialSDKAdapters.swift",
           "finding": "Self-review found URLSessionOfficialSDKRequestExecutor direct non-2xx errors should also redact exact request.apiKey values before throwing, not only rely on adapter-level normalization.",
           "resolution": "URLSessionOfficialSDKRequestExecutor now redacts exact request.apiKey occurrences in non-2xx detail before throwing; testURLSessionOfficialSDKRequestExecutorRedactsDirectHTTPFailures covers direct executor use; swift test passed 45 tests."
+        },
+        {
+          "nodeId": "step6-implement",
+          "exec": "exec-000009",
+          "severity": "info",
+          "file": "impl-plans/active/swift-native-migration.md",
+          "finding": "Implemented the accepted remaining TASK-004 local-agent command-builder and readiness parity slice after Step 5 accepted the plan with no high or mid findings.",
+          "resolution": "Added LocalAgentCommandBuilding and backend-owned Swift builders for codex-agent, claude-code-agent, and cursor-cli-agent; added deterministic Swift readiness/runtime-readiness APIs for available, unavailable, unknown, and not_checked states; added no-live XCTest coverage for exact argv/config/stdin/deadline behavior, policy_blocked preflight failures, readiness invalid/unknown results, and Xcode Swift 6.3.2 swift test passing 51 tests."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "exec": "exec-000010",
+          "severity": "mid-fixed",
+          "file": "impl-plans/active/swift-native-migration.md",
+          "finding": "Self-review found the TASK-004 markdown status header still said In Progress while TASK-004 completion criteria, progress log, and impl-plans/PROGRESS.json recorded completion.",
+          "resolution": "Corrected active plan status headers so TASK-002 and TASK-003 remain In Progress and TASK-004 is Completed, matching impl-plans/PROGRESS.json and Step 6 verification evidence."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "exec": "exec-000010",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAdapters/AgentReadiness.swift",
+          "finding": "Self-review found TASK-004H required injectable probe operations, but the first Step 6 implementation only exposed readiness report mapping APIs and tests built reports directly.",
+          "resolution": "Added AgentBackendProbeOptions plus CodexAgentReadinessOperations, ClaudeCodeAgentReadinessOperations, and CursorCLIAgentReadinessOperations protocols with async readiness API entry points. Added testReadinessAPIsUseInjectedProbeOperations with no-live mock operations; Xcode Swift 6.3.2 swift test passed 51 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000012",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift; Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift; Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift",
+          "finding": "Step 7 review found default Codex, Claude, and Cursor adapter paths only ran auth/readiness preflight when callers injected checkAuthPreflight, so failed login, unavailable CLI, or unavailable model checks could surface as provider_error instead of accepted policy_blocked preflight behavior.",
+          "resolution": "Added default runner-backed preflight before local agent execution: Codex auth status, Claude --version plus auth status, and Cursor --version plus model check. Added no-live XCTest coverage for default Codex login failure, Claude unavailable CLI/auth failures, and Cursor unavailable CLI/auth/model failures; Xcode Swift 6.3.2 swift test passed 54 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000012",
+          "severity": "low",
+          "file": "impl-plans/active/swift-native-migration.md",
+          "finding": "Step 7 review found TASK-001 was marked In Progress in the active plan while impl-plans/PROGRESS.json recorded TASK-001 as Completed.",
+          "resolution": "Corrected TASK-001 status in impl-plans/active/swift-native-migration.md to Completed."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000016",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift",
+          "line": 23,
+          "finding": "Codex command construction sent the prompt on stdin and never appended the combined prompt as the final argv entry, while codex-agent builds codex exec --json ... <prompt>.",
+          "resolution": "CodexAgentCommandBuilder now appends supported image args, image separator when needed, and the combined system/user prompt as the final codex exec argv entry with empty stdin. Tests assert exact argv, prompt boundary, and CODEX_HOME propagation."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000016",
+          "severity": "mid",
+          "file": "Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift",
+          "line": 40,
+          "finding": "Cursor command construction omitted --print --output-format stream-json -- <prompt>, sent prompt on stdin, and added unsupported --stream-mode.",
+          "resolution": "CursorCLIAgentCommandBuilder now emits cursor-agent --print --output-format stream-json --model <model>, optional non-default --mode, supported image/additional args, --, final combined prompt, and empty stdin; unsupported stream-mode/effort CLI flags were removed from Swift Cursor command construction."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000016",
+          "severity": "mid",
+          "file": "Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift",
+          "line": 147,
+          "finding": "Cursor model preflight used cursor-agent --model <model> --check instead of the cursor-cli-agent model-availability probe shape.",
+          "resolution": "Cursor default model preflight now runs cursor-agent --print --output-format text --model <model> -- Reply with exactly OK. Tests assert the exact no-live probe argv."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000016",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift; Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift; Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift",
+          "line": 101,
+          "finding": "Default auth/readiness preflights did not propagate adapter environment passed to command builders, so configured PATH/auth homes could be absent during preflight.",
+          "resolution": "CodexAgentAdapter, ClaudeCodeAgentAdapter, and CursorCLIAgentAdapter now store the configured environment and merge it into default preflight configurations with RIEL_AGENT_BACKEND. Tests assert CODEX_HOME, CLAUDE_CONFIG_DIR, and CURSOR_CONFIG_DIR reach preflight and main execution."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000020",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift",
+          "line": 113,
+          "finding": "Codex default auth preflight used codex auth status while the codex-agent readiness reference uses codex login status.",
+          "resolution": "runCodexDefaultAuthPreflight now invokes [executableName, \"login\", \"status\"] and keeps policy_blocked mapping plus adapter environment propagation. AgentAdapterTests asserts the exact argv in Codex command-builder and default preflight failure coverage; Xcode Swift 6.3.2 swift test passed 54 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000024",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift; Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift; Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift",
+          "line": 29,
+          "finding": "Swift image/attachment command builders read only node.variables imagePaths or attachmentPaths while TypeScript parity resolves images from AdapterExecutionInput.mergedVariables and arguments and honors forwardImageAttachments=false.",
+          "resolution": "Added shared resolveAdapterImagePaths in RielflowAdapters over mergedVariables and arguments, with nested image descriptor/source support, dedupe, depth limiting, and forwardImageAttachments=false. Codex and Cursor builders now use it for --image, Claude merges it into attachment behavior, and AgentAdapterTests covers mergedVariables, arguments, nested descriptors, dedupe, and disabled forwarding across Codex, Claude, and Cursor; Xcode Swift 6.3.2 swift test passed 56 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000028",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift; Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift; Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift",
+          "finding": "authPreflight:false was ignored when checkAuthPreflight was supplied, so injected preflight still ran for Codex, Claude, and Cursor local-agent execution.",
+          "resolution": "Gated both injected and default preflight work behind authPreflight in all three adapters. When authPreflight is true, execution prefers checkAuthPreflight and otherwise runs the default preflight. Added no-live testAuthPreflightFalseSkipsInjectedPreflightForLocalAgents with throwing injected preflights for codex-agent, claude-code-agent, and cursor-cli-agent; Xcode Swift 6.3.2 swift test passed 57 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000032",
+          "severity": "mid",
+          "file": "Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift",
+          "line": 48,
+          "finding": "Cursor command execution requested --output-format stream-json but returned raw JSONL stdout through LocalAgentCommandAdapter without Cursor-specific normalization, so final assistant/session.completed text could be missed before output-contract parsing.",
+          "resolution": "Added normalizeCursorStreamJSONStdout in CursorCLIAgentCommandBuilder to extract latest session.assistant_message displayText/rawText or fall back to session.completed.result before shared output normalization. Added no-live XCTest coverage for Cursor stream-json text payload extraction and output-contract envelope parsing; Xcode Swift 6.3.2 swift test passed 59 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "exec": "exec-000037",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift; Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift; Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift; Sources/RielflowAdapters/AdapterUtilities.swift",
+          "line": 96,
+          "finding": "Default local-agent auth/readiness preflights reused AdapterExecutionContext.deadline and had no independent bounded timeout, so nil deadlines could hang and preflight timeouts could surface as timeout instead of policy_blocked auth/readiness failures.",
+          "resolution": "Added defaultAgentPreflightDeadline and agentPreflightErrorDetail helpers, applied 5-second Codex/Claude and 30-second Cursor default preflight bounds, mapped runner timeout/provider errors to redacted policy_blocked auth/CLI/model messages, and added no-live XCTest coverage for nil-deadline bounds plus timeout-to-policy_blocked mapping; Xcode Swift 6.3.2 swift test passed 61 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "exec": "exec-000041",
+          "severity": "mid",
+          "file": "Sources/CodexAgent/CodexAgentAdapter.swift",
+          "line": 35,
+          "finding": "Codex command construction only inserted the argv option terminator -- when image paths existed, so a flag-like prompt could be parsed as codex CLI options instead of the positional prompt.",
+          "resolution": "CodexAgentCommandBuilder now always appends -- before the final prompt argument after all supported flags/additional args. Added testCodexCommandBuilderTerminatesOptionsBeforeFlagLikePrompt with --model other prompt coverage; Xcode Swift 6.3.2 swift test passed 62 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "exec": "exec-000046",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/LocalAgentProcess.swift",
+          "line": 358,
+          "finding": "External local-agent processes were spawned with POSIX_SPAWN_SETPGROUP but without a close-on-exec default for unrelated inherited file descriptors, allowing child agents to inherit parent runtime descriptors.",
+          "resolution": "FoundationLocalAgentProcessRunner now sets POSIX_SPAWN_CLOEXEC_DEFAULT while explicitly duping stdin/stdout/stderr; added testFoundationRunnerClosesUnrelatedInheritedFileDescriptors; Xcode Swift 6.3.2 swift test passed 65 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "exec": "exec-000046",
+          "severity": "mid",
+          "file": "Sources/RielflowAdapters/AdapterUtilities.swift; Sources/RielflowAdapters/LocalAgentProcess.swift; Sources/RielflowAdapters/AgentReadiness.swift; Sources/CodexAgent/CodexAgentAdapter.swift; Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift; Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift",
+          "line": 165,
+          "finding": "Local-agent failure redaction did not include sensitive values supplied through LocalAgentProcessConfiguration.environment, so raw configured CODEX_HOME/CLAUDE_CONFIG_DIR/CURSOR_CONFIG_DIR or token values could leak in provider_error or policy_blocked details.",
+          "resolution": "Added sensitiveAdapterEnvironmentValues and additionalSensitiveValues redaction plumbing through provider errors, compact readiness messages, agentPreflightErrorDetail, and Codex/Claude/Cursor default preflights; added configured environment redaction tests for provider_error and policy_blocked paths; Xcode Swift 6.3.2 swift test passed 65 tests."
         }
       ]
     }

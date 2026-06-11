@@ -21,6 +21,30 @@ public struct LocalAgentProcessConfiguration: Equatable, Sendable {
   }
 }
 
+public struct LocalAgentCommand: Sendable {
+  public var provider: String
+  public var configuration: LocalAgentProcessConfiguration
+  public var stdin: String
+  public var normalizeStdout: @Sendable (String) -> String
+
+  public init(
+    provider: String,
+    configuration: LocalAgentProcessConfiguration,
+    stdin: String,
+    normalizeStdout: @escaping @Sendable (String) -> String = { $0 }
+  ) {
+    self.provider = provider
+    self.configuration = configuration
+    self.stdin = stdin
+    self.normalizeStdout = normalizeStdout
+  }
+}
+
+public protocol LocalAgentCommandBuilding: Sendable {
+  var provider: String { get }
+  func buildCommand(for input: AdapterExecutionInput) throws -> LocalAgentCommand
+}
+
 public struct LocalAgentProcessResult: Equatable, Sendable {
   public var stdout: String
   public var stderr: String
@@ -332,8 +356,8 @@ private func spawnProcess(
   }
 
   try checkPosixSpawn(
-    posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP)),
-    operation: "set process-group flag"
+    posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT)),
+    operation: "set process flags"
   )
   try checkPosixSpawn(posix_spawnattr_setpgroup(&attributes, 0), operation: "set child process group")
 
@@ -467,44 +491,32 @@ public struct FoundationLocalAgentProcessRunner: LocalAgentProcessRunning {
 }
 
 public struct LocalAgentCommandAdapter: NodeAdapter {
-  public var provider: String
-  public var executableName: String
-  public var baseArguments: [String]
+  public var commandBuilder: any LocalAgentCommandBuilding
   public var runner: any LocalAgentProcessRunning
 
   public init(
-    provider: String,
-    executableName: String,
-    baseArguments: [String],
+    commandBuilder: any LocalAgentCommandBuilding,
     runner: any LocalAgentProcessRunning = FoundationLocalAgentProcessRunner()
   ) {
-    self.provider = provider
-    self.executableName = executableName
-    self.baseArguments = baseArguments
+    self.commandBuilder = commandBuilder
     self.runner = runner
   }
 
   public func execute(_ input: AdapterExecutionInput, context: AdapterExecutionContext) async throws -> AdapterExecutionOutput {
-    let prompt = buildCombinedPromptText(promptText: input.promptText, systemPromptText: input.systemPromptText)
-    let executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    let workingDirectory = input.node.workingDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
-    let configuration = LocalAgentProcessConfiguration(
-      executableURL: executableURL,
-      arguments: [executableName] + baseArguments + ["--model", input.node.model],
-      environment: ["RIEL_AGENT_BACKEND": provider],
-      workingDirectoryURL: workingDirectory
-    )
-
-    let result = try await runner.run(configuration: configuration, stdin: prompt, deadline: context.deadline)
+    let command = try commandBuilder.buildCommand(for: input)
+    let result = try await runner.run(configuration: command.configuration, stdin: command.stdin, deadline: context.deadline)
     guard result.terminationStatus == 0 else {
-      let detail = redactAdapterSensitiveText(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
-      throw AdapterExecutionError(.providerError, "\(provider) failed with exit code \(result.terminationStatus): \(detail)")
+      let detail = redactAdapterSensitiveText(
+        result.stderr.trimmingCharacters(in: .whitespacesAndNewlines),
+        additionalSensitiveValues: sensitiveAdapterEnvironmentValues(command.configuration.environment)
+      )
+      throw AdapterExecutionError(.providerError, "\(command.provider) failed with exit code \(result.terminationStatus): \(detail)")
     }
 
-    let responseText = normalizeProviderStdout(result.stdout, provider: provider)
-    let normalized = try normalizeAgentOutput(responseText, source: provider, requiresOutputContract: input.node.output != nil)
+    let responseText = command.normalizeStdout(result.stdout)
+    let normalized = try normalizeAgentOutput(responseText, source: command.provider, requiresOutputContract: input.node.output != nil)
     return AdapterExecutionOutput(
-      provider: provider,
+      provider: command.provider,
       model: input.node.model,
       promptText: input.promptText,
       completionPassed: normalized.completionPassed,
@@ -530,116 +542,4 @@ public struct LocalAgentCommandAdapter: NodeAdapter {
     let parsed = try parseJSONObjectCandidate(text, source: source)
     return try normalizeOutputContractEnvelope(parsed, source: source)
   }
-}
-
-private func normalizeProviderStdout(_ text: String, provider: String) -> String {
-  guard provider == CliAgentBackend.codexAgent.rawValue else {
-    return text
-  }
-  return normalizeCodexExecJSONStdout(text)
-}
-
-private func normalizeCodexExecJSONStdout(_ text: String) -> String {
-  let lines = text
-    .split(whereSeparator: \.isNewline)
-    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-    .filter { !$0.isEmpty }
-  guard !lines.isEmpty else {
-    return text
-  }
-
-  var parsedObjects: [JSONObject] = []
-  var containsCodexEvent = false
-  for line in lines {
-    guard
-      let data = line.data(using: .utf8),
-      let decoded = try? JSONDecoder().decode(JSONValue.self, from: data),
-      case let .object(object) = decoded
-    else {
-      return text
-    }
-    if isCodexJSONEvent(object) {
-      containsCodexEvent = true
-    }
-    parsedObjects.append(object)
-  }
-  guard containsCodexEvent else {
-    return text
-  }
-
-  var finalAssistantContent: String?
-  for object in parsedObjects {
-    if let content = codexAssistantContent(from: object) {
-      finalAssistantContent = content
-    }
-  }
-
-  return finalAssistantContent ?? ""
-}
-
-private func isCodexJSONEvent(_ object: JSONObject) -> Bool {
-  switch stringValue(object["type"]) {
-  case "session_meta", "response_item", "assistant.snapshot", "session.started", "session.error":
-    return true
-  default:
-    return false
-  }
-}
-
-private func codexAssistantContent(from object: JSONObject) -> String? {
-  if stringValue(object["type"]) == "assistant.snapshot", let content = stringValue(object["content"]) {
-    return content
-  }
-
-  if stringValue(object["role"]) == "assistant", let content = outputText(from: object["content"]) {
-    return content
-  }
-
-  for key in ["payload", "item", "message"] {
-    if let nested = objectValue(object[key]), let content = codexAssistantContent(from: nested) {
-      return content
-    }
-  }
-
-  return nil
-}
-
-private func outputText(from value: JSONValue?) -> String? {
-  guard let value else {
-    return nil
-  }
-  switch value {
-  case let .string(text):
-    return text
-  case let .array(entries):
-    let text = entries.compactMap { entry -> String? in
-      guard case let .object(object) = entry else {
-        return nil
-      }
-      let type = stringValue(object["type"])
-      if (type == "output_text" || type == "text"), let text = stringValue(object["text"]) {
-        return text
-      }
-      return outputText(from: object["content"])
-    }.joined()
-    return text.isEmpty ? nil : text
-  case let .object(object):
-    return outputText(from: object["content"])
-  case .null, .bool, .number:
-    return nil
-  }
-}
-
-private func stringValue(_ value: JSONValue?) -> String? {
-  guard case let .string(text) = value else {
-    return nil
-  }
-  return text
-}
-
-private func objectValue(_ value: JSONValue?) -> JSONObject? {
-  guard case let .object(object) = value else {
-    return nil
-  }
-  return object
 }

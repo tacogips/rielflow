@@ -60,21 +60,21 @@ Out of scope for this plan:
 
 - Workflow mode: `issue-resolution`
 - Workflow ID: `codex-design-and-implement-review-loop`
-- Workflow session: `riel-codex-design-and-implement-review-loop-1781199313-f6e782b6`
+- Workflow session: `riel-codex-design-and-implement-review-loop-1781203096-8dcd5023`
 - Current planning node: `step4-impl-plan-create`
 - Repository: `tacogips/rielflow`
-- Issue title: `Port official OpenAI and Anthropic SDK adapters to Swift`
-- GitHub issue: none found by Step 1 exact-title or `Swift migration` search
+- Issue title: `Port Swift local agent command builders and readiness parity`
+- GitHub issue: none supplied by runtime input
 - Branch: `swift-migration`
 - Risk level: high; adversarial implementation review required before cutover
 
 Workflow execution note:
 
-- Started with `bun run packages/rielflow/src/bin.ts workflow run codex-design-and-implement-review-loop --scope project --variables tmp/swift-migration-workflow-input.json --output json --verbose`.
-- The workflow ran through intake, design update, design self-review, design review, implementation-plan creation, plan self-review, plan review, implementation, implementation self-review, test-integrity, implementation review, and adversarial review.
-- The review loop returned to implementation repeatedly. It reached `step6-implement` attempt 11 after completed artifacts through `step7-review` attempt 10 and `step7-adversarial-review` attempt 5.
-- The foreground workflow process was stopped after repeated review loops so the current worktree could be inspected. The session store still records the session as `running` with queued `step6-implement`; resume or continue it only after reviewing the current diff and latest findings.
-- Latest completed blocking review before the stopped attempt was `step7-review/exec-000056`, which requested fixes for output-contracted plain-text stdout and child pipe descriptor inheritance. The current worktree includes code and tests intended to address those findings, but no subsequent completed workflow review has accepted them yet.
+- Step 1 intake and Step 2 design update scoped this run to the remaining
+  TASK-004 local-agent command-builder and readiness parity slice.
+- Step 3 design review accepted the design with no findings.
+- The previous TASK-004 official OpenAI/Anthropic SDK parity slice remains
+  completed and is not reopened by this plan revision.
 
 ## Codex Agent References
 
@@ -88,6 +88,8 @@ Workflow execution note:
 - `packages/rielflow-adapters/src/readiness.ts`
 - `packages/rielflow-adapters/src/dispatch.ts`
 - `packages/rielflow-adapters/src/shared.ts`
+- `packages/rielflow/src/workflow/runtime-readiness-agent-probes.ts`
+- `packages/rielflow/src/workflow/validate/node-executability-validation.ts`
 - `packages/rielflow-adapters/src/openai-sdk.ts`
 - `packages/rielflow-adapters/src/anthropic-sdk.ts`
 - `packages/rielflow-adapters/src/cursor-sdk.ts`
@@ -150,7 +152,7 @@ public enum ExecutionBackend: String, Codable, Sendable {
 #### `Sources/RielflowCore/WorkflowValidation.swift`
 #### `Tests/RielflowCoreTests/*`
 
-**Status**: IN_PROGRESS
+**Status**: COMPLETED
 
 ```swift
 public struct WorkflowDefinition: Codable, Equatable, Sendable {
@@ -252,7 +254,7 @@ public struct OfficialSDKAdapterConfiguration: Sendable {
 
 **Checklist**:
 
-- [ ] Replace generic subprocess argv with backend-faithful command builders.
+- [x] Replace generic subprocess argv with backend-faithful command builders.
 - [x] Drain local agent stdout/stderr concurrently and enforce
       `AdapterExecutionContext.deadline` by terminating timed-out child
       processes.
@@ -288,10 +290,13 @@ public struct OfficialSDKAdapterConfiguration: Sendable {
       propagation, retry policy, deadline timeout handling, provider error
       normalization, credential redaction, response text extraction from
       `content[].type == "text"`, and output envelope normalization.
-- [ ] Port readiness and auth failure categories from `readiness.ts`.
-- [ ] Keep Cursor modes, stream formats, probes, and SDK compatibility inside
+- [x] Port readiness and auth failure categories from `readiness.ts`.
+- [x] Port deterministic runtime-readiness probe summaries from
+      `runtime-readiness-agent-probes.ts` where Swift APIs currently expose
+      validation/preflight behavior.
+- [x] Keep Cursor modes, stream formats, probes, and SDK compatibility inside
       `CursorCLIAgent`.
-- [ ] Explicitly keep `official/cursor-sdk` deferred unless a minimal
+- [x] Explicitly keep `official/cursor-sdk` deferred unless a minimal
       compatibility shim is required for parity and separately reviewed.
 - [x] Redact credentials from adapter failures.
 - [x] Test local agents through injected process runners and official SDKs
@@ -299,19 +304,22 @@ public struct OfficialSDKAdapterConfiguration: Sendable {
       network access, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or
       `CURSOR_API_KEY` are required.
 
-**Next TASK-004 Slice: Official OpenAI And Anthropic SDK Parity**
+**Completed TASK-004 Slice: Local Agent Command Builder And Readiness Parity**
 
 | Step | Scope | Deliverables | Verification |
 | ---- | ----- | ------------ | ------------ |
-| TASK-004A | Official SDK shared infrastructure | `Sources/RielflowAdapters/OfficialSDKAdapters.swift` with Swift request/response DTOs, environment resolver, bounded retry, deadline-aware request execution, credential-redacted failure normalization, and output-contract/text payload normalization helpers. | Unit tests in `Tests/RielflowAdaptersTests/*` using injected request executors only. |
-| TASK-004B | OpenAI adapter | `OpenAiSDKAdapter` using the Responses request shape and text extraction rules from `packages/rielflow-adapters/src/openai-sdk.ts`; no live OpenAI client required in tests. | Synthetic responses cover request shape, `apiKeyEnv`, base URL, retry, timeout, errors, `output_text`, segmented `output_text`, and output envelopes. |
-| TASK-004C | Anthropic adapter | `AnthropicSDKAdapter` using the Messages request shape and text extraction rules from `packages/rielflow-adapters/src/anthropic-sdk.ts`; no live Anthropic client required in tests. | Synthetic responses cover request shape, `apiKeyEnv`, base URL, max-token clamp, retry, timeout, errors, content text segments, and output envelopes. |
-| TASK-004D | Dispatch registration | `DispatchingNodeAdapter` default registry includes `official/openai-sdk` and `official/anthropic-sdk`; `official/cursor-sdk` remains recognized by `NodeExecutionBackend` but intentionally unimplemented in this slice. | Dispatch tests prove both official SDK backends resolve with injected executors and missing registry entries fail deterministically. |
+| TASK-004E | Shared local-agent command boundary | Replace `LocalAgentCommandAdapter`'s generic `executableName + baseArguments + --model` construction with an injectable Swift command-builder protocol/configuration in `Sources/RielflowAdapters/LocalAgentProcess.swift`. Shared code may prepare prompts, resolve image attachments from runtime arguments/merged variables, execute `LocalAgentProcessConfiguration`, normalize output contracts, enforce deadlines, and redact failures, but it must not infer backend-specific argv. | `Tests/AgentAdapterTests/*` asserts exact executable, argv, environment overlay, working directory, stdin prompt, deadline propagation, provider string, output-contract handling, image forwarding/dedupe/disabled policy, and stderr redaction through injected runners. |
+| TASK-004F | Codex command builder and auth preflight | `Sources/CodexAgent/CodexAgentAdapter.swift` owns `codex exec --json`, model propagation, Codex effort as `model_reasoning_effort="<effort>"`, supported additional args from Swift input contracts, Codex auth preflight, and existing Codex JSONL final-assistant normalization. | Tests prove Codex argv/config isolation, failed login -> `policy_blocked`, no live `codex` binary or credentials required, and provider remains `codex-agent`. |
+| TASK-004G | Claude and Cursor command builders | `Sources/ClaudeCodeAgent/ClaudeCodeAgentAdapter.swift` owns Claude print-mode argv (`-p`, `--output-format text`, `--model`, effort, permission mode, supported attachment directory flags, additional args) and Claude CLI/auth preflight. `Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift` owns Cursor headless argv (`--print`, `--output-format stream-json`, `--model`, optional non-default mode, supported image/additional args, `--`, prompt), model probe argv (`--output-format text`), and auth/model readiness interpretation without unsupported CLI flags. | Tests prove exact Claude and Cursor argv/config shapes, unavailable CLI/auth/model probes -> `policy_blocked` preflight failures, Cursor concepts stay out of `RielflowCore`, provider-neutral adapters, `official/cursor-sdk`, add-ons, GraphQL, events, and server targets. |
+| TASK-004H | Swift readiness model and runtime-readiness parity | Add deterministic Swift readiness types/APIs for `available`, `unavailable`, `unknown`, and `not_checked` tool/auth/model states, plus injectable probe operations that map the practical behavior from `packages/rielflow-adapters/src/readiness.ts` and `packages/rielflow/src/workflow/runtime-readiness-agent-probes.ts`: Codex/Git/Claude/Cursor tool summaries, source step ids, model-specific reachability messages, Codex account readiness, Claude auth/model checks, and Cursor unknown auth when no stable local auth command exists. | Unit tests use injected probe operations only; no live CLI tools, network, npm package installs, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `CURSOR_API_KEY` are required. Tests cover validation invalid/unknown results and adapter preflight `policy_blocked` failures separately. |
 
-The implementation step must keep this slice provider-neutral. It may add
-configuration types and test fixtures in `RielflowAdapters`, but it must not
-add official SDK behavior to `CodexAgent`, `ClaudeCodeAgent`, or
-`CursorCLIAgent`, and must not port `official/cursor-sdk`.
+The implementation step must keep official SDK behavior out of this remaining
+slice. `official/openai-sdk` and `official/anthropic-sdk` are already ported;
+`official/cursor-sdk` remains explicitly deferred unless separately scoped and
+reviewed. Backend-specific command flags and readiness interpretation belong in
+`CodexAgent`, `ClaudeCodeAgent`, or `CursorCLIAgent`; `RielflowAdapters` owns
+only provider-neutral runner, deadline, redaction, and output normalization
+contracts.
 
 ### 5. Runtime Session, Message Store, And Output Publication
 
@@ -421,7 +429,7 @@ public struct SwiftReleaseArtifact: Equatable, Sendable {
 | Swift package boundary scaffold | `Package.swift`, `Sources/*`, `Tests/*` | COMPLETED | Initial scaffold tests present |
 | Core workflow model and validation | `Sources/RielflowCore/WorkflowModel.swift`, `Sources/RielflowCore/WorkflowValidation.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
 | Prompt and JSON boundary contracts | `Sources/RielflowCore/PromptTemplate.swift`, `Sources/RielflowCore/JSONValue.swift`, `Sources/RielflowAdapters/AdapterUtilities.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
-| Backend-faithful agent and official SDK adapters | `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*` | IN_PROGRESS | `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed 45 tests for current local-agent/Codex JSONL and official OpenAI/Anthropic SDK scaffold |
+| Backend-faithful agent and official SDK adapters | `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*` | COMPLETED | `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed 65 tests for local-agent command builders, bounded preflights, Cursor/Codex stream normalization, Codex argv option termination, descriptor isolation, configured-secret redaction, readiness parity, and official OpenAI/Anthropic SDK scaffold |
 | Runtime session and message publication | `Sources/RielflowCore/*`, `Sources/RielflowCLI/*` | NOT_STARTED | `Tests/RielflowCoreTests/*` |
 | Add-on, package, event, hook, GraphQL, and server boundaries | `Sources/RielflowAddons/*`, `Sources/RielflowEvents/*`, `Sources/RielflowHook/*`, `Sources/RielflowGraphQL/*`, `Sources/RielflowServer/*` | NOT_STARTED | `Tests/*` |
 | CLI parity slice | `Sources/RielflowCLI/main.swift` | NOT_STARTED | `Tests/RielflowCLITests/*` |
@@ -492,7 +500,7 @@ agents and runtime output publication share one contract.
 
 ### TASK-004: Port Backend-Specific Agent And Official SDK Adapter Behavior
 
-**Status**: In Progress
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*`, `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`
 **Dependencies**: TASK-003
@@ -500,12 +508,13 @@ agents and runtime output publication share one contract.
 **Description**:
 Replace generic local command behavior with backend-faithful Codex, Claude, and
 Cursor CLI adapters using injected process runners, and port
-`official/openai-sdk` / `official/anthropic-sdk` dispatch parity inside
-`RielflowAdapters`.
+readiness/auth failure categories into deterministic Swift APIs. The
+`official/openai-sdk` / `official/anthropic-sdk` parity portion of TASK-004 is
+already complete; this remaining slice must not reopen it.
 
 **Completion Criteria**:
 
-- [ ] `codex-agent`, `claude-code-agent`, and `cursor-cli-agent` command
+- [x] `codex-agent`, `claude-code-agent`, and `cursor-cli-agent` command
       builders match TypeScript reference behavior.
 - [x] Local CLI process runner drains stdout/stderr concurrently, honors adapter
       deadlines, terminates child process groups, closes child-unused pipe
@@ -522,8 +531,11 @@ Cursor CLI adapters using injected process runners, and port
       timeout handling, output text extraction, and output envelope
       normalization.
 - [x] Cursor-specific behavior does not leak into provider-neutral modules.
-- [ ] Readiness tests cover unavailable tools, auth failures, and policy-blocked
+- [x] Readiness tests cover unavailable tools, auth failures, and policy-blocked
       states without credentials.
+- [x] Runtime-readiness-style validation can report invalid or unknown Codex,
+      Git, Claude, and Cursor tool/auth/model states without executing a
+      workflow.
 
 ### TASK-005: Port Runtime Session And Message Publication Boundary
 
@@ -627,14 +639,15 @@ high-risk implementation review before any TypeScript removal or release switch.
 
 ## Parallelization
 
-No remaining implementation task is marked parallelizable. The accepted design
+No top-level implementation task is marked parallelizable. The accepted design
 requires a single-path plan because core model, adapter contracts, agent targets,
 runtime publication, package behavior, CLI parity, and release cutover are
 dependency-coupled. After TASK-002 and TASK-003 are complete, subtests inside
-TASK-004 may be split by backend only if write scopes stay confined to
-`Sources/CodexAgent`, `Sources/ClaudeCodeAgent`, `Sources/CursorCLIAgent`, and
-their matching test files, or to `Sources/RielflowAdapters` and
-`Tests/RielflowAdaptersTests` for official SDK adapter parity.
+TASK-004 may be split only after TASK-004E establishes the shared command
+boundary. TASK-004F and TASK-004G may then run in parallel if write scopes stay
+confined to backend-specific targets and matching `Tests/AgentAdapterTests/*`
+sections. TASK-004H is not parallel with TASK-004E because shared readiness
+types and adapter preflight errors cross provider-neutral boundaries.
 
 ## Verification Plan
 
@@ -670,6 +683,13 @@ Agent adapter checks:
 - TASK-004 official SDK planning check:
   `rg -n "TASK-004A|OpenAiSDKAdapter|AnthropicSDKAdapter|official/cursor-sdk"
   impl-plans/active/swift-native-migration.md`.
+- TASK-004 local-agent planning check:
+  `rg -n "TASK-004E|TASK-004F|TASK-004G|TASK-004H|runtime-readiness-agent-probes|AgentCommandBuilding|LocalAgentCommand" impl-plans/active/swift-native-migration.md`.
+- TASK-004 implementation checks:
+  `rg -n "AgentCommandBuilding|Readiness|policy_blocked|codex exec|--output-format|cursor-cli-agent" Sources Tests`.
+  Add or update XCTest cases for exact backend argv, readiness categories,
+  auth/model preflight failures, output-contract handling, deadline propagation,
+  and credential redaction with injected runners/probes only.
 
 Cutover checks:
 
@@ -1120,3 +1140,251 @@ adapter-level normalization redaction. Added
 `testURLSessionOfficialSDKRequestExecutorRedactsDirectHTTPFailures` for a direct
 executor call whose HTTP body echoes a custom non-pattern secret. Re-ran Xcode
 Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 45 tests.
+
+### Session: 2026-06-12 03:45
+
+**Tasks Completed**: TASK-004 official OpenAI/Anthropic SDK parity slice
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004
+**Blockers**: None for planning. Implementation still requires the Xcode Swift
+toolchain command recorded in the verification plan.
+**Review Feedback Addressed**: Step 3 accepted the updated Swift migration
+design with no findings; no Step 5 implementation-plan feedback exists for this
+run.
+**Notes**: Revised TASK-004 planning for the remaining local-agent slice. Added
+explicit TASK-004E through TASK-004H substeps for the shared command-builder
+boundary, Codex command/auth parity, Claude and Cursor command/auth/model
+parity, and deterministic Swift readiness/runtime-readiness APIs. The plan
+keeps official OpenAI/Anthropic SDK parity complete, keeps `official/cursor-sdk`
+deferred, preserves public backend strings, and requires all local-agent tests
+to use injected process runners or readiness probes with no live credentials.
+
+### Session: 2026-06-12 03:56
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: `official/cursor-sdk` remains explicitly deferred; TASK-005 and
+later runtime/CLI/packaging slices remain unstarted until their dependencies
+are complete.
+**Review Feedback Addressed**: Step 5 implementation-plan review accepted the
+local-agent TASK-004E through TASK-004H scope with no high or mid findings.
+**Notes**: Replaced shared generic `executableName + baseArguments + --model`
+construction with a provider-neutral `LocalAgentCommandBuilding` boundary and
+backend-owned Swift builders for `codex-agent`, `claude-code-agent`, and
+`cursor-cli-agent`. Added deterministic Swift readiness types and backend
+readiness APIs for available, unavailable, unknown, and not_checked tool/auth
+and model states, including Codex account/model validation, Claude auth/model
+validation, and Cursor unknown auth/model reachability behavior. Added no-live
+tests for exact executable/argv/environment/working-directory/stdin/deadline
+propagation, policy_blocked preflight failures, stderr redaction, and
+runtime-readiness-style invalid/unknown results. Re-ran Xcode Swift 6.3.2 with
+`DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 51 tests.
+
+### Session: 2026-06-12 04:00
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 6 self-review found the TASK-004 status
+header still said `In Progress` while TASK-004 completion criteria, progress
+log, and `impl-plans/PROGRESS.json` recorded completion.
+**Notes**: Corrected the active implementation plan status headers so TASK-002
+and TASK-003 remain `In Progress` and TASK-004 is `Completed`, matching
+`impl-plans/PROGRESS.json` and the Step 6 verification evidence. Added
+explicit injected probe operation protocols/tests for Codex, Claude, and Cursor
+readiness and re-ran Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`;
+`swift test` passed 51 tests.
+
+### Session: 2026-06-12 04:11
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 review `exec-000012` reported three mid
+findings: Codex, Claude, and Cursor default adapter paths only ran preflight
+when callers injected `checkAuthPreflight`, so default local-agent execution
+could surface readiness failures as `provider_error` instead of
+`policy_blocked`.
+**Notes**: Added default runner-backed preflight before local agent execution:
+Codex runs `auth status`, Claude checks `--version` plus `auth status`, and
+Cursor checks `--version` plus a model reachability probe before spawning the
+main command. Added no-live tests for default Codex login failure, Claude
+unavailable CLI/auth failures, and Cursor unavailable CLI/auth/model failures.
+Also corrected TASK-001 back to `Completed` to match `impl-plans/PROGRESS.json`.
+Re-ran Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test`
+passed 54 tests. Also ran `bun run typecheck:server`,
+`bun run lint:biome`,
+`bun run packages/rielflow/src/bin.ts workflow validate
+codex-design-and-implement-review-loop --scope project`, and
+`gitleaks git --pre-commit --redact --staged --verbose`; all passed.
+
+### Session: 2026-06-12 04:24
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 review `exec-000016` reported four mid
+findings: Codex prompt placement used stdin instead of the final argv,
+Cursor execution used unsupported stream-mode/stdin behavior, Cursor model
+preflight used unsupported `--check`, and default preflights did not inherit
+adapter environment overlays.
+**Notes**: Updated Codex execution to append the combined prompt as the final
+`codex exec --json` argv, including supported `--image` arguments and the image
+separator behavior. Updated Cursor execution to match `cursor-agent --print
+--output-format stream-json --model <model> ... -- <prompt>` and Cursor model
+preflight to use `--output-format text -- <probe prompt>`. Threaded configured
+adapter environments into Codex, Claude, and Cursor default preflights, and
+expanded no-live tests to assert the same env overlays reach preflight and main
+execution. Re-ran Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`;
+`swift test` passed 54 tests.
+
+### Session: 2026-06-12 04:33
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 review `exec-000020` reported one mid
+finding: Codex default auth preflight used `codex auth status` while the
+codex-agent readiness reference uses `codex login status`.
+**Notes**: Updated Codex default preflight argv to `codex login status` while
+preserving `policy_blocked` failure mapping and configured environment
+propagation. Updated no-live XCTest assertions for the exact Codex preflight
+argv in both command-builder and preflight-failure coverage. Re-ran Xcode Swift
+6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 54 tests.
+
+### Session: 2026-06-12 04:42
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 review `exec-000024` reported one mid
+finding: local-agent image/attachment command builders only read node variables
+and missed runtime `arguments` / `mergedVariables` image attachments and
+`forwardImageAttachments: false`.
+**Notes**: Added shared Swift `resolveAdapterImagePaths` parity in
+`Sources/RielflowAdapters/AdapterUtilities.swift`, covering runtime
+`mergedVariables`, runtime `arguments`, nested image descriptors, source
+descriptors, dedupe, depth limiting, and disabled forwarding. Updated Codex and
+Cursor builders to use the shared resolver for `--image`; updated Claude to
+merge resolved images into its attachment behavior. Added no-live tests for
+merged/argument/nested/deduped image paths and for disabled forwarding across
+Codex, Claude, and Cursor. Re-ran Xcode Swift 6.3.2 with `DEVELOPER_DIR` and
+`SDKROOT`; `swift test` passed 56 tests.
+
+### Session: 2026-06-12 04:49
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 review `exec-000028` reported three mid
+findings: Codex, Claude, and Cursor still ran injected `checkAuthPreflight`
+closures when `authPreflight: false` explicitly disabled auth preflight.
+**Notes**: Gated injected and default auth preflight behind `authPreflight` for
+all three local-agent adapters. The execution order now skips all preflight work
+when disabled; otherwise it prefers injected `checkAuthPreflight` and falls back
+to the default runner-backed preflight. Added no-live XCTest coverage with
+throwing injected preflights and `authPreflight: false` for Codex, Claude, and
+Cursor. Re-ran Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`;
+`swift test` passed 57 tests.
+
+### Session: 2026-06-12 05:00
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 review `exec-000032` reported one mid
+finding: Cursor execution requested `--output-format stream-json` but returned
+raw JSONL stdout through the shared local-agent adapter, so final assistant or
+`session.completed` text could be missed before output-contract normalization.
+**Notes**: Added Cursor stream JSON stdout normalization in
+`Sources/CursorCLIAgent/CursorCLIAgentAdapter.swift`, extracting the latest
+`session.assistant_message.message.displayText`/`rawText` and falling back to
+`session.completed.result` before shared output normalization. Added no-live
+XCTest coverage for Cursor stream JSON text payload extraction and
+output-contract envelope parsing from `session.completed`. Re-ran Xcode Swift
+6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 59 tests. Also
+ran `bun run typecheck:server`, `bun run lint:biome`,
+`bun run packages/rielflow/src/bin.ts workflow validate
+codex-design-and-implement-review-loop --scope project`,
+`gitleaks git --pre-commit --redact --staged --verbose`, `git diff --check`,
+and `jq empty impl-plans/PROGRESS.json`; all passed.
+
+### Session: 2026-06-12 05:13
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 adversarial review `exec-000037`
+reported one mid finding: default Codex, Claude, and Cursor auth/readiness
+preflights reused `AdapterExecutionContext.deadline` and could run without an
+independent bound or surface timeout instead of `policy_blocked`.
+**Notes**: Added shared bounded preflight deadline and preflight-error detail
+helpers in `Sources/RielflowAdapters/AdapterUtilities.swift`. Codex and Claude
+default auth preflights now use 5-second bounds; Cursor default auth/model
+preflight uses a 30-second bound. Runner timeout/provider errors during default
+preflight are now mapped into redacted `policy_blocked` auth, CLI, or model
+messages before the main agent command runs. Added no-live XCTest coverage for
+nil-context bounded preflight deadlines and timeout-to-`policy_blocked` mapping
+across `codex-agent`, `claude-code-agent`, and `cursor-cli-agent`. Re-ran
+Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 61
+tests. Also ran `bun run typecheck:server`, `bun run lint:biome`,
+`bun run packages/rielflow/src/bin.ts workflow validate
+codex-design-and-implement-review-loop --scope project`,
+`gitleaks git --pre-commit --redact --staged --verbose`, `git diff --check`,
+and `jq empty impl-plans/PROGRESS.json`; all passed.
+
+### Session: 2026-06-12 05:21
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 review `exec-000041` reported one mid
+finding: `CodexAgentCommandBuilder` only inserted the argv option terminator
+`--` before the final prompt when image paths existed, so a prompt beginning
+with `--` could be parsed by `codex exec` as a CLI flag.
+**Notes**: Updated `Sources/CodexAgent/CodexAgentAdapter.swift` so Codex
+always appends `--` after supported flags, additional args, model, effort, and
+images, and immediately before the final prompt argument. Added
+`testCodexCommandBuilderTerminatesOptionsBeforeFlagLikePrompt` in
+`Tests/AgentAdapterTests/AgentAdapterTests.swift` to cover a `--model other`
+prompt while preserving the intended builder-owned `--model` flag. Re-ran
+Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`; `swift test` passed 62
+tests. Also ran `bun run typecheck:server`, `bun run lint:biome`,
+`bun run packages/rielflow/src/bin.ts workflow validate
+codex-design-and-implement-review-loop --scope project`,
+`gitleaks git --pre-commit --redact --staged --verbose`, `git diff --check`,
+`jq empty impl-plans/PROGRESS.json`, and targeted `rg` checks for the
+terminator/test coverage; all passed.
+
+### Session: 2026-06-12 05:35
+
+**Tasks Completed**: TASK-004 local-agent command-builder and readiness parity
+slice
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the implemented TASK-004 slice.
+**Review Feedback Addressed**: Step 7 adversarial review `exec-000046`
+reported two mid findings: local-agent child processes could inherit unrelated
+parent file descriptors, and local-agent/preflight failure redaction did not
+include configured child environment secret values when a CLI echoed raw values.
+**Notes**: Updated `Sources/RielflowAdapters/LocalAgentProcess.swift` to spawn
+children with `POSIX_SPAWN_CLOEXEC_DEFAULT`, preserving explicit stdin,
+stdout, and stderr duplication while closing unrelated descriptors at exec.
+Updated `Sources/RielflowAdapters/AdapterUtilities.swift`,
+`Sources/RielflowAdapters/AgentReadiness.swift`, and the Codex, Claude, and
+Cursor default preflight paths so configured sensitive environment values such
+as `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `CURSOR_CONFIG_DIR`, `*_CONFIG_DIR`, and
+token/secret/password keys are redacted from provider and `policy_blocked`
+failure details. Added deterministic no-live tests for inherited descriptor
+closure, configured environment secret redaction in provider errors, and
+configured environment secret redaction in default preflight `policy_blocked`
+errors. Re-ran Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`;
+`swift test` passed 65 tests.

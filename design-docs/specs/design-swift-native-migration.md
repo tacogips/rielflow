@@ -64,9 +64,29 @@ Swift target mapping:
 
 Intentional divergence from the reference behavior is allowed only at the adapter boundary and must be documented in this file or the implementation plan. The current accepted divergence is structural: Swift splits the three repository-owned agent integrations into independent SwiftPM targets instead of importing npm packages, while preserving backend strings and normalized adapter envelopes.
 
+## Local Agent Command Builder And Readiness Parity Slice
+
+The completed TASK-004 local-agent slice replaces the generic Swift subprocess argv builder with backend-specific command builders for `codex-agent`, `claude-code-agent`, and `cursor-cli-agent`. The shared `RielflowAdapters` boundary defines the injectable process runner, command-builder protocol, deadline/error normalization, redaction, descriptor isolation, image-path resolution, and normalized output handling. Backend-specific targets own the command shape, optional flags, auth/model preflight, stream normalization, and readiness interpretation.
+
+Command-builder requirements:
+
+- `CodexAgent` owns Codex command construction. It must preserve provider `codex-agent`, use the Codex model from the node payload, keep Codex-only reasoning-effort and additional-argument handling inside the Codex target, and continue normalizing `codex exec --json` JSONL into final assistant text before output-contract parsing.
+- `ClaudeCodeAgent` owns Claude Code command construction. It must preserve provider `claude-code-agent`, map working directory, model, effort, permission/plan mode, attachments or image path behavior only where Swift input contracts support them, and keep Claude-specific auth status checks in the Claude target.
+- `CursorCLIAgent` owns Cursor CLI command construction. It must preserve provider `cursor-cli-agent`, keep Cursor mode and stream-mode options inside the Cursor target, and must not expose Cursor CLI concepts through `RielflowCore`, shared adapter dispatch, add-ons, GraphQL, events, server code, or the `official/cursor-sdk` backend.
+- The old generic shape of `executableName + baseArguments + --model` is not a sufficient parity boundary. Shared code may execute a prepared `LocalAgentProcessConfiguration`, but it must not infer backend-specific argv beyond provider-neutral process execution concerns.
+- Tests assert the exact executable, argv, environment overlay, working directory, stdin prompt behavior, provider string, output-contract handling, deadline propagation, descriptor isolation, and stderr/configured-secret redaction through injected process runners.
+
+Readiness parity requirements:
+
+- Swift readiness APIs should model the TypeScript categories from `packages/rielflow-adapters/src/readiness.ts`: `available`, `unavailable`, `unknown`, and `not_checked` for tools, auth probes, and model reachability.
+- Auth and policy-blocked adapter failures should preserve current behavior: failed Codex login, unavailable Claude CLI/auth, and unavailable Cursor CLI/auth/model probes become `policy_blocked` at adapter preflight time, while runtime-readiness validation reports deterministic invalid or unknown results without running a workflow.
+- Runtime-readiness probing should map the behavior from `packages/rielflow/src/workflow/runtime-readiness-agent-probes.ts`: tool summaries for Codex, Git, Claude, and Cursor; source step ids; model-specific reachability messages; Codex account readiness; Claude auth/model checks; and Cursor's explicit unknown auth result when no stable local auth-status command exists.
+- Probe operations are injectable and deterministic in tests. Unit tests must not require live local CLI tools, network access, repository-owned npm package installs, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `CURSOR_API_KEY`.
+- Credential-bearing stdout, stderr, thrown errors, and probe details must pass through the existing adapter redaction policy before becoming test-visible or user-visible diagnostics.
+
 ## Official SDK Adapter Parity Slice
 
-The next TASK-004 Swift slice ports `official/openai-sdk` and `official/anthropic-sdk` only. Both backends remain provider-neutral official SDK adapters under `RielflowAdapters`; they must not be implemented in, or create dependencies from, `CodexAgent`, `ClaudeCodeAgent`, or `CursorCLIAgent`.
+The completed TASK-004 official SDK slice ports `official/openai-sdk` and `official/anthropic-sdk` only. Both backends remain provider-neutral official SDK adapters under `RielflowAdapters`; they must not be implemented in, or create dependencies from, `CodexAgent`, `ClaudeCodeAgent`, or `CursorCLIAgent`.
 
 Dispatch requirements:
 
@@ -148,10 +168,10 @@ Each migrated package needs:
 - Swift unit tests for the migrated public contracts.
 - Fixture compatibility tests against existing workflow JSON and node JSON examples.
 - CLI smoke tests for `workflow validate`, `workflow inspect`, and deterministic `workflow run` without real agent calls.
-- Agent adapter tests that use injected process runners, not live LLM credentials.
+- Agent adapter tests that use injected process runners and injected readiness probes, not live LLM credentials or local CLI availability.
 - Packaging verification for macOS executable artifacts before TypeScript removal.
 
-The current branch has been verified with Xcode Swift 6.3.2 by setting `DEVELOPER_DIR` and `SDKROOT` to `/Applications/Xcode.app`; `swift test` passed 28 tests. Default `swift` lookup can still point at a Nix Apple SDK path, so use the Xcode toolchain command recorded in the implementation plan until local toolchain selection is fixed.
+The current branch has been verified with Xcode Swift 6.3.2 by setting `DEVELOPER_DIR` and `SDKROOT` to `/Applications/Xcode.app`; `swift test` passed 65 tests for the current local-agent command-builder, bounded preflight, readiness, redaction, descriptor-isolation, and official OpenAI/Anthropic SDK scaffold coverage. Default `swift` lookup can still point at a Nix Apple SDK path, so use the Xcode toolchain command recorded in the implementation plan until local toolchain selection is fixed.
 
 Additional required verification:
 
