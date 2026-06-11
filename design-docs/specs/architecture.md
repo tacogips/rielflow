@@ -89,6 +89,30 @@ Current direction:
   `ClaudeCodeAgent`, and `CursorCLIAgent` targets while TypeScript/Bun remains
   the production runtime until parity gates pass. See
   `design-docs/specs/design-swift-native-migration.md`.
+- The Swift TASK-005 runtime slice keeps session mutation, candidate-path
+  handling, output validation, accepted output publication, and downstream
+  workflow message creation on the runtime side of the boundary. Swift
+  adapters remain provider-output producers and must not publish final workflow
+  messages or reintroduce execution-local inbox/outbox contracts. Runtime
+  candidate-path publication accepts only the exact reserved candidate path for
+  the attempt, rejects ambiguous candidate sources, finalizes staging after
+  candidate consumption, and adapter/provider failures update step state
+  without publishing workflow messages. Candidate-path staging rejects unsafe
+  path components before filesystem use, and Swift output-contract validation
+  mirrors the TypeScript JSON Schema subset for schema-definition checks,
+  unsupported keyword rejection, nested objects/arrays, enum/const,
+  additionalProperties, numeric/string bounds, valid patterns, and
+  combinators before publication. Until Swift implements cross-workflow and
+  fanout delivery, unsupported transition shapes fail closed before accepted
+  output or message publication. See
+  `design-docs/specs/design-swift-native-migration.md#task-005-runtime-session-message-store-and-publication-boundary`.
+- TASK-005 also exposes runtime-owned message input resolution so prior
+  `workflow_messages` rows become deterministic structured execution input
+  before adapter execution, and root output publication is explicit
+  root-scope/output-node metadata rather than implicit terminal-step detection.
+  Staging verifies existing path components before creation and resolved
+  directories after creation to reject symlink escapes, and message input
+  resolution excludes created, failed, and superseded rows.
 
 ### Native Command Script Dispatch
 

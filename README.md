@@ -132,6 +132,31 @@ and official SDK adapter tests use injected process runners, readiness probes,
 request executors, or HTTP transports with synthetic responses; they do not
 require live local CLI tools, provider credentials, or network access.
 
+The TASK-005 Swift runtime slice adds deterministic in-memory
+`RielflowCore` APIs for runtime-owned workflow sessions, step executions,
+workflow message records, message input resolution, candidate-path staging,
+output validation, and publication. Adapters still own only provider output:
+they may return inline candidate payloads or use a runtime-reserved candidate
+path, but they do not allocate communication ids, mutate session state, write
+final workflow output, or publish downstream workflow messages. Candidate-path
+publication is runtime-owned and rejects missing, stale, malformed,
+outside-staging, ambiguous, or unreserved candidate sources before accepted
+output or workflow message publication.
+
+The Swift runtime boundary intentionally avoids the legacy execution-local
+mailbox contract: do not add `RIEL_MAILBOX_DIR`, `inbox/input.json`,
+`outbox/output.json`, or worker-managed inbox/outbox message APIs to the Swift
+path. Message input resolution consumes only delivered or already consumed
+runtime message rows, excludes created, failed, and superseded rows, and
+applies the merged payload to adapter input before execution. Output-contract
+validation fails closed for malformed JSON, invalid envelopes, malformed
+schema definitions, schema failures, `completionPassed: false`, and
+unsupported transition shapes such as cross-workflow, resume-step, and fanout
+transitions. The Swift implementation remains an additive parity slice; the
+TypeScript/Bun runtime is still the production fallback until later validation,
+inspect, deterministic run, package, event, GraphQL, hook, adapter, SQLite,
+and Homebrew parity gates pass.
+
 If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
 toolchain explicitly:
 
@@ -143,12 +168,12 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 65 tests for the current local-agent command-builder,
-bounded preflight, readiness, redaction, descriptor-isolation, and official
-OpenAI/Anthropic SDK scaffold coverage. Keep using the Bun commands in this
-README for the production runtime until Swift validation, inspect,
-deterministic run, package, event, GraphQL, hook, adapter, and Homebrew parity
-gates pass.
+`swift test` passed 93 tests for the current local-agent command-builder,
+bounded preflight, readiness, redaction, descriptor-isolation, official
+OpenAI/Anthropic SDK scaffold, and TASK-005 in-memory runtime publication
+coverage. Keep using the Bun commands in this README for the production
+runtime until Swift validation, inspect, deterministic run, package, event,
+GraphQL, hook, adapter, SQLite, and Homebrew parity gates pass.
 
 ### Optional LLM Agent Setup
 

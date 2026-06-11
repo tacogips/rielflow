@@ -15,6 +15,7 @@ Source of truth:
 - `design-docs/specs/design-swift-native-migration.md#reference-mapping`
 - `design-docs/specs/design-swift-native-migration.md#official-sdk-adapter-parity-slice`
 - `design-docs/specs/design-swift-native-migration.md#cursor-cli-behavior-boundary`
+- `design-docs/specs/design-swift-native-migration.md#task-005-runtime-session-message-store-and-publication-boundary`
 - `design-docs/specs/design-swift-native-migration.md#migration-strategy`
 - `design-docs/specs/design-swift-native-migration.md#verification-gates`
 - `design-docs/specs/architecture.md`
@@ -60,21 +61,28 @@ Out of scope for this plan:
 
 - Workflow mode: `issue-resolution`
 - Workflow ID: `codex-design-and-implement-review-loop`
-- Workflow session: `riel-codex-design-and-implement-review-loop-1781203096-8dcd5023`
-- Current planning node: `step4-impl-plan-create`
+- Current workflow session:
+  `riel-codex-design-and-implement-review-loop-1781211309-5fe4a54a`
+- Earlier TASK-004 workflow session:
+  `riel-codex-design-and-implement-review-loop-1781203096-8dcd5023`
+- Current planning nodes: `step4-impl-plan-create`,
+  `step4-impl-plan-self-review`
 - Repository: `tacogips/rielflow`
-- Issue title: `Port Swift local agent command builders and readiness parity`
+- Issue title: `Port Swift runtime session and message publication boundary`
 - GitHub issue: none supplied by runtime input
 - Branch: `swift-migration`
 - Risk level: high; adversarial implementation review required before cutover
 
 Workflow execution note:
 
-- Step 1 intake and Step 2 design update scoped this run to the remaining
-  TASK-004 local-agent command-builder and readiness parity slice.
-- Step 3 design review accepted the design with no findings.
-- The previous TASK-004 official OpenAI/Anthropic SDK parity slice remains
-  completed and is not reopened by this plan revision.
+- Current TASK-005 planning run
+  `riel-codex-design-and-implement-review-loop-1781211309-5fe4a54a` scopes the
+  next implementation step to the Swift runtime-owned session, workflow
+  message store, candidate-path publication, and output-validation boundary.
+- Step 3 design review accepted the TASK-005 design update with no findings.
+- The previous TASK-004 official OpenAI/Anthropic SDK and local-agent
+  command-builder/readiness slices remain completed and are not reopened by
+  this plan revision.
 
 ## Codex Agent References
 
@@ -93,6 +101,19 @@ Workflow execution note:
 - `packages/rielflow-adapters/src/openai-sdk.ts`
 - `packages/rielflow-adapters/src/anthropic-sdk.ts`
 - `packages/rielflow-adapters/src/cursor-sdk.ts`
+- `packages/rielflow/src/workflow/runtime-db.ts`
+- `packages/rielflow/src/workflow/runtime-db/message-types.ts`
+- `packages/rielflow/src/workflow/runtime-db/workflow-message-records.ts`
+- `packages/rielflow/src/workflow/runtime-execution-contracts.ts`
+- `packages/rielflow/src/workflow/output-attempt-runner.ts`
+- `packages/rielflow/src/workflow/adapter.ts`
+- `packages/rielflow/src/workflow/engine/workflow-runner.ts`
+- `packages/rielflow/src/workflow/engine/step-result-finalization.ts`
+- `packages/rielflow/src/workflow/engine/result-finalization.ts`
+- `packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts`
+- `design-docs/specs/design-sqlite-message-store.md`
+- `design-docs/specs/design-node-output-contract.md`
+- `impl-plans/completed/swift-native-migration-task-005-runtime-session.md`
 - `packages/rielflow-adapters/package.json`
 - Existing Swift scaffold:
   - `Package.swift`
@@ -327,7 +348,7 @@ contracts.
 #### `Sources/RielflowCLI/*`
 #### `Tests/RielflowCoreTests/*`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```swift
 public protocol WorkflowSessionStore: Sendable {
@@ -339,10 +360,14 @@ public protocol WorkflowSessionStore: Sendable {
 
 **Checklist**:
 
-- [ ] Port the runtime-owned session and workflow message boundary.
-- [ ] Preserve candidate-path handling as runtime-owned publication behavior.
-- [ ] Avoid legacy execution-local inbox/outbox message contracts.
-- [ ] Add tests for output validation, message publication, and failure paths.
+- [x] Port the runtime-owned session and workflow message boundary.
+- [x] Preserve candidate-path handling as runtime-owned publication behavior.
+- [x] Cover runtime-owned candidate-path provisioning, pre-attempt clearing,
+      and post-attempt cleanup or ignore semantics.
+- [x] Avoid legacy execution-local inbox/outbox message contracts.
+- [x] Add tests for output validation, message publication, and failure paths.
+- [x] Execute the focused plan in
+      `impl-plans/completed/swift-native-migration-task-005-runtime-session.md`.
 
 ### 6. Add-on, Package, Event, Hook, GraphQL, And Server Boundaries
 
@@ -430,7 +455,7 @@ public struct SwiftReleaseArtifact: Equatable, Sendable {
 | Core workflow model and validation | `Sources/RielflowCore/WorkflowModel.swift`, `Sources/RielflowCore/WorkflowValidation.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
 | Prompt and JSON boundary contracts | `Sources/RielflowCore/PromptTemplate.swift`, `Sources/RielflowCore/JSONValue.swift`, `Sources/RielflowAdapters/AdapterUtilities.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
 | Backend-faithful agent and official SDK adapters | `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*` | COMPLETED | `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed 65 tests for local-agent command builders, bounded preflights, Cursor/Codex stream normalization, Codex argv option termination, descriptor isolation, configured-secret redaction, readiness parity, and official OpenAI/Anthropic SDK scaffold |
-| Runtime session and message publication | `Sources/RielflowCore/*`, `Sources/RielflowCLI/*` | NOT_STARTED | `Tests/RielflowCoreTests/*` |
+| Runtime session and message publication | `Sources/RielflowCore/*`, `Sources/RielflowCLI/*` | COMPLETED | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed 93 tests for TASK-005 in-memory runtime APIs |
 | Add-on, package, event, hook, GraphQL, and server boundaries | `Sources/RielflowAddons/*`, `Sources/RielflowEvents/*`, `Sources/RielflowHook/*`, `Sources/RielflowGraphQL/*`, `Sources/RielflowServer/*` | NOT_STARTED | `Tests/*` |
 | CLI parity slice | `Sources/RielflowCLI/main.swift` | NOT_STARTED | `Tests/RielflowCLITests/*` |
 | Packaging and release cutover readiness | `packaging/homebrew/*`, `README.md`, `design-docs/user-qa/qa-swift-native-migration.md` | NOT_STARTED | macOS archive smoke checks |
@@ -539,20 +564,55 @@ already complete; this remaining slice must not reopen it.
 
 ### TASK-005: Port Runtime Session And Message Publication Boundary
 
-**Status**: Not Started
+**Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `Sources/RielflowCore/*`, `Sources/RielflowCLI/*`, `Tests/RielflowCoreTests/*`
+**Deliverables**: `Sources/RielflowCore/*`, `Sources/RielflowCLI/*`, `Tests/RielflowCoreTests/*`, `impl-plans/completed/swift-native-migration-task-005-runtime-session.md`
 **Dependencies**: TASK-002, TASK-003
 
 **Description**:
 Port enough runtime session, message store, candidate-path, and output validation
 behavior to support deterministic workflow execution.
+Implementation detail is split into the focused TASK-005 plan so this parent
+plan stays navigable while the runtime session/message boundary remains
+traceable to the accepted design.
 
 **Completion Criteria**:
 
-- [ ] Workflow messages are runtime-owned records, not adapter-owned outputs.
-- [ ] Candidate-path publication is tested through runtime boundaries.
-- [ ] Legacy execution-local inbox/outbox paths are not introduced.
+- [x] Workflow messages are runtime-owned records, not adapter-owned outputs.
+- [x] Runtime-owned message input resolution converts prior
+      `WorkflowMessageRecord` rows into structured execution input before
+      adapter execution and applies the merged payload to the
+      `AdapterExecutionInput` boundary.
+- [x] Candidate-path publication is tested through runtime boundaries.
+- [x] Candidate-path lifecycle provisions and clears the reserved path before
+      each attempt and cleans up or ignores staging after adapter return.
+- [x] Runtime rejects candidate-path submissions that do not match the exact
+      runtime reservation.
+- [x] Runtime rejects ambiguous candidate sources so adapter output or inline
+      candidates cannot bypass candidate-path reservations.
+- [x] Runtime publication finalizes candidate-path staging after consuming the
+      reserved candidate on success, validation failure, and append failure.
+- [x] Runtime rejects unsafe candidate staging path components and refuses
+      cleanup outside the configured staging root.
+- [x] Runtime rejects candidate staging symlink escapes after directory
+      creation resolves safe-looking path components.
+- [x] Legacy execution-local inbox/outbox paths are not introduced.
+- [x] Output-contract invalid JSON, invalid envelopes, schema failure, and
+      `completionPassed: false` fail without publishing downstream messages.
+- [x] Swift output-contract validation covers the TypeScript JSON Schema subset
+      for nested objects/arrays, additionalProperties, enum, const,
+      numeric/string bounds, strict integer checks, and combinators.
+- [x] Swift output-contract validation rejects malformed schema definitions
+      before payload validation, matching the TypeScript/Bun boundary for
+      unsupported keywords, structure, bounds, pattern, and combinator checks.
+- [x] Provider, `policy_blocked`, timeout, and invalid-output adapter failures
+      fail the step without publishing downstream messages.
+- [x] Unsupported cross-workflow, resume-step, and fanout transition semantics
+      fail before accepted output or workflow message publication.
+- [x] External root output publication is explicit root-scope/output-node
+      metadata; terminal non-output steps do not publish workflow output.
+- [x] Message input resolution includes only delivered or consumed rows and
+      excludes created, failed, and superseded lifecycle rows.
 
 ### TASK-006: Port Package, Add-on, Event, Hook, GraphQL, And Server Contracts
 
@@ -648,6 +708,10 @@ boundary. TASK-004F and TASK-004G may then run in parallel if write scopes stay
 confined to backend-specific targets and matching `Tests/AgentAdapterTests/*`
 sections. TASK-004H is not parallel with TASK-004E because shared readiness
 types and adapter preflight errors cross provider-neutral boundaries.
+TASK-005 is split into the focused plan
+`impl-plans/completed/swift-native-migration-task-005-runtime-session.md`; that
+plan starts sequential because its runtime store, candidate normalization,
+validation, and publication APIs share `RielflowCore` type ownership.
 
 ## Verification Plan
 
@@ -690,6 +754,19 @@ Agent adapter checks:
   Add or update XCTest cases for exact backend argv, readiness categories,
   auth/model preflight failures, output-contract handling, deadline propagation,
   and credential redaction with injected runners/probes only.
+- TASK-005 planning check:
+  `rg -n "WorkflowSession|WorkflowMessageRecord|CandidatePathReading|RuntimeCandidatePathStaging|WorkflowOutputPublishing|completionPassed|RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json" impl-plans/completed/swift-native-migration-task-005-runtime-session.md`.
+- TASK-005 implementation checks:
+  `rg -n "WorkflowSession|WorkflowMessageRecord|CandidatePathReading|WorkflowOutputPublishing|completionPassed" Sources/RielflowCore Tests/RielflowCoreTests`.
+  `rg -n "RuntimeCandidatePathStaging|prepareCandidatePath|finalizeCandidatePath|RuntimeCandidatePathReservation" Sources/RielflowCore Tests/RielflowCoreTests`.
+  `rg -n "RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json|execution-local inbox|execution-local outbox" Sources Tests`.
+  `rg -n "ambiguousCandidateSources|candidatePathReservationRequiresCandidatePath|finalizeCandidatePathIfNeeded|testPublicationFinalizesCandidatePathStagingAfter" Sources/RielflowCore Tests/RielflowCoreTests`.
+  `rg -n "unsupportedTransition|unsupportedTransitionReason|testUnsupportedTransitionShapesFailBeforeAcceptedOutputAndMessages" Sources/RielflowCore Tests/RielflowCoreTests`.
+  `rg -n "unsupported JSON Schema keyword|validateSchemaDefinition|validateSchemaNode|must be a non-empty array when provided" Sources/RielflowCore/RuntimeOutputValidation.swift Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift`.
+  Add deterministic XCTest coverage for runtime-generated communication ids,
+  in-memory message append failures, candidate-path rejection, output-contract
+  failure paths, candidate-path provisioning/clearing/cleanup lifecycle, and
+  no-publication provider/policy/timeout failures.
 
 Cutover checks:
 
@@ -1388,3 +1465,151 @@ closure, configured environment secret redaction in provider errors, and
 configured environment secret redaction in default preflight `policy_blocked`
 errors. Re-ran Xcode Swift 6.3.2 with `DEVELOPER_DIR` and `SDKROOT`;
 `swift test` passed 65 tests.
+
+### Session: 2026-06-12 06:02
+
+**Tasks Completed**: None
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for planning. TASK-005 implementation remains gated on
+stable parent TASK-002/TASK-003 runtime model and JSON/envelope contracts.
+**Review Feedback Addressed**: Step 3 accepted the TASK-005 design update with
+no findings; no Step 5 implementation-plan feedback exists for this run.
+**Notes**: Created focused TASK-005 implementation plan at
+`impl-plans/completed/swift-native-migration-task-005-runtime-session.md` covering
+Swift runtime-owned session/message value types, store protocols,
+deterministic in-memory behavior, candidate-path publication, output-contract
+validation, no-publication failure paths, TypeScript/Bun fallback, and legacy
+inbox/outbox exclusion.
+
+### Session: 2026-06-12 06:10
+
+**Tasks Completed**: None
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for planning self-review.
+**Review Feedback Addressed**: Step 4 self-review found the parent plan's
+issue-reference block still described the prior TASK-004 workflow session and
+local-agent scope.
+**Notes**: Updated the parent plan issue-reference block to name the current
+TASK-005 workflow session, issue title, and self-review node while preserving
+the earlier TASK-004 session as historical context. No design revision or
+additional implementation-plan revision is required.
+
+### Session: 2026-06-12 06:12
+
+**Tasks Completed**: None
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: TASK-005 implementation remains blocked until parent TASK-002 and
+TASK-003 are completed or explicitly accepted as stable for the runtime
+session/message slice.
+**Review Feedback Addressed**: Step 5 review `exec-000008` reported two mid
+findings against `impl-plans/completed/swift-native-migration-task-005-runtime-session.md`:
+the focused plan was marked `Ready` while parent contracts were still blockers,
+and candidate-path staging lifecycle was under-specified.
+**Notes**: Marked the focused TASK-005 plan `Blocked`, updated
+`impl-plans/README.md` and `impl-plans/PROGRESS.json`, added an explicit
+activation rule for parent TASK-002/TASK-003 stability, and expanded
+candidate-path lifecycle planning with runtime provisioning, pre-attempt
+clearing, post-attempt cleanup or ignore behavior, and focused verification
+commands.
+
+### Session: 2026-06-12 06:21
+
+**Tasks Completed**: TASK-005
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the additive TASK-005 in-memory runtime slice; parent
+TASK-002/TASK-003 remain active for broader Swift migration parity but the
+current model and JSON/envelope contracts were stable enough for this scoped
+runtime boundary implementation.
+**Review Feedback Addressed**: Step 5 accepted the focused TASK-005 plan after
+the blocked-status and candidate-path lifecycle findings were addressed.
+**Notes**: Added `RielflowCore` runtime session/message value types, in-memory
+store protocols and implementation, candidate-path staging and reader APIs,
+output validation, and runtime-owned publication service. Added deterministic
+XCTest coverage for runtime-generated communication ids, append failures,
+candidate-path missing/stale/malformed/non-object/out-of-staging rejection,
+candidate-path provisioning/clearing/finalization, schema and
+`completionPassed: false` validation failures, no-candidate provider failure,
+accepted downstream message publication, and root output selection. Verified
+TypeScript/Bun fallback checks and Xcode Swift 6.3.2 `swift test` with 77
+tests passing.
+
+### Session: 2026-06-12 06:39
+
+**Tasks Completed**: TASK-005 Step 7 adversarial revision
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the additive TASK-005 in-memory runtime slice; parent
+TASK-002/TASK-003 remain active for broader Swift migration parity.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000016`
+requested a revision to harden the runtime publication boundary. Candidate-path
+publication now requires the exact runtime-reserved candidate path, and
+adapter/provider failures now have an explicit runtime API path that marks the
+step failed without creating workflow messages.
+**Notes**: Updated `RuntimePublication.swift`, `RuntimeOutputCandidate.swift`,
+`RuntimeOutputCandidateTests.swift`, and `RuntimePublicationTests.swift`.
+Verified TypeScript/Bun fallback checks and Xcode Swift 6.3.2 `swift test`
+with 79 tests passing.
+
+### Session: 2026-06-12 06:50
+
+**Tasks Completed**: TASK-005 Step 7 review revision
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the additive TASK-005 in-memory runtime slice; parent
+TASK-002/TASK-003 remain active for broader Swift migration parity.
+**Review Feedback Addressed**: Step 7 review `comm-000004` reported two mid
+findings. Candidate-path staging now rejects unsafe path components and
+outside-root finalization before recursive cleanup. Runtime output validation
+now covers the TypeScript JSON Schema subset from
+`packages/rielflow-core/src/json-schema.ts`.
+**Notes**: Updated `RuntimeCandidatePathStaging.swift`,
+`RuntimeOutputValidation.swift`, `RuntimeOutputCandidateTests.swift`, and
+`RuntimeOutputValidationTests.swift`. Xcode Swift 6.3.2 `swift test` passes 82
+tests.
+
+### Session: 2026-06-12 07:04
+
+**Tasks Completed**: TASK-005 Step 7 schema-definition review revision
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the additive TASK-005 in-memory runtime slice; parent
+TASK-002/TASK-003 remain active for broader Swift migration parity.
+**Review Feedback Addressed**: Step 7 review `comm-000008` reported that Swift
+payload validation did not reject malformed output-contract schema definitions
+before payload validation as TypeScript/Bun does in
+`packages/rielflow-core/src/json-schema.ts`.
+**Notes**: Updated `RuntimeOutputValidation.swift` with schema-definition
+validation for unsupported keywords and structural checks over type,
+properties, required, additionalProperties, items, enum, min/max bounds,
+pattern, and combinators. Added malformed schema-definition regressions in
+`RuntimeOutputValidationTests.swift`. Xcode Swift 6.3.2 `swift test` passes 83
+tests.
+
+### Session: 2026-06-12 07:18
+
+**Tasks Completed**: TASK-005 Step 7 adversarial candidate-path revision
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the additive TASK-005 in-memory runtime slice; parent
+TASK-002/TASK-003 remain active for broader Swift migration parity.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000013`
+reported that candidate-source precedence could bypass candidate-path
+reservation validation and that publication did not finalize staging after
+candidate-path consumption.
+**Notes**: Updated `RuntimePublication.swift`,
+`RuntimeCandidatePathStaging.swift`, and `RuntimePublicationTests.swift`.
+Publication now rejects ambiguous candidate sources, requires candidate-path
+requests to use the reserved path when a reservation is present, and finalizes
+candidate-path staging after success, validation failure, and append failure.
+Xcode Swift 6.3.2 `swift test` passes 88 tests.
+
+### Session: 2026-06-12 07:30
+
+**Tasks Completed**: TASK-005 Step 7 adversarial unsupported-transition
+revision
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for the additive TASK-005 in-memory runtime slice; parent
+TASK-002/TASK-003 remain active for broader Swift migration parity.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000018`
+reported that cross-workflow, resume-step, and fanout transition fields could
+be silently converted to direct in-workflow messages.
+**Notes**: Updated `RuntimePublication.swift` and
+`RuntimePublicationTests.swift`. Unsupported `toWorkflowId`, `resumeStepId`,
+and `fanout` transitions now fail before accepted output or workflow message
+publication. Xcode Swift 6.3.2 `swift test` passes 89 tests.

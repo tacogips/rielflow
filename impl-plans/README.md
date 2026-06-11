@@ -46,6 +46,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `swift-native-migration-task-005-runtime-session` | 2026-06-12 | `design-swift-native-migration#task-005-runtime-session-message-store-and-publication-boundary` |
 | `sqlite-only-node-io-mailbox-removal` | 2026-06-08 | `design-node-execution-inbox-contract#contract-shape`, `design-sqlite-message-store#node-execution-io-boundary`, `design-sqlite-message-store#file-mailbox-removal-boundary`, `architecture#message-architecture`, `design-node-output-contract#runtime-artifact-model`, `design-graphql-manager-control-plane#communication-query-model` |
 | `sqlite-message-payload-attachment-snapshot-preservation` | 2026-06-08 | `design-sqlite-message-store#payload-attachment-snapshot-rules` |
 | `manager-control-idempotency-atomic-claim` | 2026-06-07 | `design-graphql-manager-control-plane#idempotency-contract`, `design-graphql-manager-control-plane#atomic-idempotency-claim-flow`, `notes#manager-authidempotency-contract` |

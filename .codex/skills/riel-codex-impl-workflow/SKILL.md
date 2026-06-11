@@ -178,6 +178,32 @@ unavailable, `official/cursor-sdk` stayed deferred, TASK-002 and TASK-003
 remained in progress, and default `swift` lookup still required the Xcode
 `DEVELOPER_DIR`/`SDKROOT` override.
 
+For the 2026-06-12 TASK-005 `swift-migration` run, Step 7 adversarial review
+accepted the runtime session and message publication boundary after Xcode
+Swift 6.3.2 `swift test` passed 93 tests. The accepted slice adds additive
+`RielflowCore` APIs for runtime-owned workflow sessions, step executions,
+workflow message records, deterministic in-memory storage, message input
+resolution, candidate-path staging, output validation, accepted output
+publication, and downstream message creation. Keep adapter outputs
+provider-owned until the Swift runtime publishes workflow messages: adapters
+may return inline candidates or write a runtime-reserved candidate path, but
+must not allocate communication ids, mutate session state, write final
+workflow output, or publish downstream messages. Candidate-path publication is
+runtime-owned and must reject missing, stale, malformed, outside-staging,
+ambiguous, or unreserved candidate sources; staging must reject unsafe path
+components and symlink escapes. Do not reintroduce legacy execution-local
+mailbox contracts such as `RIEL_MAILBOX_DIR`, `inbox/input.json`, or
+`outbox/output.json`. Message input resolution must include only delivered or
+already consumed message rows and exclude created, failed, or superseded rows.
+Output-contract handling must fail closed before publication for malformed
+JSON, invalid envelopes, malformed schema definitions, schema failures,
+`completionPassed: false`, provider/policy/timeout failures, and unsupported
+cross-workflow, resume-step, or fanout transitions. Residual low risks remain:
+the Swift TASK-005 implementation is deterministic in-memory only, SQLite
+Swift persistence and CLI parity remain deferred, the preferred
+`../../codex-agent` reference is unavailable, and the default `swift` lookup
+may still require the Xcode `DEVELOPER_DIR`/`SDKROOT` override.
+
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via
 an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; workflow message payloads

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-12T05:35:00+09:00",
+  "lastUpdated": "2026-06-12T08:06:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -576,6 +576,9 @@
     },
     "195": {
       "status": "IN_PROGRESS"
+    },
+    "196": {
+      "status": "COMPLETED"
     }
   },
   "plans": {
@@ -7575,10 +7578,10 @@
       "path": "impl-plans/active/swift-native-migration.md",
       "designReference": "design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
       "workflowMode": "issue-resolution",
-      "issueReference": "Port Swift local agent command builders and readiness parity; workflowInput.requestedBehavior; no matching GitHub issue URL or number supplied",
+      "issueReference": "Port Swift runtime session and message publication boundary; workflowInput.requestedBehavior TASK-005; no matching GitHub issue URL or number supplied",
       "workflowId": "codex-design-and-implement-review-loop",
-      "lastPlanningNode": "step4-impl-plan-create",
-      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use packages/rielflow-adapters/src/codex.ts, packages/rielflow-adapters/src/claude.ts, packages/rielflow-adapters/src/cursor.ts, packages/rielflow-adapters/src/readiness.ts, packages/rielflow/src/workflow/runtime-readiness-agent-probes.ts, and pinned package metadata until Swift references are supplied. Official SDK parity for official/openai-sdk and official/anthropic-sdk is complete; remaining TASK-004 scope is local-agent command builders and readiness parity; official/cursor-sdk remains explicitly deferred unless separately scoped.",
+      "lastPlanningNode": "step6-implement",
+      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use TypeScript adapter/runtime references and pinned package metadata until Swift references are supplied. TASK-004 local-agent and official OpenAI/Anthropic SDK parity are complete; TASK-005 is split to impl-plans/completed/swift-native-migration-task-005-runtime-session.md for runtime session, message store, candidate-path publication, and output validation; official/cursor-sdk remains explicitly deferred unless separately scoped.",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
@@ -7608,7 +7611,7 @@
           ]
         },
         "TASK-005": {
-          "status": "Not Started",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "TASK-002",
@@ -7721,13 +7724,33 @@
         "rg -n \"defaultAgentPreflightDeadline|agentPreflightErrorDetail|testDefaultAuthPreflightsUseBoundedDeadline|testDefaultAuthPreflightTimeoutsMapToPolicyBlocked|defaultCodexAuthPreflightTimeout|defaultClaudeAuthPreflightTimeout|defaultCursorAuthPreflightTimeout\" Sources Tests",
         "rg -n \"testCodexCommandBuilderTerminatesOptionsBeforeFlagLikePrompt|arguments.append\\(\\\"--\\\"\\)|promptText: String = \\\"hello\\\"\" Sources/CodexAgent/CodexAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "rg -n \"POSIX_SPAWN_CLOEXEC_DEFAULT|sensitiveAdapterEnvironmentValues|additionalSensitiveValues|testFoundationRunnerClosesUnrelatedInheritedFileDescriptors|testProviderFailureRedactsConfiguredEnvironmentSecretValue|testDefaultPreflightRedactsConfiguredEnvironmentSecretValue\" Sources Tests",
-        "rg -n \"2026-06-12 05:35|exec-000046|passed 65 tests|descriptor isolation|configured-secret redaction\" impl-plans/active/swift-native-migration.md impl-plans/PROGRESS.json"
+        "rg -n \"2026-06-12 05:35|exec-000046|passed 65 tests|descriptor isolation|configured-secret redaction\" impl-plans/active/swift-native-migration.md impl-plans/PROGRESS.json",
+        "rg -n \"WorkflowSession|WorkflowMessageRecord|CandidatePathReading|WorkflowOutputPublishing|completionPassed|RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json\" impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+        "rg -n \"WorkflowSession|WorkflowMessageRecord|CandidatePathReading|WorkflowOutputPublishing|completionPassed\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json|execution-local inbox|execution-local outbox\" Sources Tests",
+        "rg -n \"WorkflowSession|WorkflowMessageRecord|CandidatePathReading|RuntimeCandidatePathStaging|WorkflowOutputPublishing|completionPassed|RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json\" impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+        "rg -n \"RuntimeCandidatePathStaging|prepareCandidatePath|finalizeCandidatePath|RuntimeCandidatePathReservation|candidatePathDoesNotMatchReservation|RuntimeCandidatePathStagingError|adapterFailure\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"additionalProperties|enum|const|anyOf|oneOf|allOf|minItems|maxItems|minLength|maxLength|minimum|maximum\" Sources/RielflowCore/RuntimeOutputValidation.swift Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift",
+        "rg -n \"unsupported JSON Schema keyword|validateSchemaDefinition|validateSchemaNode|must be a non-empty array when provided\" Sources/RielflowCore/RuntimeOutputValidation.swift Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift",
+        "rg -n \"ambiguousCandidateSources|candidatePathReservationRequiresCandidatePath|finalizeCandidatePathIfNeeded|testPublicationFinalizesCandidatePathStagingAfter\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"unsupportedTransition|unsupportedTransitionReason|testUnsupportedTransitionShapesFailBeforeAcceptedOutputAndMessages\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"WorkflowResolvedMessageInput|WorkflowMessageInputResolving|DefaultWorkflowMessageInputResolver|testMessageInputResolverFiltersOrdersAndMergesPayloads\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"publishesRootOutput|testTerminalNonOutputStepDoesNotPublishRootOutput|testRootOutputComesFromAcceptedOutputWithoutDownstreamMessages\" Sources/RielflowCore/RuntimePublication.swift Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+        "rg -n \"testCandidatePathStagingRejectsSymlinkEscapeUnderSafeComponent|resolvedStagingDirectory|stagingPathEscapesRoot\" Sources/RielflowCore/RuntimeCandidatePathStaging.swift Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift",
+        "rg -n \"lifecycleStatus: \\.delivered|isResolvableInput|testMessageInputResolverUsesOnlyDeliveredAndConsumedMessages|testPublicationRecordsAcceptedOutputAndRuntimeGeneratedMessages\" Sources/RielflowCore/RuntimeStore.swift Tests/RielflowCoreTests/RuntimeStoreTests.swift Tests/RielflowCoreTests/RuntimePublicationTests.swift"
       ],
       "residualRisks": [
         "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select points at a Nix Apple SDK path.",
         "High-risk runtime migration requires adversarial implementation review before release cutover.",
         "Preferred local codex-agent reference root ../../codex-agent is unavailable.",
-        "Swift local-agent command/readiness parity maps current TypeScript adapter behavior because dedicated Swift references for codex-agent, claude-code-agent, and cursor-cli-agent are not supplied; preferred ../../codex-agent remains unavailable."
+        "Swift local-agent command/readiness parity maps current TypeScript adapter behavior because dedicated Swift references for codex-agent, claude-code-agent, and cursor-cli-agent are not supplied; preferred ../../codex-agent remains unavailable.",
+        "TASK-005 starts with deterministic in-memory runtime behavior; SQLite-backed Swift persistence is deferred.",
+        "TASK-005 currently provides deterministic in-memory Swift runtime behavior; SQLite-backed Swift persistence remains deferred.",
+        "Parent TASK-002 and TASK-003 remain active for broader Swift migration parity, though current model and JSON/envelope contracts were stable for this TASK-005 slice.",
+        "High-risk runtime publication boundary still requires adversarial implementation review before any Swift runtime cutover.",
+        "TASK-005 remains deterministic in-memory Swift runtime behavior; SQLite-backed Swift persistence remains deferred.",
+        "TASK-005 message input resolution and root-output publication are deterministic in-memory APIs; SQLite-backed Swift persistence remains deferred.",
+        "TASK-005 lifecycle filtering is deterministic in-memory behavior; SQLite-backed Swift message persistence and status transitions remain deferred."
       ],
       "addressedReviewFindings": [
         {
@@ -8076,6 +8099,311 @@
           "line": 165,
           "finding": "Local-agent failure redaction did not include sensitive values supplied through LocalAgentProcessConfiguration.environment, so raw configured CODEX_HOME/CLAUDE_CONFIG_DIR/CURSOR_CONFIG_DIR or token values could leak in provider_error or policy_blocked details.",
           "resolution": "Added sensitiveAdapterEnvironmentValues and additionalSensitiveValues redaction plumbing through provider errors, compact readiness messages, agentPreflightErrorDetail, and Codex/Claude/Cursor default preflights; added configured environment redaction tests for provider_error and policy_blocked paths; Xcode Swift 6.3.2 swift test passed 65 tests."
+        },
+        {
+          "nodeId": "step4-impl-plan-create",
+          "exec": "exec-000006",
+          "severity": "info",
+          "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+          "finding": "Created focused implementation plan for accepted TASK-005 design scope.",
+          "resolution": "Added runtime session/message value types, store protocols, deterministic in-memory behavior, candidate-path normalization, output validation, publication boundary, verification commands, and legacy inbox/outbox exclusion criteria."
+        },
+        {
+          "nodeId": "step4-impl-plan-self-review",
+          "exec": "exec-000007",
+          "severity": "plan-only-fixed",
+          "file": "impl-plans/active/swift-native-migration.md",
+          "finding": "Parent plan issue-reference block still named the previous TASK-004 local-agent workflow session and issue title after the TASK-005 focused plan was created.",
+          "resolution": "Updated the parent issue-reference block to name the current TASK-005 workflow session, issue title, and self-review node while preserving the prior TASK-004 session as historical context."
+        },
+        {
+          "nodeId": "step5-impl-plan-review",
+          "exec": "exec-000008",
+          "severity": "mid",
+          "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+          "line": 3,
+          "finding": "Focused TASK-005 plan was marked Ready while parent active/swift-native-migration:TASK-002 and TASK-003 were still recorded as blockers.",
+          "resolution": "Marked the focused TASK-005 plan Blocked, set phase 196 to BLOCKED, updated README status, and added an activation rule requiring parent TASK-002/TASK-003 completion or explicit stability acceptance before implementation starts."
+        },
+        {
+          "nodeId": "step5-impl-plan-review",
+          "exec": "exec-000008",
+          "severity": "mid",
+          "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+          "line": 188,
+          "finding": "Candidate-path work planned reader/validation behavior but omitted explicit runtime-owned provisioning, pre-attempt clearing, and post-attempt cleanup or ignore lifecycle.",
+          "resolution": "Added RuntimeCandidatePathStaging and RuntimeCandidatePathReservation planning, prepareCandidatePath/finalizeCandidatePath lifecycle expectations, checklist items, task deliverables, completion criteria, and rg verification commands."
+        },
+        {
+          "nodeId": "step4-impl-plan-self-review",
+          "exec": "exec-000010",
+          "severity": "plan-only-fixed",
+          "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+          "finding": "TASK-001 markdown status still said Not Started while PROGRESS.json marked it Blocked on parent TASK-002/TASK-003 dependencies.",
+          "resolution": "Updated TASK-001 markdown status to Blocked so the focused plan, progress index, and activation rule agree before renewed Step 5 review."
+        },
+        {
+          "nodeId": "step6-implement",
+          "exec": "exec-000012",
+          "severity": "implemented",
+          "file": "Sources/RielflowCore/RuntimePublication.swift; Sources/RielflowCore/RuntimeStore.swift; Sources/RielflowCore/RuntimeOutputCandidate.swift",
+          "finding": "TASK-005 required Swift runtime-owned session/message APIs, candidate-path publication, output validation, and no-publication failure behavior while preserving TypeScript/Bun fallback.",
+          "resolution": "Implemented deterministic in-memory runtime session, workflow message store, candidate-path staging/reader, output validation, and publication APIs with focused RielflowCoreTests. Swift test passed 77 tests; TypeScript typecheck, Biome lint, and workflow validation passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000016",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimePublication.swift; Sources/RielflowCore/RuntimeOutputCandidate.swift; Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+          "finding": "Step 7 adversarial review requested runtime publication boundary hardening for exact candidate-path ownership and adapter/provider failure handling.",
+          "resolution": "Runtime publication now rejects candidate-path submissions that do not match the exact reserved candidate path and exposes adapterFailure handling that marks the step failed without publishing messages. Xcode Swift 6.3.2 swift test passed 79 tests; TypeScript typecheck, Biome lint, and workflow validation passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000004",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Sources/RielflowCore/RuntimeOutputValidation.swift; Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift; Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift",
+          "finding": "Step 7 review found unsafe candidate staging path components before recursive cleanup and shallow Swift output-contract validation versus packages/rielflow-core/src/json-schema.ts.",
+          "resolution": "Runtime candidate staging now rejects unsafe path components and refuses outside-root finalization; Swift output validation now covers additionalProperties, enum, const, nested items/properties, numeric/string bounds, strict integer checks, and anyOf/oneOf/allOf. Xcode Swift 6.3.2 swift test passed 82 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000008",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimeOutputValidation.swift; Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift",
+          "finding": "Step 7 review found Swift output-contract validation validated payload values directly but did not validate schema definitions like packages/rielflow-core/src/json-schema.ts, allowing unsupported or malformed contract keywords to be silently ignored.",
+          "resolution": "DefaultWorkflowOutputValidator now validates schema definitions before payload validation, rejects unsupported keywords and malformed type/properties/required/additionalProperties/items/enum/bounds/pattern/combinator definitions, and has malformed-schema regression tests. Xcode Swift 6.3.2 swift test passed 83 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000013",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimePublication.swift; Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+          "finding": "Step 7 adversarial review found candidate source precedence could bypass candidate-path reservation validation and publication did not finalize candidate-path staging after consumption.",
+          "resolution": "Runtime publication now rejects ambiguous candidate sources, requires candidate-path requests to use the reserved candidate path when a reservation is present, and finalizes candidate-path staging after runtime consumption. Added tests for adapterOutput+candidatePath ambiguity and cleanup on success, validation failure, and append failure. Xcode Swift 6.3.2 swift test passed 88 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000018",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimePublication.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+          "finding": "Step 7 adversarial review found unsupported cross-workflow, resume-step, and fanout transition fields were silently converted into direct in-workflow messages, creating misleading successful publication.",
+          "resolution": "Runtime publication now rejects unsupported transition semantics before accepted output or message append. Added tests for toWorkflowId, resumeStepId, and fanout transitions proving no acceptedOutput and no workflow messages. Xcode Swift 6.3.2 swift test passed 89 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000022",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimeStore.swift; Sources/RielflowCore/RuntimePublication.swift; Tests/RielflowCoreTests/RuntimeStoreTests.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift; impl-plans/completed/swift-native-migration-task-005-runtime-session.md; impl-plans/PROGRESS.json",
+          "finding": "Step 7 review found prior WorkflowMessageRecord rows were not resolved into one structured adapter/executor input object and root output selection used transitions.isEmpty, allowing any terminal step to publish external workflow output.",
+          "resolution": "Added runtime-owned WorkflowResolvedMessageInput and DefaultWorkflowMessageInputResolver with deterministic ordering/filtering/merge tests and AdapterExecutionInput application. Added explicit publishesRootOutput metadata so terminal non-output steps do not publish rootOutput. Xcode Swift 6.3.2 swift test passed 91 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000026",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Sources/RielflowCore/RuntimeStore.swift; Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift; Tests/RielflowCoreTests/RuntimeStoreTests.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift; design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; impl-plans/completed/swift-native-migration-task-005-runtime-session.md; impl-plans/PROGRESS.json",
+          "finding": "Step 7 review found candidate-path staging could follow safe-named symlink components outside the staging root and message input resolution consumed created, failed, or superseded workflow message rows.",
+          "resolution": "Candidate staging now validates existing path components before creation, validates the resolved staging directory after creation, and rejects symlink escapes without returning outside-root candidate paths. Runtime message append now stores direct messages as delivered, and DefaultWorkflowMessageInputResolver includes only delivered or consumed messages. Added symlink escape and lifecycle filtering regressions. Xcode Swift 6.3.2 swift test passed 93 tests."
+        }
+      ]
+    },
+    "completed/swift-native-migration-task-005-runtime-session": {
+      "phase": 196,
+      "status": "Completed",
+      "path": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md#task-005-runtime-session-message-store-and-publication-boundary",
+      "workflowMode": "issue-resolution",
+      "issueReference": "Port Swift runtime session and message publication boundary; workflowInput.requestedBehavior TASK-005; no matching GitHub issue URL or number supplied",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastPlanningNode": "step6-implement",
+      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use packages/rielflow-adapters/src/codex.ts, packages/rielflow-adapters/src/claude.ts, packages/rielflow-adapters/src/cursor.ts, packages/rielflow/src/workflow/runtime-db.ts, packages/rielflow/src/workflow/runtime-db/message-types.ts, packages/rielflow/src/workflow/runtime-db/workflow-message-records.ts, packages/rielflow/src/workflow/runtime-execution-contracts.ts, packages/rielflow/src/workflow/output-attempt-runner.ts, packages/rielflow/src/workflow/adapter.ts, packages/rielflow/src/workflow/engine/workflow-runner.ts, packages/rielflow/src/workflow/engine/step-result-finalization.ts, packages/rielflow/src/workflow/engine/result-finalization.ts, and packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts until Swift references are supplied.",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "active/swift-native-migration:TASK-002",
+            "active/swift-native-migration:TASK-003"
+          ]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-004"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-005"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "git status --short --branch",
+        "git diff --check",
+        "bun run typecheck:server",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "rg -n \"RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json|execution-local inbox|execution-local outbox\" Sources Tests",
+        "rg -n \"WorkflowSession|WorkflowMessageRecord|CandidatePathReading|WorkflowOutputPublishing|completionPassed\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "jq empty impl-plans/PROGRESS.json",
+        "rg -n \"WorkflowSession|WorkflowMessageRecord|CandidatePathReading|RuntimeCandidatePathStaging|WorkflowOutputPublishing|completionPassed|RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json\" impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+        "rg -n \"RuntimeCandidatePathStaging|prepareCandidatePath|finalizeCandidatePath|RuntimeCandidatePathReservation|candidatePathDoesNotMatchReservation|RuntimeCandidatePathStagingError|adapterFailure\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"additionalProperties|enum|const|anyOf|oneOf|allOf|minItems|maxItems|minLength|maxLength|minimum|maximum\" Sources/RielflowCore/RuntimeOutputValidation.swift Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift",
+        "rg -n \"unsupported JSON Schema keyword|validateSchemaDefinition|validateSchemaNode|must be a non-empty array when provided\" Sources/RielflowCore/RuntimeOutputValidation.swift Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift",
+        "rg -n \"ambiguousCandidateSources|candidatePathReservationRequiresCandidatePath|finalizeCandidatePathIfNeeded|testPublicationFinalizesCandidatePathStagingAfter\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"unsupportedTransition|unsupportedTransitionReason|testUnsupportedTransitionShapesFailBeforeAcceptedOutputAndMessages\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"WorkflowResolvedMessageInput|WorkflowMessageInputResolving|DefaultWorkflowMessageInputResolver|testMessageInputResolverFiltersOrdersAndMergesPayloads\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"publishesRootOutput|testTerminalNonOutputStepDoesNotPublishRootOutput|testRootOutputComesFromAcceptedOutputWithoutDownstreamMessages\" Sources/RielflowCore/RuntimePublication.swift Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+        "rg -n \"testCandidatePathStagingRejectsSymlinkEscapeUnderSafeComponent|resolvedStagingDirectory|stagingPathEscapesRoot\" Sources/RielflowCore/RuntimeCandidatePathStaging.swift Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift",
+        "rg -n \"lifecycleStatus: \\.delivered|isResolvableInput|testMessageInputResolverUsesOnlyDeliveredAndConsumedMessages|testPublicationRecordsAcceptedOutputAndRuntimeGeneratedMessages\" Sources/RielflowCore/RuntimeStore.swift Tests/RielflowCoreTests/RuntimeStoreTests.swift Tests/RielflowCoreTests/RuntimePublicationTests.swift"
+      ],
+      "residualRisks": [
+        "Parent active/swift-native-migration TASK-002 and TASK-003 are still recorded as In Progress, so TASK-005 implementation should confirm those contracts are stable before coding.",
+        "TASK-005 implements deterministic in-memory runtime behavior first; SQLite-backed Swift persistence is deferred.",
+        "High-risk runtime publication boundary requires adversarial implementation review before any cutover.",
+        "Preferred local codex-agent reference root ../../codex-agent is unavailable.",
+        "TASK-005 implements deterministic in-memory Swift runtime behavior first; SQLite-backed Swift persistence is deferred.",
+        "Parent active/swift-native-migration TASK-002 and TASK-003 remain active for broader Swift parity, though current model and JSON/envelope contracts were stable for this slice.",
+        "High-risk runtime publication boundary requires adversarial implementation review before any Swift runtime cutover.",
+        "TASK-005 remains deterministic in-memory Swift runtime behavior; SQLite-backed Swift persistence remains deferred.",
+        "TASK-005 message input resolution and root-output publication are deterministic in-memory APIs; SQLite-backed Swift persistence remains deferred.",
+        "TASK-005 lifecycle filtering is deterministic in-memory behavior; SQLite-backed Swift message persistence and status transitions remain deferred."
+      ],
+      "addressedReviewFindings": [
+        {
+          "nodeId": "step3-design-review",
+          "exec": "exec-000005",
+          "severity": "accepted",
+          "file": "design-docs/specs/design-swift-native-migration.md",
+          "finding": "Step 3 accepted TASK-005 design update with no findings.",
+          "resolution": "Implementation plan uses the accepted design as source of truth and records no Step 5 feedback for this run."
+        },
+        {
+          "nodeId": "step4-impl-plan-self-review",
+          "exec": "exec-000007",
+          "severity": "accepted",
+          "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+          "finding": "Self-review found the focused TASK-005 plan maps to the accepted design and has explicit deliverables, dependencies, completion criteria, progress tracking, and verification commands.",
+          "resolution": "No design revision or focused-plan revision required."
+        },
+        {
+          "nodeId": "step5-impl-plan-review",
+          "exec": "exec-000008",
+          "severity": "mid",
+          "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+          "line": 3,
+          "finding": "Focused TASK-005 plan was marked Ready while parent active/swift-native-migration:TASK-002 and TASK-003 were still recorded as blockers.",
+          "resolution": "Marked the focused TASK-005 plan Blocked, set phase 196 to BLOCKED, updated README status, and added an activation rule requiring parent TASK-002/TASK-003 completion or explicit stability acceptance before implementation starts."
+        },
+        {
+          "nodeId": "step5-impl-plan-review",
+          "exec": "exec-000008",
+          "severity": "mid",
+          "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+          "line": 188,
+          "finding": "Candidate-path work planned reader/validation behavior but omitted explicit runtime-owned provisioning, pre-attempt clearing, and post-attempt cleanup or ignore lifecycle.",
+          "resolution": "Added RuntimeCandidatePathStaging and RuntimeCandidatePathReservation planning, prepareCandidatePath/finalizeCandidatePath lifecycle expectations, checklist items, task deliverables, completion criteria, and rg verification commands."
+        },
+        {
+          "nodeId": "step4-impl-plan-self-review",
+          "exec": "exec-000010",
+          "severity": "plan-only-fixed",
+          "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+          "finding": "TASK-001 markdown status still said Not Started while PROGRESS.json marked it Blocked on parent TASK-002/TASK-003 dependencies.",
+          "resolution": "Updated TASK-001 markdown status to Blocked so the focused plan, progress index, and activation rule agree before renewed Step 5 review."
+        },
+        {
+          "nodeId": "step6-implement",
+          "exec": "exec-000012",
+          "severity": "implemented",
+          "file": "Sources/RielflowCore/RuntimeSession.swift; Sources/RielflowCore/RuntimeStore.swift; Sources/RielflowCore/RuntimeOutputCandidate.swift; Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Sources/RielflowCore/RuntimeOutputValidation.swift; Sources/RielflowCore/RuntimePublication.swift",
+          "finding": "Focused TASK-005 implementation was required after Step 5 accepted the plan and prior candidate-path lifecycle findings were addressed.",
+          "resolution": "Added runtime-owned Swift APIs and deterministic in-memory behavior for sessions, messages, candidate paths, output validation, publication, root output selection, append failures, and no-publication failure paths with no legacy inbox/outbox contracts."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000016",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimePublication.swift; Sources/RielflowCore/RuntimeOutputCandidate.swift; Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+          "finding": "Step 7 adversarial review requested runtime publication boundary hardening for exact candidate-path ownership and adapter/provider failure handling.",
+          "resolution": "Runtime publication now rejects candidate-path submissions that do not match the exact reserved candidate path and exposes adapterFailure handling that marks the step failed without publishing messages. Xcode Swift 6.3.2 swift test passed 79 tests; TypeScript typecheck, Biome lint, and workflow validation passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000004",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Sources/RielflowCore/RuntimeOutputValidation.swift; Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift; Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift",
+          "finding": "Step 7 review found unsafe candidate staging path components before recursive cleanup and shallow Swift output-contract validation versus packages/rielflow-core/src/json-schema.ts.",
+          "resolution": "Runtime candidate staging now rejects unsafe path components and refuses outside-root finalization; Swift output validation now covers additionalProperties, enum, const, nested items/properties, numeric/string bounds, strict integer checks, and anyOf/oneOf/allOf. Xcode Swift 6.3.2 swift test passed 82 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000008",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimeOutputValidation.swift; Tests/RielflowCoreTests/RuntimeOutputValidationTests.swift",
+          "finding": "Step 7 review found Swift output-contract validation validated payload values directly but did not validate schema definitions like packages/rielflow-core/src/json-schema.ts, allowing unsupported or malformed contract keywords to be silently ignored.",
+          "resolution": "DefaultWorkflowOutputValidator now validates schema definitions before payload validation, rejects unsupported keywords and malformed type/properties/required/additionalProperties/items/enum/bounds/pattern/combinator definitions, and has malformed-schema regression tests. Xcode Swift 6.3.2 swift test passed 83 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000013",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimePublication.swift; Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+          "finding": "Step 7 adversarial review found candidate source precedence could bypass candidate-path reservation validation and publication did not finalize candidate-path staging after consumption.",
+          "resolution": "Runtime publication now rejects ambiguous candidate sources, requires candidate-path requests to use the reserved candidate path when a reservation is present, and finalizes candidate-path staging after runtime consumption. Added tests for adapterOutput+candidatePath ambiguity and cleanup on success, validation failure, and append failure. Xcode Swift 6.3.2 swift test passed 88 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000018",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimePublication.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+          "finding": "Step 7 adversarial review found unsupported cross-workflow, resume-step, and fanout transition fields were silently converted into direct in-workflow messages, creating misleading successful publication.",
+          "resolution": "Runtime publication now rejects unsupported transition semantics before accepted output or message append. Added tests for toWorkflowId, resumeStepId, and fanout transitions proving no acceptedOutput and no workflow messages. Xcode Swift 6.3.2 swift test passed 89 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000022",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimeStore.swift; Sources/RielflowCore/RuntimePublication.swift; Tests/RielflowCoreTests/RuntimeStoreTests.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift; impl-plans/completed/swift-native-migration-task-005-runtime-session.md; impl-plans/PROGRESS.json",
+          "finding": "Step 7 review found prior WorkflowMessageRecord rows were not resolved into one structured adapter/executor input object and root output selection used transitions.isEmpty, allowing any terminal step to publish external workflow output.",
+          "resolution": "Added runtime-owned WorkflowResolvedMessageInput and DefaultWorkflowMessageInputResolver with deterministic ordering/filtering/merge tests and AdapterExecutionInput application. Added explicit publishesRootOutput metadata so terminal non-output steps do not publish rootOutput. Xcode Swift 6.3.2 swift test passed 91 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000026",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Sources/RielflowCore/RuntimeStore.swift; Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift; Tests/RielflowCoreTests/RuntimeStoreTests.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift; design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; impl-plans/completed/swift-native-migration-task-005-runtime-session.md; impl-plans/PROGRESS.json",
+          "finding": "Step 7 review found candidate-path staging could follow safe-named symlink components outside the staging root and message input resolution consumed created, failed, or superseded workflow message rows.",
+          "resolution": "Candidate staging now validates existing path components before creation, validates the resolved staging directory after creation, and rejects symlink escapes without returning outside-root candidate paths. Runtime message append now stores direct messages as delivered, and DefaultWorkflowMessageInputResolver includes only delivered or consumed messages. Added symlink escape and lifecycle filtering regressions. Xcode Swift 6.3.2 swift test passed 93 tests."
         }
       ]
     }

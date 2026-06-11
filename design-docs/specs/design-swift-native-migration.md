@@ -41,6 +41,7 @@ The migration must keep the Swift package additive until parity gates pass. The 
 - Hook context keeps `agentSessionId` and optional backend metadata.
 - Existing workflow package, event source, GraphQL manager-control, and session inspection surfaces remain compatibility targets for parity tests.
 - Runtime output publication remains runtime-owned. Swift adapters may parse provider output into a normalized envelope, but final workflow message delivery, candidate-path handling, and output validation belong to the workflow engine boundary.
+- Runtime session and workflow message APIs remain runtime-owned. Swift adapters, command executors, and add-ons may return candidate output only; they must not allocate communication ids, mutate session state, publish downstream messages, or learn the final `output.json` destination.
 - External process execution remains explicit and injectable. Backend adapters construct argv arrays directly, avoid shell interpolation, redact credentials from failures, enforce deadlines, and expose deterministic runner injection for tests.
 
 ## Reference Mapping
@@ -131,6 +132,57 @@ The Swift migration should preserve these Cursor contracts:
 - readiness checks report unavailable tools, auth failures, model reachability, and policy-blocked states without requiring live workflow execution
 
 The `official/cursor-sdk` backend is a separate official SDK adapter and must not be conflated with `cursor-cli-agent`. Any Swift port of `official/cursor-sdk` should be a later, separately gated adapter slice unless implementation parity requires a minimal compatibility shim.
+
+## TASK-005 Runtime Session, Message Store, And Publication Boundary
+
+TASK-005 ports the first Swift runtime-owned session and message boundary needed for deterministic workflow execution. The scope is intentionally narrower than the full SQLite runtime: Swift should expose the core value types, store protocols, publication APIs, and deterministic in-memory behavior that later SQLite, CLI, GraphQL, server, package, and event slices can reuse.
+
+Ownership rules:
+
+- `RielflowCore` owns session and message value types, runtime store protocols, publication request/result types, candidate output normalization, and output validation helpers that are independent of a concrete persistence backend.
+- `RielflowCLI` may host a minimal deterministic runner or command surface only when it exercises those core runtime APIs without replacing the TypeScript/Bun production fallback.
+- `RielflowAdapters`, `CodexAgent`, `ClaudeCodeAgent`, `CursorCLIAgent`, and official SDK adapters remain provider-output boundaries. They may return inline candidate payloads or write to a runtime-provided candidate path, but they must not publish final workflow messages.
+- Candidate-path staging is an execution-attempt detail. The runtime provisions and clears the candidate path before an attempt, reads or copies the submitted candidate after the adapter returns, validates the normalized business payload, records the attempt result, then finalizes the staging location as non-authoritative plumbing. Runtime publication must reject ambiguous candidate sources so adapter output or inline candidates cannot bypass a reserved candidate path. Runtime staging must reject unsafe path components before filesystem use and must verify prepared/finalized staging directories stay under the configured staging root.
+- Runtime staging must also validate existing path components before creation and the resolved staging directory after creation so safe-looking symlink components under the staging root cannot redirect candidate paths outside the root.
+- Legacy worker mailbox compatibility is out of scope and must not be reintroduced. TASK-005 must not add `RIEL_MAILBOX_DIR`, `inbox/input.json`, `outbox/output.json`, or execution-local inbox/outbox message APIs.
+
+Core API shape:
+
+- `WorkflowSession` records the workflow id, session id, status, entry step, current step, created/updated timestamps, and accepted step execution summaries needed by deterministic inspection tests.
+- `WorkflowStepExecution` records step id, node id, attempt ordinal, backend, status, accepted output metadata, and provider-owned adapter output metadata without treating adapter output as a published workflow message.
+- `WorkflowMessageRecord` mirrors the TypeScript `workflow_messages` boundary: runtime-generated communication id, workflow execution id, from/to step ids, routing scope, delivery kind, source step execution id, transition condition, payload JSON, optional artifact references, lifecycle state, and created order.
+- Runtime-owned message input resolution converts prior `WorkflowMessageRecord` rows for the target step into one deterministic structured execution input with ordered message records, merged payload, communication ids, and source step ids before any adapter call, then applies the merged payload to the `AdapterExecutionInput` boundary.
+- Runtime-owned direct message publication creates deliverable messages, and input resolution consumes only delivered or already-consumed workflow message rows while excluding created, failed, and superseded rows.
+- `WorkflowRuntimeStore` or equivalent protocols must split session mutation from message publication closely enough that later SQLite-backed persistence can fail message writes deterministically. A failed message append must prevent downstream delivery from being reported as published.
+- Deterministic in-memory implementations should use injectable clocks and monotonic id generation so tests can assert exact session ids, execution ids, communication ids, created order, status transitions, and publication failure behavior without real SQLite or filesystem state.
+
+Publication flow:
+
+1. Runtime creates or resumes a `WorkflowSession` and records a step execution attempt.
+2. Runtime resolves prior `WorkflowMessageRecord` rows into one structured adapter/executor input object.
+3. Adapter or executor returns a provider-owned `AdapterExecutionOutput`, inline business candidate, or candidate-file submission.
+4. Runtime normalizes the candidate using the same output-envelope rules already shared by Swift adapters.
+5. If the node declares an output contract, runtime validates the schema definition and normalized business payload before publication. Malformed JSON, invalid envelopes, malformed schema definitions, schema failure, and `completionPassed: false` failure paths must be deterministic and must not publish downstream workflow messages. Swift validation must preserve the TypeScript JSON Schema subset for unsupported keyword rejection, nested properties/items, additionalProperties, enum, const, string and numeric bounds, strict integer checks, valid patterns, and anyOf/oneOf/allOf combinators.
+6. After validation succeeds, runtime writes the accepted output artifact or in-memory equivalent, updates the session step execution state, and publishes downstream `WorkflowMessageRecord` rows generated from the accepted output only.
+7. TASK-005 must fail closed for transition shapes it does not yet implement. Cross-workflow `toWorkflowId`, `resumeStepId`, and fanout transitions must not be silently converted into direct in-workflow messages.
+8. External root output selection remains runtime-owned: published workflow output comes from the latest accepted root-scope output node metadata, not from an arbitrary adapter response or merely because a step has no downstream transitions.
+
+Validation requirements:
+
+- Inline adapter payloads and candidate-path file payloads must pass through one normalization and validation path.
+- Candidate-path files must be rejected when they are missing, stale from a previous attempt, malformed, non-object when an output contract requires an object, or outside the runtime-provided staging location.
+- Output-contract retries may be modeled minimally in TASK-005, but final-attempt failure must leave the step failed and must not create downstream messages.
+- Provider errors, policy-blocked adapter failures, timeout failures, and invalid output failures must update session state deterministically without fabricating successful messages.
+- Unsupported transition semantics must fail before accepted output or workflow message publication.
+- Published messages must use runtime-generated ids and created order; workers never provide communication ids.
+
+Rollout constraints:
+
+- TypeScript/Bun remains the production runtime and fallback while Swift runtime parity is incomplete.
+- TASK-005 should prefer in-memory deterministic behavior over partial SQLite writes. The SQLite-backed implementation can follow once the Swift API shape matches the existing `workflow_messages` contract.
+- CLI exposure should remain minimal until TASK-007; any Swift CLI smoke command added in TASK-005 must be clearly scaffold/parity-only.
+- Cursor-specific behavior remains isolated in `CursorCLIAgent`; TASK-005 adds no Cursor CLI mode, stream, auth, or `official/cursor-sdk` behavior.
+- Tests must use injected adapters/stores/clocks and synthetic candidates. They must not require live LLM credentials, local agent binaries, network access, or the TypeScript runtime.
 
 ## Data Flow
 
