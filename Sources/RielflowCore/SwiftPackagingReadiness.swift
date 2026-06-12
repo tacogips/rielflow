@@ -74,3 +74,67 @@ public func makeSwiftHomebrewReadinessArchivePlan(
     publishSideEffects: false
   )
 }
+
+public enum SwiftHomebrewProductionTarget: String, CaseIterable, Codable, Equatable, Sendable {
+  case darwinArm64 = "darwin-arm64"
+  case darwinX64 = "darwin-x64"
+
+  public var triple: String {
+    switch self {
+    case .darwinArm64:
+      "arm64-apple-macosx"
+    case .darwinX64:
+      "x86_64-apple-macosx"
+    }
+  }
+}
+
+public struct SwiftHomebrewProductionArchivePlan: Codable, Equatable, Sendable {
+  public var version: String
+  public var target: SwiftHomebrewProductionTarget
+  public var executableProduct: String
+  public var releaseDirectory: String
+  public var stagedBinaryPath: String
+  public var archivePath: String
+  public var checksumPath: String
+  public var publishSideEffects: Bool
+
+  public init(
+    version: String,
+    target: SwiftHomebrewProductionTarget,
+    executableProduct: String,
+    releaseDirectory: String,
+    stagedBinaryPath: String,
+    archivePath: String,
+    checksumPath: String,
+    publishSideEffects: Bool
+  ) {
+    self.version = version
+    self.target = target
+    self.executableProduct = executableProduct
+    self.releaseDirectory = releaseDirectory
+    self.stagedBinaryPath = stagedBinaryPath
+    self.archivePath = archivePath
+    self.checksumPath = checksumPath
+    self.publishSideEffects = publishSideEffects
+  }
+}
+
+public func makeSwiftHomebrewProductionArchivePlan(
+  version: String,
+  target: SwiftHomebrewProductionTarget,
+  releaseDirectory: String = "dist/homebrew"
+) -> SwiftHomebrewProductionArchivePlan {
+  let packageName = "rielflow-\(version)-\(target.rawValue)"
+  let archivePath = "\(releaseDirectory)/rielflow-\(version)-\(target.rawValue).tar.gz"
+  return SwiftHomebrewProductionArchivePlan(
+    version: version,
+    target: target,
+    executableProduct: "rielflow",
+    releaseDirectory: releaseDirectory,
+    stagedBinaryPath: "\(releaseDirectory)/work/\(packageName)/bin/rielflow",
+    archivePath: archivePath,
+    checksumPath: "\(archivePath).sha256",
+    publishSideEffects: false
+  )
+}

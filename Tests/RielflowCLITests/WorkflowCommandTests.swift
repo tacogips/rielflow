@@ -10,7 +10,9 @@ final class WorkflowCommandTests: XCTestCase {
     XCTAssertEqual(result.exitCode, .success)
     XCTAssertTrue(result.stderr.isEmpty)
     XCTAssertTrue(result.stdout.contains("workflow validate"))
-    XCTAssertTrue(result.stdout.contains("TypeScript/Bun remains the production runtime"))
+    XCTAssertTrue(result.stdout.contains("Swift CLI is the production Homebrew runtime"))
+    XCTAssertFalse(result.stdout.contains("TypeScript/Bun"))
+    XCTAssertFalse(result.stdout.contains("cutover gates pass"))
   }
 
   func testValidateInspectAndDeterministicRunWorkerFixture() async throws {
@@ -55,6 +57,21 @@ final class WorkflowCommandTests: XCTestCase {
     XCTAssertEqual(result.nodeExecutions, 1)
     XCTAssertEqual(result.transitions, 0)
     XCTAssertEqual(result.rootOutput?["status"], .string("ready"))
+  }
+
+  func testUsageSupportsAddonSmokeWorkflow() async throws {
+    let root = repositoryRoot()
+    let result = await RielflowCLIApplication().run([
+      "workflow", "usage", "matrix-chat-reply",
+      "--workflow-definition-dir", "\(root)/examples",
+      "--output", "json",
+    ])
+
+    XCTAssertEqual(result.exitCode, .success)
+    XCTAssertTrue(result.stderr.isEmpty)
+    let summary = try decodeJSON(WorkflowInspectionSummary.self, from: result.stdout)
+    XCTAssertEqual(summary.workflowId, "matrix-chat-reply")
+    XCTAssertTrue(summary.addonSourceSummaries.contains("reply-to-matrix:rielflow/chat-reply-worker"))
   }
 
   func testNodePatchIsInMemoryOnly() async throws {

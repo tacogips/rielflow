@@ -10,17 +10,33 @@ Recommended default: CLI/runtime parity only. A native UI should be designed aft
 
 ## Release Cutover Threshold
 
-What exact verification threshold is required before release packaging and Homebrew artifacts switch from the TypeScript/Bun executable to the Swift executable?
+Status: resolved for the branch-local production packaging cutover after
+TASK-009 acceptance.
 
-Recommended default: require fixture parity for workflow validation, inspect, deterministic run, package validation, event trigger dry-runs, GraphQL manager control, hook context parsing, adapter output normalization, SQLite-backed session/message persistence, and macOS archive smoke tests.
+The accepted threshold requires fixture parity for workflow validation, inspect,
+deterministic run, package validation, event trigger dry-runs, GraphQL manager
+control, hook context parsing, adapter output normalization, SQLite-backed
+session/message persistence, macOS archive smoke tests, and the dedicated
+production archive/formula verification described in
+`design-docs/specs/design-swift-native-migration.md#branch-production-swift-homebrew-release-cutover`.
 
-TASK-008 default readiness contract: keep production Homebrew on the current TypeScript/Bun archives under `dist/homebrew/rielflow-<version>-<target>.tar.gz`; stage Swift-only macOS readiness archives separately as `dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz` and `dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz` with `bin/rielflow` inside. Do not publish those archives, commit tap formula changes, or make them the documented install path until TASK-009 adversarial review accepts the full cutover.
+TASK-008 default readiness contract: keep pre-cutover Swift-only macOS readiness archives separate as `dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz` and `dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz` with `bin/rielflow` inside. Do not publish those readiness archives or commit tap formula changes as part of readiness verification.
 
 TASK-008 implementation default: derive the Swift release executable from
 `swift build -c release --product rielflow --show-bin-path`, stage it under
 `dist/swift-homebrew/work/rielflow-<version>-darwin-<arch>/bin/rielflow`, and
-use `packaging/homebrew/swift-cutover-gates.json` as the blocked gate manifest.
-The current Homebrew formula source remains the TypeScript/Bun archive path.
+use `packaging/homebrew/swift-cutover-gates.json` as the readiness gate
+manifest. After TASK-009 acceptance, the dedicated branch-local production
+cutover moved macOS Homebrew archives to Swift executable archives under
+`dist/homebrew`.
+
+Dedicated production cutover result: production Swift archives now live under
+`dist/homebrew`, the formula renders from those checksums, and the gate
+manifest records `productionRuntime=swift-native`,
+`homebrewFormulaSource=swift-executable-archive`, and
+`allowsProductionCutover=true` after the production archive, checksum, formula,
+local smoke, deterministic workflow, and leakage gates passed. GitHub release
+upload and tap pushes remain operator actions outside the verification step.
 
 ## Agent Source Strategy
 

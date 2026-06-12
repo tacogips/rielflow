@@ -45,6 +45,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `swift-homebrew-production-cutover` | 2026-06-12 | `design-swift-native-migration#branch-production-swift-homebrew-release-cutover`, `architecture`, `qa-swift-native-migration#release-cutover-threshold` |
 | `swift-native-migration` | 2026-06-12 | `design-swift-native-migration`, `architecture`, `qa-swift-native-migration` |
 | `swift-native-migration-task-009-final-cutover-gate` | 2026-06-12 | `design-swift-native-migration#task-009-final-parity-security-and-cutover-gate` |
 | `swift-native-migration-task-008-packaging-cutover-readiness` | 2026-06-12 | `design-swift-native-migration#task-008-packaging-and-homebrew-cutover-readiness-gates` |

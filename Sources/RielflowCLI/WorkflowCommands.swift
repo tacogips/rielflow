@@ -657,6 +657,8 @@ public struct RielflowCLIApplication: Sendable {
         return await validateCommand.run(options)
       case let .workflow(.inspect(options)):
         return inspectCommand.run(options)
+      case let .workflow(.usage(options)):
+        return inspectCommand.run(options)
       case let .workflow(.run(options)):
         return await runCommand.run(options)
       }
@@ -728,15 +730,16 @@ public struct RielflowCLIApplication: Sendable {
 }
 
 public let rielflowCLIHelpText = """
-Rielflow Swift migration CLI
+Rielflow CLI
 
 Usage:
   rielflow --version
   rielflow workflow validate <workflow> [--scope project|user|auto] [--output json]
   rielflow workflow inspect <workflow> [--scope project|user|auto] [--output json]
+  rielflow workflow usage <workflow> [--scope project|user|auto] [--output json]
   rielflow workflow run <workflow> --mock-scenario <path> [--output json]
 
-The Swift CLI is additive migration coverage. TypeScript/Bun remains the production runtime until cutover gates pass.
+The Swift CLI is the production Homebrew runtime. Linux Homebrew archives remain unsupported until a reviewed Swift Linux build contract exists.
 
 """
 

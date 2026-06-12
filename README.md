@@ -14,9 +14,10 @@ retry, waiting for user input, calling tools, and handing work between agents
 can all be described as a reusable workflow.
 
 Swift native migration work is tracked on the `swift-migration` branch. The
-top-level SwiftPM package mirrors the current package boundaries while the
-existing TypeScript/Bun runtime remains in place until Swift feature parity is
-proven. The branch currently includes Swift targets for `RielflowCore`,
+top-level SwiftPM package mirrors the current package boundaries, and branch
+production Homebrew packaging now builds macOS Swift executable archives after
+TASK-009 parity acceptance and the dedicated release cutover. The branch
+currently includes Swift targets for `RielflowCore`,
 `RielflowAdapters`, `RielflowAddons`, `RielflowEvents`, `RielflowGraphQL`,
 `RielflowServer`, `RielflowHook`, `CodexAgent`, `ClaudeCodeAgent`,
 `CursorCLIAgent`, and the `rielflow` executable; see
@@ -24,10 +25,13 @@ proven. The branch currently includes Swift targets for `RielflowCore`,
 `impl-plans/completed/swift-native-migration.md`. TASK-002 through TASK-009 now
 have accepted parity evidence for the current additive Swift migration scope,
 including the final security, persistence, macOS archive smoke, and
-adversarial-review handoff. Production packaging still remains on
-TypeScript/Bun until a separate release cutover updates the Homebrew formula
-and production archive source. Completed focused migration slices are archived
-under `impl-plans/completed/`, including
+adversarial-review handoff. The dedicated production cutover changed
+`packaging/homebrew/swift-cutover-gates.json` to
+`productionRuntime=swift-native`,
+`homebrewFormulaSource=swift-executable-archive`, and
+`allowsProductionCutover=true`, while GitHub release upload and Homebrew tap
+pushes remain operator actions. Completed focused migration slices are
+archived under `impl-plans/completed/`, including
 `impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md`
 for the final parity/security/cutover handoff,
 `impl-plans/completed/swift-native-migration-task-007-cli-parity.md` for the
@@ -74,8 +78,11 @@ rielflow --help
 ```
 
 The installed binary is `rielflow`.
-Built-in add-ons are bundled into the installed command; they do not require a
-separate add-on package install.
+On macOS, the current Homebrew formula installs the Swift-native executable
+archive. Built-in add-ons are bundled into the installed command; they do not
+require a separate add-on package install. Linux Homebrew archives are
+intentionally unsupported for this cutover until a reviewed Swift Linux build
+contract exists.
 
 ### Run With Bun
 
@@ -109,9 +116,12 @@ Homebrew, Nix, or the source-checkout commands above.
 
 ### Swift Migration Development
 
-On the `swift-migration` branch, the SwiftPM package is additive and does not
-replace the TypeScript/Bun runtime yet. The repository-owned local agent
-backends remain stable as workflow `executionBackend` strings:
+On the `swift-migration` branch, the SwiftPM package is additive, and the
+branch-local production Homebrew path now installs the Swift-native macOS
+executable. The TypeScript/Bun source path remains available for development,
+compatibility checks, and workflows that have not yet been moved to a reviewed
+Swift production surface. The repository-owned local agent backends remain
+stable as workflow `executionBackend` strings:
 `codex-agent`, `claude-code-agent`, and `cursor-cli-agent`; the Swift targets
 that currently map them are `CodexAgent`, `ClaudeCodeAgent`, and
 `CursorCLIAgent`.
@@ -193,10 +203,10 @@ applies the merged payload to adapter input before execution. Output-contract
 validation fails closed for malformed JSON, invalid envelopes, malformed
 schema definitions, schema failures, `completionPassed: false`, and
 unsupported transition shapes such as cross-workflow, resume-step, and fanout
-transitions. The Swift implementation remains an additive parity slice; the
-TypeScript/Bun runtime is still the production fallback until later validation,
-inspect, deterministic run, package, event, GraphQL, hook, adapter, SQLite,
-and Homebrew parity gates pass.
+transitions. The Swift implementation remains additive inside the repository,
+but the production Homebrew packaging cutover now uses the accepted Swift
+macOS executable archives after the TASK-009 parity gates and dedicated
+release cutover evidence passed.
 
 The TASK-006 Swift contract slice adds deterministic compatibility surfaces in
 `RielflowAddons`, `RielflowEvents`, `RielflowHook`, `RielflowGraphQL`, and
@@ -238,9 +248,10 @@ CLI still does not replace release packaging, registry-backed run mutation,
 remote `--endpoint` execution, live gateways, live server loops, or live agent
 credential requirements.
 
-The TASK-008 Swift packaging readiness slice defines the pre-cutover artifact
-contract without changing production installs. The Swift release executable is
-the `rielflow` SwiftPM product built through Xcode SwiftPM:
+The TASK-008 Swift packaging readiness slice defined the pre-cutover artifact
+contract. The dedicated production release packaging cutover now builds the
+Homebrew macOS archives from the same `rielflow` SwiftPM product through Xcode
+SwiftPM:
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
@@ -249,16 +260,16 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
     build -c release --product rielflow --show-bin-path
 ```
 
-Local Swift readiness archives are staged only under
+Historical local Swift readiness archives are staged only under
 `dist/swift-homebrew/work/rielflow-<version>-darwin-<arch>/bin/rielflow` and
 archived as `dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz`
 or `dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz`, each with a
-matching `.sha256` sidecar. Current production Homebrew archives remain the
-TypeScript/Bun artifacts under `dist/homebrew/rielflow-<version>-<target>.tar.gz`.
-TASK-009 accepted the final Swift parity, security, archive-smoke, and
-adversarial-review handoff, but Homebrew stays on the Bun formula until a
-dedicated release cutover deliberately changes the production archive source.
-The local readiness helper is:
+matching `.sha256` sidecar. Current branch production Homebrew archives are
+Swift executable archives under
+`dist/homebrew/rielflow-<version>-darwin-arm64.tar.gz` and
+`dist/homebrew/rielflow-<version>-darwin-x64.tar.gz`, each installing
+`bin/rielflow` plus `README.md`. Linux Homebrew remains fail-closed for this
+cutover. Historical readiness helpers remain:
 
 ```bash
 RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64
@@ -297,9 +308,16 @@ found no high or mid findings in workflow session
 `riel-codex-design-and-implement-review-loop-1781261544-53db3135`. The
 TypeScript/Bun fallback validation from the implementation run remained
 `bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project`.
-Keep using the Bun commands in this README for the production runtime until
-the production release packaging cutover deliberately switches the Homebrew
-formula source from Bun archives to Swift archives.
+The dedicated production packaging cutover then passed
+`RIEL_VERSION=0.0.0-cutover scripts/build-homebrew-release.sh --dry-run darwin-arm64 darwin-x64`,
+`RIEL_VERSION=0.1.15 scripts/build-homebrew-release.sh darwin-arm64 darwin-x64`,
+archive listing, checksum validation from `dist/homebrew`,
+`scripts/render-homebrew-formula.sh 0.1.15 Formula/rielflow.rb`, formula and
+checksum leakage checks, focused Swift CLI tests, archived Swift workflow
+usage smokes for arm64 and x64, and local Homebrew install/test smoke. The
+accepted review fixed `comm-000020` and `comm-000024`; no high or mid findings
+remained. Use Homebrew for the Swift-native macOS install path and Bun only
+for source-checkout development or explicit TypeScript/Bun validation.
 
 ### Optional LLM Agent Setup
 

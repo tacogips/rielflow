@@ -686,6 +686,118 @@ Codex-reference mapping:
   envelopes, readiness categories, and runtime-owned publication semantics stay
   compatible.
 
+## Branch Production Swift Homebrew Release Cutover
+
+The dedicated branch-local release packaging cutover is the first step after
+TASK-009 acceptance that may change production Homebrew packaging defaults. Its
+scope is narrower than runtime migration: it switches the release artifact and
+formula source from Bun-compiled archives to Swift executable archives while
+preserving the existing CLI command name, workflow behavior, and installer
+payload shape.
+
+Cutover inputs:
+
+- `impl-plans/completed/swift-native-migration.md` and
+  `impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md`
+  are accepted evidence that the Swift runtime parity gates have completed.
+- `packaging/homebrew/swift-cutover-gates.json` is the machine-readable source
+  for cutover readiness. At cutover start, all non-review gates are passed, but
+  `productionRuntime` is still `typescript-bun`, `homebrewFormulaSource` is
+  still `bun-archive`, `allowsProductionCutover` is still `false`, and
+  `task009-adversarial-review` is blocked only because production Homebrew has
+  not yet been switched.
+- The existing production release scripts and formula renderer are the behavior
+  boundary: the new production Swift path must produce archives and checksums
+  that the renderer can consume without relying on the pre-cutover readiness
+  directory.
+
+Production artifact contract:
+
+- The production runtime marker becomes `swift-native`, and the formula source
+  marker becomes `swift-executable-archive` or an equivalent explicit Swift
+  archive value after the dedicated cutover verification passes.
+- Production archives move to `dist/homebrew` and keep the installer-visible
+  archive shape `bin/rielflow` plus `README.md`. The command installed by
+  Homebrew remains `rielflow`.
+- Production Swift archive names should use the existing release naming
+  convention consumed by the formula renderer:
+
+  ```text
+  dist/homebrew/rielflow-<version>-darwin-arm64.tar.gz
+  dist/homebrew/rielflow-<version>-darwin-x64.tar.gz
+  ```
+
+- Linux release archive behavior must fail closed until there is an explicit
+  Swift Linux build contract. The cutover must not silently keep Bun-built Linux
+  archives while marking the overall production runtime as Swift.
+- Each production archive must have a sibling `.sha256` sidecar generated from
+  the archive basename in the archive directory, with no machine-local absolute
+  path leakage.
+
+Formula and script behavior:
+
+- The production Homebrew formula renderer reads `dist/homebrew` checksums and
+  emits macOS URLs for Swift executable archives. The formula description should
+  no longer describe the installed tool as TypeScript/Bun once the cutover is
+  accepted.
+- `RIEL_RELEASE_BASE_URL` remains the only URL-base override for local formula
+  smoke tests and release upload staging.
+- The Swift readiness builder remains historical cutover evidence unless it is
+  intentionally collapsed into the production release builder. Production
+  scripts must be dry-run friendly where practical, deterministic, explicit
+  about artifact directories, and free of release upload or tap mutation side
+  effects.
+- GitHub release upload and Homebrew tap commits remain operator actions after
+  archive and formula verification. The cutover may update scripts and docs for
+  those actions, but must not perform publication during verification.
+
+Gate manifest transition:
+
+- The dedicated cutover may resolve the `task009-adversarial-review` blocked
+  state because TASK-009 review already accepted with no high or mid findings
+  in workflow session
+  `riel-codex-design-and-implement-review-loop-1781261544-53db3135`.
+- `allowsProductionCutover` may become `true` only when production archive
+  generation, formula rendering, local formula smoke, manifest JSON validation,
+  and source/path leakage checks pass in the current branch.
+- Historical TASK-009 evidence should remain readable in
+  `packaging/homebrew/swift-cutover-gates.json`; the dedicated release cutover
+  should add or update a separate production cutover evidence block rather than
+  erasing the prior readiness trail.
+
+Required production cutover verification:
+
+- `git diff --check`
+- `jq empty packaging/homebrew/swift-cutover-gates.json`
+- Swift toolchain version through the explicit Xcode Swift path
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test`
+- production Swift archive dry-run, when available
+- production Swift archive build for `darwin-arm64` on an arm64 macOS host and
+  `darwin-x64` on an x64 macOS host or other explicitly supported deterministic
+  builder
+- `tar -tzf` for every produced production archive, proving the payload is only
+  `./`, `./bin/`, `./bin/rielflow`, and `./README.md`
+- checksum validation for every produced production archive
+- repository search against checksum files and generated formula proving no
+  `/Users/`, `/home/`, or current checkout path appears
+- local Homebrew formula render using `RIEL_RELEASE_BASE_URL="file://$PWD/dist/homebrew"`
+- `brew install`, `brew test`, `rielflow --help`, and at least one
+  deterministic workflow command through the installed formula when Homebrew is
+  available; otherwise record the missing Homebrew tool as a blocker, not a
+  passed gate
+
+Rollout constraints:
+
+- This cutover changes branch production packaging defaults only; it does not
+  delete TypeScript/Bun source, remove fallback test coverage, publish GitHub
+  releases, or push tap changes.
+- If any production archive, formula, checksum, or Homebrew smoke gate remains
+  blocked, `allowsProductionCutover` stays `false` and the production runtime
+  marker must not claim Swift production.
+- Cursor-specific behavior remains isolated in `CursorCLIAgent`; release
+  packaging must not add Cursor CLI modes, stream handling, auth checks, or
+  `official/cursor-sdk` behavior to provider-neutral packaging scripts.
+
 ## Data Flow
 
 The Swift runtime should keep the same high-level execution flow as the TypeScript runtime:
@@ -706,14 +818,17 @@ Swift code should avoid introducing a second workflow contract. Existing workflo
 3. Port adapter dispatch and local agent subprocess wrappers, including `codex-agent`, `claude-code-agent`, and `cursor-cli-agent` as independent Swift targets.
 4. Port runtime storage, workflow execution, node add-ons, and event sources behind the same public contracts.
 5. Replace the CLI entry point only after Swift runtime can validate, inspect, and run deterministic mock workflows.
-6. Switch release packaging and Homebrew artifacts to the Swift executable after parity gates pass.
+6. Switch branch production release packaging and Homebrew artifacts to the
+   Swift executable after TASK-009 parity gates pass and the dedicated
+   production archive/formula gates pass.
 
 Cutover constraints:
 
 - TypeScript/Bun remains the fallback runtime until Swift can pass fixture parity for validation, inspect, deterministic run, package validation, event trigger dry-runs, GraphQL manager control, hook context parsing, and adapter output normalization.
 - Swift packaging must not replace release artifacts until the Swift executable
-  path, macOS archive names, Homebrew preview path, and smoke tests are updated,
-  verified, and accepted by TASK-009 adversarial review.
+  path, macOS archive names, production `dist/homebrew` archive path, Homebrew
+  formula source, and smoke tests are updated and verified by the dedicated
+  production cutover after TASK-009 acceptance.
 - Swift target names can use Swift-style PascalCase, but public backend strings, workflow JSON fields, package identifiers, and documented CLI behavior must remain stable.
 - The migration should not include a native macOS UI in the runtime parity milestone. UI design can begin after CLI/runtime parity is testable.
 
@@ -734,6 +849,12 @@ Each migrated package needs:
   `packaging/homebrew/swift-cutover-gates.json`,
   `scripts/build-swift-homebrew-readiness.sh`, archive naming, `.sha256`
   sidecars, and the absence of production publishing side effects.
+- Dedicated release cutover checks for production Swift archives under
+  `dist/homebrew`, generated formula URLs and checksums, local formula install
+  or explicit Homebrew-tool blocker, and
+  `packaging/homebrew/swift-cutover-gates.json` transitioning
+  `productionRuntime`, `homebrewFormulaSource`, and `allowsProductionCutover`
+  only after evidence is recorded.
 
 The current branch has been verified with Xcode Swift 6.3.2 by setting `DEVELOPER_DIR` and `SDKROOT` to `/Applications/Xcode.app`; `swift test` passed 197 tests for the current Swift scaffold, model validation, adapter, runtime publication, deterministic CLI, package/event/GraphQL/server contracts, and packaging-readiness coverage. Default `swift` lookup can still point at a Nix Apple SDK path, so use the Xcode toolchain command recorded in the implementation plan until local toolchain selection is fixed.
 
@@ -753,5 +874,4 @@ Open user decisions are tracked in `design-docs/user-qa/qa-swift-native-migratio
 Known unresolved decisions:
 
 - whether the replacement milestone is CLI/runtime parity only, or also includes a native macOS UI
-- the exact parity threshold for switching release packaging from TypeScript/Bun to Swift
 - whether to vendor local source from the three repository-owned agent packages or continue mapping behavior from package pins and TypeScript adapters until dedicated Swift references exist

@@ -1068,6 +1068,219 @@
         }
       }
     },
+    "completed/swift-homebrew-production-cutover": {
+      "phase": 195,
+      "status": "Completed",
+      "path": "impl-plans/completed/swift-homebrew-production-cutover.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md#branch-production-swift-homebrew-release-cutover; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md#release-cutover-threshold",
+      "workflowMode": "issue-resolution",
+      "issueReference": "tacogips/rielflow; issue title: Switch branch production packaging from Bun archives to Swift executable archives; no issueUrl or issueNumber supplied",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastPlanningNode": "step4-impl-plan-create",
+      "codexAgentReference": "Preferred ../../codex-agent root unavailable; adjacent ../codex-agent remains reference-only. Use current Rielflow packaging scripts, TASK-009 evidence, Swift runtime tests, and pinned package contracts as behavior references; do not copy codex-agent source.",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "completed/swift-native-migration:TASK-009",
+            "completed/swift-native-migration-task-009-final-cutover-gate:TASK-009F"
+          ]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-004"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "git status --short --branch",
+        "git diff --check",
+        "jq empty impl-plans/PROGRESS.json",
+        "jq empty packaging/homebrew/swift-cutover-gates.json",
+        "bash -n scripts/build-homebrew-release.sh && bash -n scripts/render-homebrew-formula.sh",
+        "RIEL_VERSION=0.0.0-cutover scripts/build-homebrew-release.sh --dry-run darwin-arm64 darwin-x64",
+        "RIEL_VERSION=0.0.0-cutover scripts/build-homebrew-release.sh --dry-run linux-x64",
+        "RIEL_VERSION=0.1.15 scripts/build-homebrew-release.sh darwin-arm64 darwin-x64",
+        "scripts/render-homebrew-formula.sh 0.1.15 Formula/rielflow.rb",
+        "tar -tzf dist/homebrew/rielflow-0.1.15-darwin-arm64.tar.gz && tar -tzf dist/homebrew/rielflow-0.1.15-darwin-x64.tar.gz",
+        "(cd dist/homebrew && shasum -a 256 -c rielflow-0.1.15-darwin-arm64.tar.gz.sha256 && shasum -a 256 -c rielflow-0.1.15-darwin-x64.tar.gz.sha256)",
+        "! rg -n \"/Users/|/home/|$(pwd)\" dist/homebrew/*.sha256 Formula/rielflow.rb",
+        "brew tap-new local/rielflow-test",
+        "RIEL_RELEASE_BASE_URL=\"file://$PWD/dist/homebrew\" scripts/render-homebrew-formula.sh 0.1.15 \"$tap_root/Formula/rielflow.rb\"",
+        "brew install local/rielflow-test/rielflow",
+        "brew test local/rielflow-test/rielflow",
+        "rielflow --help",
+        "rielflow workflow validate codex-design-and-implement-review-loop --scope project --output json",
+        "brew uninstall rielflow",
+        "brew untap local/rielflow-test",
+        "bun run typecheck:server",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter SwiftPackagingReadinessTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "rg -n \"TypeScript/Bun remains the production runtime|NOT_STARTED|\\[ \\]\" Sources/RielflowCLI/WorkflowCommands.swift Tests/RielflowCLITests/WorkflowCommandTests.swift impl-plans/completed/swift-homebrew-production-cutover.md",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowCommandTests/testTopLevelHelpReturnsSuccessfulSmokeOutput",
+        "arch -x86_64 dist/homebrew/work/rielflow-0.1.15-darwin-x64/bin/rielflow --help",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter CommandParsingTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowCommandTests/testUsageSupportsAddonSmokeWorkflow",
+        "dist/homebrew/work/rielflow-0.1.15-darwin-arm64/bin/rielflow workflow usage matrix-chat-reply --workflow-definition-dir ./examples --output json",
+        "arch -x86_64 dist/homebrew/work/rielflow-0.1.15-darwin-x64/bin/rielflow workflow usage matrix-chat-reply --workflow-definition-dir ./examples --output json",
+        "rielflow workflow usage matrix-chat-reply --workflow-definition-dir ./examples --output json",
+        "brew install tacogips/tap/rielflow",
+        "nl -ba Formula/rielflow.rb | sed -n '64,72p'; nl -ba scripts/render-homebrew-formula.sh | sed -n '126,137p'",
+        "brew install local/rielflow-test/rielflow && brew test local/rielflow-test/rielflow && rielflow workflow usage matrix-chat-reply --workflow-definition-dir ./examples --output json",
+        "git diff --check && jq empty impl-plans/PROGRESS.json && jq empty packaging/homebrew/swift-cutover-gates.json"
+      ],
+      "dependencies": [
+        "completed/swift-native-migration:TASK-009",
+        "completed/swift-native-migration-task-009-final-cutover-gate:TASK-009F",
+        "packaging/homebrew/swift-cutover-gates.json",
+        "scripts/build-homebrew-release.sh",
+        "scripts/render-homebrew-formula.sh",
+        "Formula/rielflow.rb"
+      ],
+      "parallelizableTasks": [
+        "TASK-001 is parallelizable at plan start after completed cross-plan prerequisites.",
+        "TASK-002 and TASK-003 are sequential because the builder contract determines formula checksum inputs and both tasks can touch packaging documentation.",
+        "TASK-004 and TASK-005 are sequential because they mutate cutover gate evidence and plan progress state."
+      ],
+      "addressedFeedback": [
+        {
+          "nodeId": "step3-design-review",
+          "communication": "comm-000005",
+          "severity": "accepted",
+          "finding": "Design accepted with no high or mid findings; implementation planning must cover productionRuntime, homebrewFormulaSource, allowsProductionCutover, TASK-009 review unblock, Swift production archives, formula rendering, smoke checks, and no publication side effects.",
+          "resolution": "Created focused branch-local production cutover plan with archive, formula, gate-manifest, smoke, leakage, and release-handoff tasks."
+        },
+        {
+          "nodeId": "step4-impl-plan-self-review",
+          "communication": "comm-000007",
+          "severity": "plan-only-fixed",
+          "finding": "Initial plan let TASK-004 imply final production marker updates before TASK-005 local Homebrew smoke, and used an ad hoc formula-path brew install command instead of the documented local tap smoke flow.",
+          "resolution": "Re-scoped TASK-004 to prepare evidence and docs while preserving top-level production markers until TASK-005 passes; replaced smoke commands with brew tap-new, tap formula render, brew install/test local/rielflow-test/rielflow, uninstall, and untap."
+        },
+        {
+          "nodeId": "step5-impl-plan-review",
+          "communication": "comm-000008",
+          "severity": "mid-fixed",
+          "file": "impl-plans/completed/swift-homebrew-production-cutover.md",
+          "finding": "Verification only built and checksummed darwin-arm64 even though accepted design and artifact contract require darwin-arm64 and darwin-x64 evidence or explicit blocked-target evidence before production marker transition.",
+          "resolution": "Added darwin-x64 dry-run, build, tar payload, checksum, and gate-manifest evidence requirements; TASK-005 now keeps productionRuntime=typescript-bun, homebrewFormulaSource=bun-archive, and allowsProductionCutover=false when either macOS target is blocked."
+        },
+        {
+          "nodeId": "step5-impl-plan-review",
+          "communication": "comm-000008",
+          "severity": "low-fixed",
+          "file": "impl-plans/completed/swift-homebrew-production-cutover.md; impl-plans/PROGRESS.json",
+          "finding": "Parallelization guidance allowed TASK-002 and TASK-003 concurrency while task metadata marked both non-parallelizable.",
+          "resolution": "Aligned narrative and PROGRESS.json by documenting TASK-002 and TASK-003 as sequential because builder outputs determine formula checksum inputs and both can touch packaging documentation."
+        },
+        {
+          "nodeId": "step6-implement",
+          "communication": null,
+          "severity": "implemented",
+          "file": "scripts/build-homebrew-release.sh; scripts/render-homebrew-formula.sh; Formula/rielflow.rb; packaging/homebrew/swift-cutover-gates.json; packaging/homebrew/README.md; Sources/RielflowCore/SwiftPackagingReadiness.swift; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; impl-plans/completed/swift-homebrew-production-cutover.md; impl-plans/PROGRESS.json",
+          "finding": "Accepted plan required branch-local production Homebrew packaging to switch from Bun archives to Swift executable archives after TASK-009 acceptance.",
+          "resolution": "Implemented Swift production archive planning, builder cutover, macOS-only formula rendering, local Homebrew smoke, leakage checks, and cutover gate marker transition to swift-native / swift-executable-archive / allowsProductionCutover=true."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000015",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Swift packaged CLI help and its regression test still said TypeScript/Bun remains the production runtime until cutover gates pass after production markers switched to Swift.",
+          "resolution": "Updated rielflowCLIHelpText to state Swift CLI is the production Homebrew runtime and Linux Homebrew remains unsupported until a reviewed Swift Linux build contract exists; updated testTopLevelHelpReturnsSuccessfulSmokeOutput to assert the new message and reject the stale TypeScript/Bun production fallback sentence."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000015",
+          "severity": "low-fixed",
+          "file": "impl-plans/completed/swift-homebrew-production-cutover.md",
+          "finding": "Per-module plan sections still showed NOT_STARTED and unchecked checklist rows despite completed task tables and progress log.",
+          "resolution": "Changed per-module sections to COMPLETED and checked TASK-001 through TASK-005 checklist rows; added Step 7 review fix progress log entry."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000020",
+          "severity": "mid-fixed",
+          "file": "Formula/rielflow.rb; scripts/render-homebrew-formula.sh; Sources/RielflowCLI/RielflowCommand.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/CommandParsingTests.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift; packaging/homebrew/swift-cutover-gates.json; impl-plans/completed/swift-homebrew-production-cutover.md; impl-plans/PROGRESS.json",
+          "finding": "Formula test only asserted rielflow --help, allowing a Swift archive that rejects the required built-in add-on workflow usage smoke to pass brew test.",
+          "resolution": "Added workflow usage parser and dispatch support, restored the formula test to create an addon-smoke workflow with rielflow/chat-reply-worker and assert workflow usage JSON output, added parser and CLI regression tests, rebuilt archives, and recorded archived binary workflow usage smoke evidence for both macOS targets."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000020",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/RielflowCommand.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Packaged binary still presented as a migration CLI and narrow surface while formula/gates marked Swift as the production Homebrew runtime.",
+          "resolution": "Changed --version to 0.1.15, changed help text to Rielflow CLI with Swift production Homebrew runtime wording, added workflow usage to the supported command list, and kept Linux Homebrew explicitly unsupported until a reviewed Swift Linux build contract exists."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000024",
+          "severity": "mid-fixed",
+          "file": "Formula/rielflow.rb; scripts/render-homebrew-formula.sh; packaging/homebrew/swift-cutover-gates.json; impl-plans/completed/swift-homebrew-production-cutover.md; impl-plans/PROGRESS.json",
+          "finding": "The restored Homebrew built-in add-on smoke assertion did not match Swift JSON output containing escaped slash `rielflow\\/chat-reply-worker`, so brew test could fail while gate evidence recorded homebrewSmoke.status=passed and allowsProductionCutover=true.",
+          "resolution": "Confirmed Formula/rielflow.rb renders `assert_match %r{rielflow\\\\?/chat-reply-worker}, usage` and scripts/render-homebrew-formula.sh emits the same escaped-slash-tolerant regex, reran local Homebrew install/test plus workflow usage smoke, and kept cutover gate evidence passed only after the smoke passed."
+        }
+      ],
+      "risks": [
+        "Linux Homebrew remains unsupported until a reviewed Swift Linux build contract exists.",
+        "GitHub release upload and tacogips/homebrew-tap mutation were intentionally not performed by Step 6.",
+        "Homebrew smoke temporarily uninstalled the pre-existing rielflow formula, cleaned up the local tap, and restored tacogips/tap/rielflow 0.1.15 afterward."
+      ],
+      "lastImplementationNode": "step6-implement-rerun-after-step7-review-comm-000024",
+      "productionCutoverEvidence": {
+        "result": "passed",
+        "version": "0.1.15",
+        "productionRuntime": "swift-native",
+        "homebrewFormulaSource": "swift-executable-archive",
+        "allowsProductionCutover": true,
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "archivePath": "dist/homebrew/rielflow-0.1.15-darwin-arm64.tar.gz",
+            "checksumPath": "dist/homebrew/rielflow-0.1.15-darwin-arm64.tar.gz.sha256",
+            "checksum": "08bc9c49e1bae879237b398ef6174045187da1a7eeb70ae2931ef6f23179d224"
+          },
+          {
+            "target": "darwin-x64",
+            "archivePath": "dist/homebrew/rielflow-0.1.15-darwin-x64.tar.gz",
+            "checksumPath": "dist/homebrew/rielflow-0.1.15-darwin-x64.tar.gz.sha256",
+            "checksum": "ac4d3683e5a77a51b0808ab93badcc548b452893ca1ea147f01dcf8715908e40"
+          }
+        ],
+        "homebrewSmoke": "passed_with_escaped_slash_tolerant_formula_built_in_addon_usage_smoke",
+        "releaseSideEffectsPerformed": false,
+        "archivedWorkflowUsageSmoke": "passed"
+      }
+    },
     "completed/sqlite-only-node-io-mailbox-removal": {
       "phase": 194,
       "status": "Completed",

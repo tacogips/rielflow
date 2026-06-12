@@ -89,6 +89,12 @@ Current direction:
   `ClaudeCodeAgent`, and `CursorCLIAgent` targets while TypeScript/Bun remains
   the production runtime until parity gates pass. See
   `design-docs/specs/design-swift-native-migration.md`.
+- After TASK-009 acceptance, the dedicated branch production cutover may switch
+  Homebrew packaging from Bun archives to Swift executable archives only when
+  production `dist/homebrew` archives, formula rendering, checksums, local
+  smoke verification, and `packaging/homebrew/swift-cutover-gates.json` all
+  record passed evidence. Publication to GitHub releases and tap pushes remain
+  operator actions outside verification.
 - The Swift TASK-005 runtime slice keeps session mutation, candidate-path
   handling, output validation, accepted output publication, and downstream
   workflow message creation on the runtime side of the boundary. Swift

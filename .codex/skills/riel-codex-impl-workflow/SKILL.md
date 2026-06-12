@@ -343,6 +343,32 @@ checksum sidecar, and archived Swift binary `--help`, `workflow validate`,
 TypeScript/Bun runtime and production Homebrew formula as the user-facing
 install path until the release cutover explicitly changes them.
 
+For the 2026-06-12 dedicated `swift-migration` release cutover run, Step 7
+adversarial review accepted branch-local production Homebrew packaging with no
+high or mid findings after fixes for `comm-000020` and `comm-000024`. The
+accepted implementation changes `packaging/homebrew/swift-cutover-gates.json`
+to `productionRuntime=swift-native`,
+`homebrewFormulaSource=swift-executable-archive`, and
+`allowsProductionCutover=true`; renders `Formula/rielflow.rb` as a Swift-native
+macOS formula for version `0.1.15`; builds production archives under
+`dist/homebrew/rielflow-0.1.15-darwin-arm64.tar.gz` and
+`dist/homebrew/rielflow-0.1.15-darwin-x64.tar.gz`; and keeps Linux Homebrew
+fail-closed until a reviewed Swift Linux build contract exists. Release upload,
+tap repository mutation, and TypeScript/Bun source removal remain excluded
+operator actions. Accepted verification included
+`RIEL_VERSION=0.0.0-cutover scripts/build-homebrew-release.sh --dry-run darwin-arm64 darwin-x64`,
+`RIEL_VERSION=0.0.0-cutover scripts/build-homebrew-release.sh --dry-run linux-x64`,
+`RIEL_VERSION=0.1.15 scripts/build-homebrew-release.sh darwin-arm64 darwin-x64`,
+archive listing and checksum validation from `dist/homebrew`,
+`scripts/render-homebrew-formula.sh 0.1.15 Formula/rielflow.rb`, machine-local
+path leakage checks, focused Swift CLI tests, archived Swift workflow usage
+smokes for arm64 and x64, and local Homebrew install/test smoke. Keep issue
+references explicit when no GitHub issue number is supplied, preserve
+`codex-agent` as an execution-backend identifier, and document that the
+Homebrew user-facing macOS install path is now the Swift-native executable
+archive while Bun commands remain source-checkout development and fallback
+validation paths.
+
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via
 an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; workflow message payloads

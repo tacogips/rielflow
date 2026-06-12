@@ -1,14 +1,13 @@
 # Homebrew Packaging
 
-`rielflow` Homebrew releases install a standalone executable built with
-`bun build --compile`. The published archive contains `bin/rielflow`, and the
-Bun runtime plus built-in add-on implementation are bundled into that binary.
-Homebrew does not need a runtime dependency on Bun or a separate add-on package.
+`rielflow` Homebrew releases install a standalone Swift executable built with
+Xcode SwiftPM. The published macOS archive contains `bin/rielflow`. Homebrew
+does not need a runtime dependency on Bun or a separate add-on package.
 
 Build release archives:
 
 ```bash
-scripts/build-homebrew-release.sh darwin-arm64 darwin-x64 linux-arm64 linux-x64
+scripts/build-homebrew-release.sh darwin-arm64 darwin-x64
 ```
 
 The command writes archives and checksum files under `dist/homebrew/`:
@@ -16,8 +15,6 @@ The command writes archives and checksum files under `dist/homebrew/`:
 ```text
 rielflow-<version>-darwin-arm64.tar.gz
 rielflow-<version>-darwin-x64.tar.gz
-rielflow-<version>-linux-arm64.tar.gz
-rielflow-<version>-linux-x64.tar.gz
 ```
 
 Each archive contains:
@@ -33,8 +30,6 @@ Create or update the GitHub release named `v<version>` with those archives:
 gh release create "v<version>" \
   dist/homebrew/rielflow-<version>-darwin-arm64.tar.gz \
   dist/homebrew/rielflow-<version>-darwin-x64.tar.gz \
-  dist/homebrew/rielflow-<version>-linux-arm64.tar.gz \
-  dist/homebrew/rielflow-<version>-linux-x64.tar.gz \
   --repo tacogips/rielflow \
   --title "rielflow v<version>" \
   --notes ""
@@ -46,8 +41,6 @@ If the release already exists, upload or replace the assets with:
 gh release upload "v<version>" \
   dist/homebrew/rielflow-<version>-darwin-arm64.tar.gz \
   dist/homebrew/rielflow-<version>-darwin-x64.tar.gz \
-  dist/homebrew/rielflow-<version>-linux-arm64.tar.gz \
-  dist/homebrew/rielflow-<version>-linux-x64.tar.gz \
   --repo tacogips/rielflow \
   --clobber
 ```
@@ -95,22 +88,26 @@ RIEL_RELEASE_BASE_URL="file://$PWD/dist/homebrew" \
   scripts/render-homebrew-formula.sh <version> "$tap_root/Formula/rielflow.rb"
 brew install local/rielflow-test/rielflow
 brew test local/rielflow-test/rielflow
-rielflow workflow usage --scope user --output json
+rielflow workflow usage matrix-chat-reply --workflow-definition-dir ./examples --output json
 brew uninstall rielflow
 brew untap local/rielflow-test
 ```
 
-## Swift TASK-008/TASK-009 Readiness Archives
+Linux Homebrew archives are fail-closed for this cutover. The formula renderer
+does not read Linux checksum files and generated formulas do not reference
+stale TypeScript/Bun Linux archive URLs. Add Linux only after a reviewed Swift
+Linux build contract defines targets, archive contents, checksum evidence, and
+formula behavior.
 
-The production Homebrew path above remains the TypeScript/Bun release path until
-a dedicated release cutover switches the formula source. TASK-008 prepares
-local Swift readiness artifacts and blocked cutover gates. TASK-009 records
-deterministic gate evidence for the current branch, and its adversarial
-implementation review was accepted with no high or mid findings in workflow
-session `riel-codex-design-and-implement-review-loop-1781261544-53db3135`.
-These tasks do not publish release assets, commit tap changes, replace
-`dist/homebrew`, remove TypeScript/Bun packaging, or make Swift the default
-install source.
+## Swift Readiness And Production Cutover Archives
+
+TASK-008 prepared local Swift readiness artifacts and blocked cutover gates.
+TASK-009 recorded deterministic gate evidence for the current branch, and its
+adversarial implementation review was accepted with no high or mid findings in
+workflow session
+`riel-codex-design-and-implement-review-loop-1781261544-53db3135`. The release
+cutover now uses Swift archives under `dist/homebrew`; release upload and tap
+mutation remain separate operator actions.
 
 The Swift executable product is still named `rielflow`. Resolve the release
 binary path with Xcode SwiftPM:
@@ -122,7 +119,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
     build -c release --product rielflow --show-bin-path
 ```
 
-Swift readiness archives are staged separately from production Bun archives:
+Historical Swift readiness archives remain staged separately from production
+archives:
 
 ```text
 dist/swift-homebrew/work/rielflow-<version>-darwin-arm64/bin/rielflow
@@ -146,9 +144,10 @@ tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz
 ```
 
 Cutover gates are recorded in `packaging/homebrew/swift-cutover-gates.json`.
-For TASK-009, non-review gates may be marked passed only when that manifest
-records the exact local command, fixture or archive path, and result. The
-manifest keeps `productionRuntime` as `typescript-bun`,
-`homebrewFormulaSource` as `bun-archive`, and `allowsProductionCutover` as
-`false` until a release cutover intentionally enables Swift archives for
-production Homebrew.
+For TASK-009, non-review gates were marked passed only when that manifest
+recorded the exact local command, fixture or archive path, and result. The
+dedicated release cutover marked `productionRuntime` as `swift-native`,
+`homebrewFormulaSource` as `swift-executable-archive`, and
+`allowsProductionCutover` as `true` after both macOS targets had archive,
+checksum, formula, Homebrew smoke, deterministic workflow, and leakage
+evidence.

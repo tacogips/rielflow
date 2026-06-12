@@ -42,6 +42,19 @@ final class CommandParsingTests: XCTestCase {
       XCTFail("expected inspect command")
     }
 
+    let usage = try parser.parse([
+      "workflow", "usage", "demo",
+      "--workflow-definition-dir", "./examples",
+      "--output", "json",
+    ])
+    if case let .workflow(.usage(options)) = usage {
+      XCTAssertEqual(options.workflowName, "demo")
+      XCTAssertEqual(options.resolution.workflowDefinitionDir, "./examples")
+      XCTAssertEqual(options.output, .json)
+    } else {
+      XCTFail("expected usage command")
+    }
+
     let run = try parser.parse([
       "workflow", "run", "demo",
       "--variables", #"{"topic":"swift"}"#,

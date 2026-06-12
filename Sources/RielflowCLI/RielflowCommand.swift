@@ -1,7 +1,7 @@
 import Foundation
 import RielflowCore
 
-public let rielflowSwiftMigrationVersion = "0.1.15-swift-migration"
+public let rielflowSwiftMigrationVersion = "0.1.15"
 
 public enum CLIExitCode: Int32, Codable, Equatable, Sendable {
   case success = 0
@@ -30,6 +30,7 @@ public enum RielflowCommand: Equatable, Sendable {
 public enum WorkflowCommand: Equatable, Sendable {
   case validate(WorkflowValidateOptions)
   case inspect(WorkflowInspectOptions)
+  case usage(WorkflowInspectOptions)
   case run(WorkflowRunOptions)
 }
 
@@ -181,6 +182,8 @@ public struct RielflowArgumentParser: CLIArgumentParsing {
       return .workflow(.validate(try parseValidate(target: target, tokens: optionTokens)))
     case "inspect":
       return .workflow(.inspect(try parseInspect(target: target, tokens: optionTokens)))
+    case "usage":
+      return .workflow(.usage(try parseInspect(target: target, tokens: optionTokens)))
     case "run":
       return .workflow(.run(try parseRun(target: target, tokens: optionTokens)))
     default:

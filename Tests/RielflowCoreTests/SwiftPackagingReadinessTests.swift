@@ -37,14 +37,57 @@ final class SwiftPackagingReadinessTests: XCTestCase {
     )
   }
 
-  func testCutoverGateManifestKeepsProductionCutoverBlocked() throws {
+  func testProductionArchivePlanUsesHomebrewNamesAndStagingPaths() {
+    let arm64 = makeSwiftHomebrewProductionArchivePlan(
+      version: "0.1.15",
+      target: .darwinArm64
+    )
+    let x64 = makeSwiftHomebrewProductionArchivePlan(
+      version: "0.1.15",
+      target: .darwinX64
+    )
+
+    XCTAssertEqual(arm64.executableProduct, "rielflow")
+    XCTAssertEqual(arm64.releaseDirectory, "dist/homebrew")
+    XCTAssertEqual(arm64.target.triple, "arm64-apple-macosx")
+    XCTAssertEqual(x64.target.triple, "x86_64-apple-macosx")
+    XCTAssertEqual(
+      arm64.stagedBinaryPath,
+      "dist/homebrew/work/rielflow-0.1.15-darwin-arm64/bin/rielflow"
+    )
+    XCTAssertEqual(
+      arm64.archivePath,
+      "dist/homebrew/rielflow-0.1.15-darwin-arm64.tar.gz"
+    )
+    XCTAssertEqual(
+      arm64.checksumPath,
+      "dist/homebrew/rielflow-0.1.15-darwin-arm64.tar.gz.sha256"
+    )
+    XCTAssertEqual(
+      x64.archivePath,
+      "dist/homebrew/rielflow-0.1.15-darwin-x64.tar.gz"
+    )
+    XCTAssertFalse(arm64.archivePath.contains("rielflow-swift-"))
+    XCTAssertFalse(arm64.publishSideEffects)
+    XCTAssertFalse(x64.publishSideEffects)
+  }
+
+  func testSupportedProductionTargetsAreMacOSOnly() {
+    XCTAssertEqual(
+      SwiftHomebrewProductionTarget.allCases.map(\.rawValue),
+      ["darwin-arm64", "darwin-x64"]
+    )
+  }
+
+  func testCutoverGateManifestRecordsProductionCutover() throws {
     let rootURL = try repositoryRoot()
     let manifestURL = rootURL.appendingPathComponent("packaging/homebrew/swift-cutover-gates.json")
     let data = try Data(contentsOf: manifestURL)
     let manifest = try JSONDecoder().decode(SwiftCutoverGateManifest.self, from: data)
 
-    XCTAssertEqual(manifest.productionRuntime, "typescript-bun")
-    XCTAssertEqual(manifest.swiftArtifactStatus, "cutover-evidence-ready-review-blocked")
+    XCTAssertEqual(manifest.productionRuntime, "swift-native")
+    XCTAssertEqual(manifest.swiftArtifactStatus, "production-cutover-enabled")
+    XCTAssertEqual(manifest.homebrewFormulaSource, "swift-executable-archive")
     XCTAssertEqual(manifest.swiftReadinessArchiveDirectory, "dist/swift-homebrew")
     XCTAssertEqual(manifest.currentProductionArchiveDirectory, "dist/homebrew")
     XCTAssertEqual(
@@ -54,13 +97,15 @@ final class SwiftPackagingReadinessTests: XCTestCase {
         "rielflow-swift-<version>-darwin-x64.tar.gz",
       ]
     )
-    XCTAssertFalse(manifest.allowsProductionCutover)
+    XCTAssertTrue(manifest.allowsProductionCutover)
     XCTAssertTrue(manifest.gates.count >= 10)
-    XCTAssertTrue(manifest.gates.allSatisfy { $0.status == "passed" || $0.status == "blocked" })
-    XCTAssertEqual(manifest.gates.filter { $0.id == "task009-adversarial-review" }.map(\.status), ["blocked"])
-    XCTAssertTrue(manifest.gates.filter { $0.id != "task009-adversarial-review" }.allSatisfy { $0.status == "passed" })
+    XCTAssertTrue(manifest.gates.allSatisfy { $0.status == "passed" })
+    XCTAssertEqual(manifest.gates.filter { $0.id == "task009-adversarial-review" }.map(\.status), ["passed"])
     XCTAssertTrue(manifest.gates.allSatisfy(\.requiredBeforeCutover))
     XCTAssertTrue(manifest.gates.allSatisfy(\.forbidsProductionMutation))
+    XCTAssertEqual(manifest.productionCutoverEvidence?.intendedProductionRuntime, "swift-native")
+    XCTAssertEqual(manifest.productionCutoverEvidence?.intendedHomebrewFormulaSource, "swift-executable-archive")
+    XCTAssertEqual(manifest.productionCutoverEvidence?.productionArchiveDirectory, "dist/homebrew")
   }
 
   func testReadinessScriptDoesNotExecuteProductionPublishingCommands() throws {
@@ -118,15 +163,67 @@ final class SwiftPackagingReadinessTests: XCTestCase {
     XCTAssertTrue(result.stderr.contains("unsafe Swift readiness release directory"))
   }
 
+  func testProductionBuilderUsesSwiftAndRejectsLinuxTargets() throws {
+    let rootURL = try repositoryRoot()
+    let scriptURL = rootURL.appendingPathComponent("scripts/build-homebrew-release.sh")
+    let script = try String(contentsOf: scriptURL, encoding: .utf8)
+
+    XCTAssertTrue(script.contains("--dry-run"))
+    XCTAssertTrue(script.contains("swift build -c release --product rielflow"))
+    XCTAssertTrue(script.contains("--triple"))
+    XCTAssertTrue(script.contains("rielflow-$version-$target.tar.gz"))
+    XCTAssertFalse(script.contains("bun build"))
+    XCTAssertFalse(script.contains("--target \"bun-$target\""))
+    XCTAssertFalse(script.contains("gh release"))
+    XCTAssertFalse(script.contains("git push"))
+    XCTAssertFalse(script.contains("brew tap"))
+
+    let result = try runProductionBuilder(
+      rootURL: rootURL,
+      environment: ["RIEL_VERSION": "0.0.0-cutover"],
+      arguments: ["--dry-run", "linux-x64"]
+    )
+    XCTAssertNotEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stderr.contains("unsupported Swift production target"))
+  }
+
+  func testProductionBuilderWritesPortableChecksumSidecars() throws {
+    let rootURL = try repositoryRoot()
+    let scriptURL = rootURL.appendingPathComponent("scripts/build-homebrew-release.sh")
+    let script = try String(contentsOf: scriptURL, encoding: .utf8)
+
+    XCTAssertTrue(script.contains("base=\"$(basename \"$file\")\""))
+    XCTAssertTrue(script.contains("shasum -a 256 \"$base\""))
+    XCTAssertTrue(script.contains("sha256sum \"$base\""))
+    XCTAssertFalse(script.contains("shasum -a 256 \"$file\""))
+    XCTAssertFalse(script.contains("sha256sum \"$file\""))
+  }
+
+  func testFormulaRendererRequiresOnlyMacOSChecksumsAndFailsLinuxClosed() throws {
+    let rootURL = try repositoryRoot()
+    let scriptURL = rootURL.appendingPathComponent("scripts/render-homebrew-formula.sh")
+    let script = try String(contentsOf: scriptURL, encoding: .utf8)
+
+    XCTAssertTrue(script.contains("darwin-arm64"))
+    XCTAssertTrue(script.contains("darwin-x64"))
+    XCTAssertFalse(script.contains("linux_arm64_sha"))
+    XCTAssertFalse(script.contains("linux_x64_sha"))
+    XCTAssertFalse(script.contains("rielflow-$version-linux"))
+    XCTAssertTrue(script.contains("Swift-native workflow runtime"))
+    XCTAssertTrue(script.contains("Swift Homebrew archives are currently macOS-only"))
+  }
+
 
   private struct SwiftCutoverGateManifest: Decodable {
     var productionRuntime: String
     var swiftArtifactStatus: String
+    var homebrewFormulaSource: String
     var currentProductionArchiveDirectory: String
     var swiftReadinessArchiveDirectory: String
     var swiftArchiveNames: [String]
     var allowsProductionCutover: Bool
     var gates: [SwiftCutoverGate]
+    var productionCutoverEvidence: SwiftProductionCutoverEvidence?
   }
 
   private struct SwiftCutoverGate: Decodable {
@@ -134,6 +231,12 @@ final class SwiftPackagingReadinessTests: XCTestCase {
     var status: String
     var requiredBeforeCutover: Bool
     var forbidsProductionMutation: Bool
+  }
+
+  private struct SwiftProductionCutoverEvidence: Decodable {
+    var intendedProductionRuntime: String
+    var intendedHomebrewFormulaSource: String
+    var productionArchiveDirectory: String
   }
 
   private struct ScriptResult {
@@ -150,6 +253,32 @@ final class SwiftPackagingReadinessTests: XCTestCase {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/bash")
     process.arguments = [rootURL.appendingPathComponent("scripts/build-swift-homebrew-readiness.sh").path] + arguments
+    process.currentDirectoryURL = rootURL
+    process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    try process.run()
+    process.waitUntilExit()
+
+    return ScriptResult(
+      exitCode: process.terminationStatus,
+      stdout: String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self),
+      stderr: String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    )
+  }
+
+  private func runProductionBuilder(
+    rootURL: URL,
+    environment: [String: String],
+    arguments: [String]
+  ) throws -> ScriptResult {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/bash")
+    process.arguments = [rootURL.appendingPathComponent("scripts/build-homebrew-release.sh").path] + arguments
     process.currentDirectoryURL = rootURL
     process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
 
