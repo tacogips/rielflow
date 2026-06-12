@@ -649,6 +649,8 @@ public struct RielflowCLIApplication: Sendable {
   public func run(_ arguments: [String]) async -> CLICommandResult {
     do {
       switch try parser.parse(arguments) {
+      case .help:
+        return CLICommandResult(exitCode: .success, stdout: rielflowCLIHelpText)
       case .version:
         return CLICommandResult(exitCode: .success, stdout: "\(rielflowSwiftMigrationVersion)\n")
       case let .workflow(.validate(options)):
@@ -724,6 +726,19 @@ public struct RielflowCLIApplication: Sendable {
     return arguments[2]
   }
 }
+
+public let rielflowCLIHelpText = """
+Rielflow Swift migration CLI
+
+Usage:
+  rielflow --version
+  rielflow workflow validate <workflow> [--scope project|user|auto] [--output json]
+  rielflow workflow inspect <workflow> [--scope project|user|auto] [--output json]
+  rielflow workflow run <workflow> --mock-scenario <path> [--output json]
+
+The Swift CLI is additive migration coverage. TypeScript/Bun remains the production runtime until cutover gates pass.
+
+"""
 
 func jsonString<T: Encodable>(_ value: T) throws -> String {
   let encoder = JSONEncoder()

@@ -24,7 +24,9 @@ proven. The branch currently includes Swift targets for `RielflowCore`,
 `impl-plans/active/swift-native-migration.md`. Completed focused migration
 slices are archived under `impl-plans/completed/`, including
 `impl-plans/completed/swift-native-migration-task-007-cli-parity.md` for the
-Swift CLI validate, inspect, and deterministic mock-run parity slice.
+Swift CLI validate, inspect, and deterministic mock-run parity slice and
+`impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`
+for the local-only Swift packaging readiness slice.
 
 ## What You Can Do
 
@@ -200,6 +202,33 @@ CLI still does not replace release packaging, registry-backed run mutation,
 remote `--endpoint` execution, live gateways, live server loops, or live agent
 credential requirements.
 
+The TASK-008 Swift packaging readiness slice defines the pre-cutover artifact
+contract without changing production installs. The Swift release executable is
+the `rielflow` SwiftPM product built through Xcode SwiftPM:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift \
+    build -c release --product rielflow --show-bin-path
+```
+
+Local Swift readiness archives are staged only under
+`dist/swift-homebrew/work/rielflow-<version>-darwin-<arch>/bin/rielflow` and
+archived as `dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz`
+or `dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz`, each with a
+matching `.sha256` sidecar. Current production Homebrew archives remain the
+TypeScript/Bun artifacts under `dist/homebrew/rielflow-<version>-<target>.tar.gz`.
+Homebrew stays on the Bun formula until TASK-009 accepts the full cutover after
+Swift validation, inspect, deterministic run, package, event, GraphQL, hook,
+adapter, SQLite persistence, macOS archive smoke, and adversarial review gates
+pass. The local readiness helper is:
+
+```bash
+RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64
+RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64
+```
+
 If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
 toolchain explicitly:
 
@@ -211,14 +240,17 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 188 tests for the current local-agent command-builder,
-bounded preflight, readiness, redaction, descriptor-isolation, official
-OpenAI/Anthropic SDK scaffold, TASK-005 in-memory runtime publication coverage,
-TASK-006 package/add-on/event/hook/GraphQL/server contract coverage, and
-TASK-007 Swift CLI validate/inspect/deterministic-run coverage. The same
-accepted run also passed focused Swift CLI and deterministic runner tests,
-Swift built-executable smoke checks for parseable JSON output, `git diff
---check`, and `jq empty impl-plans/PROGRESS.json`; the TypeScript/Bun fallback
+`swift test` passed 197 tests across the current local-agent command-builder,
+official OpenAI/Anthropic SDK scaffold, TASK-005 runtime publication coverage,
+TASK-006 package/add-on/event/hook/GraphQL/server contracts, TASK-007 Swift CLI
+validate/inspect/deterministic-run coverage, and TASK-008 packaging readiness
+coverage. The same accepted TASK-008 run passed `git diff --check`,
+`jq empty impl-plans/PROGRESS.json`,
+`jq empty packaging/homebrew/swift-cutover-gates.json`,
+`RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64`,
+`RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64`,
+archive listing, relocated `.sha256` verification from `dist/swift-homebrew`,
+and host-path rejection for the checksum sidecar. The TypeScript/Bun fallback
 validation from the implementation run remained
 `bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project`.
 Keep using the Bun commands in this README for the production runtime until

@@ -99,3 +99,50 @@ rielflow workflow usage --scope user --output json
 brew uninstall rielflow
 brew untap local/rielflow-test
 ```
+
+## Swift TASK-008 Readiness Archives
+
+The production Homebrew path above remains the TypeScript/Bun release path until
+TASK-009 accepts the final Swift cutover. TASK-008 only prepares local Swift
+readiness artifacts and closed cutover gates. It does not publish release
+assets, commit tap changes, replace `dist/homebrew`, remove TypeScript/Bun
+packaging, or make Swift the default install source.
+
+The Swift executable product is still named `rielflow`. Resolve the release
+binary path with Xcode SwiftPM:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift \
+    build -c release --product rielflow --show-bin-path
+```
+
+Swift readiness archives are staged separately from production Bun archives:
+
+```text
+dist/swift-homebrew/work/rielflow-<version>-darwin-arm64/bin/rielflow
+dist/swift-homebrew/work/rielflow-<version>-darwin-x64/bin/rielflow
+dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz
+dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz
+```
+
+Each archive contains `bin/rielflow` and `README.md`, and each archive must have
+a sibling `.sha256` file. Preview formula testing, when needed, must use only a
+local URL base such as `file://$PWD/dist/swift-homebrew` or unpublished CI
+artifacts.
+
+Build or inspect the local readiness archive plan:
+
+```bash
+RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64
+RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64
+tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz
+(cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz.sha256)
+```
+
+Cutover gates are recorded in `packaging/homebrew/swift-cutover-gates.json`.
+They remain blocked until the archived Swift executable passes validation,
+inspect, deterministic run, package validation, event dry-run, GraphQL
+manager-control, hook parsing, adapter normalization, SQLite persistence, macOS
+archive smoke, and TASK-009 adversarial review.

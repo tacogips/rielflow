@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "task": "TASK-008",
+  "productionRuntime": "typescript-bun",
+  "swiftArtifactStatus": "readiness-only",
+  "homebrewFormulaSource": "bun-archive",
+  "cutoverTask": "TASK-009",
+  "currentProductionArchiveDirectory": "dist/homebrew",
+  "swiftReadinessArchiveDirectory": "dist/swift-homebrew",
+  "swiftExecutableProduct": "rielflow",
+  "releaseBinPathCommand": [
+    "env",
+    "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer",
+    "SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift",
+    "build",
+    "-c",
+    "release",
+    "--product",
+    "rielflow",
+    "--show-bin-path"
+  ],
+  "stagedExecutablePathTemplate": "dist/swift-homebrew/work/rielflow-<version>-darwin-<arch>/bin/rielflow",
+  "swiftArchiveNames": [
+    "rielflow-swift-<version>-darwin-arm64.tar.gz",
+    "rielflow-swift-<version>-darwin-x64.tar.gz"
+  ],
+  "currentBunArchiveNames": [
+    "rielflow-<version>-darwin-arm64.tar.gz",
+    "rielflow-<version>-darwin-x64.tar.gz",
+    "rielflow-<version>-linux-arm64.tar.gz",
+    "rielflow-<version>-linux-x64.tar.gz"
+  ],
+  "archivePayload": [
+    "bin/rielflow",
+    "README.md"
+  ],
+  "checksumSidecar": "<archive>.sha256",
+  "previewFormulaUrlBase": "file://$PWD/dist/swift-homebrew",
+  "allowsProductionCutover": false,
+  "forbiddenTask008SideEffects": [
+    "publish GitHub release assets",
+    "commit or push tap formula changes",
+    "replace dist/homebrew Bun archives",
+    "make Swift the default Homebrew source",
+    "remove TypeScript/Bun runtime packaging"
+  ],
+  "gates": [
+    {
+      "id": "swift-workflow-validate",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "archived bin/rielflow workflow validate codex-design-and-implement-review-loop --scope project --output json",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-workflow-inspect",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "archived bin/rielflow workflow inspect codex-design-and-implement-review-loop --scope project --output json",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-deterministic-run",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "archived bin/rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --mock-scenario ./examples/worker-only-single-step/mock-scenario.json --output json",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-package-validation",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "Swift package manifest validation parity against local package fixtures",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-event-dry-run",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "Swift event source dry-run mapping parity against local fixtures",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-graphql-manager-control",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "Swift GraphQL manager-control DTO and mutation contract parity fixtures",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-hook-context",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "Swift hook context parsing and redaction fixture parity",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-adapter-output-normalization",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "Swift adapter output envelope normalization fixture parity",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-sqlite-persistence",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "Swift SQLite-backed session and workflow message persistence parity",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "swift-macos-archive-smoke",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "build readiness archive, verify sha256, extract, run --help, validate, inspect, and deterministic run",
+      "forbidsProductionMutation": true
+    },
+    {
+      "id": "task009-adversarial-review",
+      "status": "blocked",
+      "requiredBeforeCutover": true,
+      "verificationCommand": "TASK-009 adversarial implementation review accepts final cutover",
+      "forbidsProductionMutation": true
+    }
+  ]
+}

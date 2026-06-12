@@ -17,6 +17,7 @@ Source of truth:
 - `design-docs/specs/design-swift-native-migration.md#cursor-cli-behavior-boundary`
 - `design-docs/specs/design-swift-native-migration.md#task-005-runtime-session-message-store-and-publication-boundary`
 - `design-docs/specs/design-swift-native-migration.md#task-007-swift-cli-validate-inspect-and-deterministic-run-parity`
+- `design-docs/specs/design-swift-native-migration.md#task-008-packaging-and-homebrew-cutover-readiness-gates`
 - `design-docs/specs/design-swift-native-migration.md#migration-strategy`
 - `design-docs/specs/design-swift-native-migration.md#verification-gates`
 - `design-docs/specs/architecture.md`
@@ -63,7 +64,7 @@ Out of scope for this plan:
 - Workflow mode: `issue-resolution`
 - Workflow ID: `codex-design-and-implement-review-loop`
 - Current workflow session:
-  `riel-codex-design-and-implement-review-loop-1781219857-4913c906`
+  `riel-codex-design-and-implement-review-loop-1781250760-faba89fb`
 - Earlier TASK-005 workflow session:
   `riel-codex-design-and-implement-review-loop-1781211309-5fe4a54a`
 - Earlier TASK-004 workflow session:
@@ -71,21 +72,23 @@ Out of scope for this plan:
 - Current planning node: `step4-impl-plan-create`
 - Repository: `tacogips/rielflow`
 - Issue title:
-  `Implement Swift CLI parity commands for workflow validate inspect and deterministic mock run`
+  `Prepare Swift packaging and cutover readiness gates`
 - GitHub issue: none supplied by runtime input
 - Branch: `swift-migration`
 - Risk level: high; adversarial implementation review required before cutover
 
 Workflow execution note:
 
-- Current TASK-007 planning run
-  `riel-codex-design-and-implement-review-loop-1781236891-1de96adf` scopes the
-  next implementation step to additive Swift `workflow validate`,
-  `workflow inspect`, and deterministic local `workflow run` parity.
-- Step 3 design review accepted the TASK-007 design update with no findings.
+- Current TASK-008 planning run
+  `riel-codex-design-and-implement-review-loop-1781250760-faba89fb` scopes the
+  next implementation step to Swift packaging and Homebrew cutover readiness
+  gates without release publication or production cutover.
+- Step 3 design review accepted the TASK-008 design update with no findings in
+  the supplied workflow input.
 - The previous TASK-004 adapter parity, TASK-005 runtime publication, and
   TASK-006 contract slices remain completed and are not reopened by this plan
-  revision.
+  revision. TASK-007 CLI parity is complete and archived at
+  `impl-plans/completed/swift-native-migration-task-007-cli-parity.md`.
 
 ## Codex Agent References
 
@@ -139,6 +142,10 @@ Intentional divergences accepted by design:
 - Swift adapters may normalize provider output, but runtime output publication,
   candidate-path handling, workflow message delivery, and output validation stay
   runtime-owned.
+- TASK-008 Swift readiness archives intentionally use
+  `rielflow-swift-<version>-darwin-<arch>.tar.gz` names under
+  `dist/swift-homebrew/` so they cannot be confused with Bun production
+  `dist/homebrew/rielflow-<version>-...` archives before cutover.
 
 ## Modules
 
@@ -381,7 +388,7 @@ public protocol WorkflowSessionStore: Sendable {
 #### `Sources/RielflowServer/*`
 #### `Tests/*`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```swift
 public protocol AddonExecuting: Sendable {
@@ -419,10 +426,10 @@ public enum RielflowCLICommand: Equatable, Sendable {
 
 **Checklist**:
 
-- [ ] Implement `workflow validate` using Swift validation contracts.
-- [ ] Implement `workflow inspect` using Swift workflow loading contracts.
-- [ ] Implement deterministic `workflow run` without live agent calls.
-- [ ] Keep TypeScript CLI fallback documented until parity gates pass.
+- [x] Implement `workflow validate` using Swift validation contracts.
+- [x] Implement `workflow inspect` using Swift workflow loading contracts.
+- [x] Implement deterministic `workflow run` without live agent calls.
+- [x] Keep TypeScript CLI fallback documented until parity gates pass.
 
 ### 8. Packaging And Release Cutover Readiness
 
@@ -430,8 +437,10 @@ public enum RielflowCLICommand: Equatable, Sendable {
 #### `packaging/homebrew/*`
 #### `README.md`
 #### `design-docs/user-qa/qa-swift-native-migration.md`
+#### `.codex/skills/riel-codex-impl-workflow/SKILL.md`
+#### `impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```swift
 public struct SwiftReleaseArtifact: Equatable, Sendable {
@@ -443,11 +452,12 @@ public struct SwiftReleaseArtifact: Equatable, Sendable {
 
 **Checklist**:
 
-- [ ] Define Swift executable artifact path and archive naming.
-- [ ] Keep Homebrew cutover blocked until validation, inspect, run, package,
+- [x] Create focused TASK-008 implementation plan for packaging readiness.
+- [x] Define Swift executable artifact path and archive naming.
+- [x] Keep Homebrew cutover blocked until validation, inspect, run, package,
       event, GraphQL, hook, adapter, and macOS archive gates pass.
-- [ ] Refresh user-facing docs for the final cutover contract.
-- [ ] Do not remove TypeScript release path until adversarial review accepts
+- [x] Refresh user-facing docs for the final cutover contract.
+- [x] Do not remove TypeScript release path until adversarial review accepts
       the cutover.
 
 ## Module Status
@@ -460,8 +470,8 @@ public struct SwiftReleaseArtifact: Equatable, Sendable {
 | Backend-faithful agent and official SDK adapters | `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*` | COMPLETED | `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed 65 tests for local-agent command builders, bounded preflights, Cursor/Codex stream normalization, Codex argv option termination, descriptor isolation, configured-secret redaction, readiness parity, and official OpenAI/Anthropic SDK scaffold |
 | Runtime session and message publication | `Sources/RielflowCore/*`, `Sources/RielflowCLI/*` | COMPLETED | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed 93 tests for TASK-005 in-memory runtime APIs |
 | Add-on, package, event, hook, GraphQL, and server boundaries | `Sources/RielflowAddons/*`, `Sources/RielflowEvents/*`, `Sources/RielflowHook/*`, `Sources/RielflowGraphQL/*`, `Sources/RielflowServer/*` | COMPLETED | `Tests/RielflowAddonsTests/*`, `Tests/RielflowEventsTests/*`, `Tests/RielflowHookTests/*`, `Tests/RielflowGraphQLTests/*`, `Tests/RielflowServerTests/*`; Xcode Swift 6.3.2 `swift test` passed 125 tests |
-| CLI parity slice | `Sources/RielflowCLI/main.swift` | NOT_STARTED | `Tests/RielflowCLITests/*` |
-| Packaging and release cutover readiness | `packaging/homebrew/*`, `README.md`, `design-docs/user-qa/qa-swift-native-migration.md` | NOT_STARTED | macOS archive smoke checks |
+| CLI parity slice | `Sources/RielflowCLI/main.swift` | COMPLETED | `Tests/RielflowCLITests/*`; Xcode Swift 6.3.2 `swift test` passed 188 tests for TASK-007 |
+| Packaging and release cutover readiness | `packaging/homebrew/*`, `README.md`, `design-docs/user-qa/qa-swift-native-migration.md`, `.codex/skills/riel-codex-impl-workflow/SKILL.md`, `impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md` | COMPLETED | TASK-008 readiness script, gate manifest, deterministic Swift tests, and macOS archive smoke checks passed |
 
 ## Task Breakdown
 
@@ -666,20 +676,25 @@ deterministic run work remains traceable to the accepted design.
 
 ### TASK-008: Wire Packaging And Documentation Cutover Gates
 
-**Status**: Not Started
+**Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `packaging/homebrew/*`, `README.md`, `design-docs/user-qa/qa-swift-native-migration.md`
+**Deliverables**: `packaging/homebrew/*`, `README.md`, `design-docs/user-qa/qa-swift-native-migration.md`, `.codex/skills/riel-codex-impl-workflow/SKILL.md`, `impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`
 **Dependencies**: TASK-007
 
 **Description**:
 Prepare, but do not execute, release packaging cutover from TypeScript/Bun to
-Swift executable artifacts.
+Swift executable artifacts. Implementation detail is split into the focused
+TASK-008 plan so the parent migration plan stays navigable while artifact
+paths, archive naming, Homebrew preview gates, fallback docs, and deterministic
+packaging checks remain traceable to the accepted design.
 
 **Completion Criteria**:
 
-- [ ] macOS Swift archive path and executable name are documented.
-- [ ] Homebrew cutover remains blocked until all parity gates pass.
-- [ ] User-facing docs explain fallback and cutover constraints.
+- [x] Focused plan exists at
+      `impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`.
+- [x] macOS Swift archive path and executable name are documented.
+- [x] Homebrew cutover remains blocked until all parity gates pass.
+- [x] User-facing docs explain fallback and cutover constraints.
 
 ### TASK-009: Final Parity, Security, And Adversarial Review Handoff
 
@@ -740,6 +755,12 @@ TASK-007 is split into the focused plan
 plan, CLI parser setup and deterministic mock runner work may run in parallel
 because their write scopes are disjoint. Validate and inspect command work may
 run in parallel only after shared workflow resolution is accepted.
+TASK-008 is split into the focused plan
+`impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`.
+Within that plan, docs/skill fallback guidance and gate manifest work may run
+in parallel only if write scopes stay disjoint. Archive builder or dry-run
+surface work, deterministic readiness tests, and progress evidence are
+sequential because they share the artifact contract and verification outputs.
 
 ## Verification Plan
 
@@ -813,6 +834,20 @@ Cutover checks:
 - GraphQL manager-control inspection parity.
 - Hook context parsing parity.
 - macOS archive smoke test before Homebrew switch.
+- TASK-008 planning check:
+  `rg -n "TASK-008|rielflow-swift-|dist/swift-homebrew|TypeScript/Bun remains" impl-plans/active/swift-native-migration.md impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md README.md packaging/homebrew/README.md design-docs/user-qa/qa-swift-native-migration.md .codex/skills/riel-codex-impl-workflow/SKILL.md`.
+- TASK-008 implementation checks:
+  `RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64`;
+  `RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64`;
+  `tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz`;
+  `(cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz.sha256)`;
+  `! rg -n "/Users/|/home/|$(pwd)" dist/swift-homebrew/rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz.sha256`;
+  archived `bin/rielflow --help`, `workflow validate`, `workflow inspect`, and
+  deterministic `workflow run --mock-scenario` smokes.
+- No-publish side-effect check:
+  `rg -n "gh release|git push|brew tap|render-homebrew-formula|Formula/rielflow.rb" scripts/build-swift-homebrew-readiness.sh packaging/homebrew/swift-cutover-gates.json packaging/homebrew/README.md`
+  with any matches confirmed as documentation-only preview or explicit
+  forbidden-action text.
 
 Current environment note:
 
@@ -845,6 +880,88 @@ Current environment note:
       change status.
 
 ## Progress Log
+
+### Session: 2026-06-12 18:35
+
+**Tasks Completed**: TASK-008 Step 8 documentation refresh after accepted
+implementation and adversarial review.
+**Tasks In Progress**: None for TASK-008 implementation.
+**Blockers**: None for TASK-008. Final Homebrew cutover remains blocked until
+TASK-009 accepts parity, security, SQLite persistence, macOS archive smoke, and
+adversarial review.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000022`
+accepted the checksum-sidecar remediation with no remaining high or mid
+findings.
+**Notes**: README and workflow skill guidance now record accepted TASK-008
+verification: Xcode Swift 6.3.2 `swift test` passed 197 tests, TypeScript/Bun
+fallback checks passed, the Swift readiness archive verified from
+`dist/swift-homebrew`, and checksum sidecars reject host paths.
+
+### Session: 2026-06-12 18:22
+
+**Tasks Completed**: TASK-008 Step 7 adversarial review revision for portable
+checksum sidecars.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-008 implementation.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000017`
+reported one mid finding: generated `.sha256` sidecars recorded absolute host
+archive paths.
+**Notes**: The readiness script now writes checksum sidecars from the archive
+directory with the archive basename, and verification covers relocated
+`shasum -c` from `dist/swift-homebrew` plus absence of `/Users/`, `/home/`, and
+repository-absolute paths in the sidecar.
+
+### Session: 2026-06-12 18:05
+
+**Tasks Completed**: TASK-008 Step 7 review revision for unsafe
+`RIEL_VERSION` path construction.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-008 implementation.
+**Review Feedback Addressed**: Step 7 review `comm-000012` reported one mid
+finding: malformed `RIEL_VERSION` could escape the Swift readiness release
+directory before `rm -rf`, copy, tar, or checksum writes.
+**Notes**: The readiness script now validates versions, checks containment, and
+has deterministic Swift and shell verification for rejected version and
+release-directory traversal values.
+
+### Session: 2026-06-12 17:55
+
+**Tasks Completed**: TASK-008 self-review status alignment.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-008 implementation.
+**Review Feedback Addressed**: Self-review found stale TASK-008 status rows in
+the parent plan module table and `impl-plans/README.md`; both now show
+`In Review` instead of pre-implementation `Ready`.
+**Notes**: No high or mid self-review findings remain for TASK-008.
+
+### Session: 2026-06-12 17:45
+
+**Tasks Completed**: TASK-008 implementation. Added local-only Swift readiness
+archive planning and build surfaces, blocked cutover gate manifest,
+deterministic Swift packaging readiness tests, README/Homebrew/QA/design/skill
+documentation updates, and parent/focused plan progress updates.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-008 implementation. Final Swift Homebrew cutover
+remains blocked until TASK-009 parity, security, persistence, macOS archive
+smoke, and adversarial review pass.
+**Review Feedback Addressed**: Step 5 implementation-plan review accepted
+TASK-008 with no high or mid findings in the supplied workflow input.
+**Notes**: Swift readiness artifacts are distinct from Bun production archives:
+`dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz` and
+`dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz` stage
+`bin/rielflow` from Xcode SwiftPM. TypeScript/Bun remains the documented
+production fallback and Homebrew source.
+
+### Session: 2026-06-12 17:10
+
+**Tasks Completed**: TASK-008 focused implementation plan creation.
+**Tasks In Progress**: TASK-008 parent plan/progress alignment.
+**Blockers**: None for planning. Implementation must still preserve the
+TypeScript/Bun production fallback and avoid release/tap mutation.
+**Review Feedback Addressed**: Step 3 design review accepted the TASK-008
+design update with no high or mid findings in the supplied workflow input. No
+Step 5 implementation-plan feedback was present for this first TASK-008
+planning attempt.
 
 ### Session: 2026-06-11 00:00
 

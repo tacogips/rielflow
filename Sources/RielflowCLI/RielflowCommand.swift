@@ -22,6 +22,7 @@ public enum WorkflowScope: String, Codable, Sendable {
 }
 
 public enum RielflowCommand: Equatable, Sendable {
+  case help
   case version
   case workflow(WorkflowCommand)
 }
@@ -157,6 +158,9 @@ public struct RielflowArgumentParser: CLIArgumentParsing {
   public init() {}
 
   public func parse(_ arguments: [String]) throws -> RielflowCommand {
+    if arguments == ["--help"] || arguments == ["-h"] || arguments == ["help"] {
+      return .help
+    }
     if arguments.isEmpty || arguments == ["--version"] || arguments == ["version"] {
       return .version
     }

@@ -248,17 +248,40 @@ containment with symlink checks, and TypeScript/Bun mock-scenario sequence
 parity based on execution index and validation attempt. The focused TASK-007
 implementation plan is archived at
 `impl-plans/completed/swift-native-migration-task-007-cli-parity.md`; the
-parent Swift migration plan remains active for TASK-002, TASK-003, TASK-008,
-and TASK-009. Keep the slice deterministic and local until later cutover gates:
+parent Swift migration plan remains active for TASK-002, TASK-003, and TASK-009.
+Keep the slice deterministic and local until later cutover gates:
 do not replace the
 TypeScript/Bun production CLI, mutate package checkout or registry state, run
 remote `--endpoint` workflows, start live gateways or servers, require live
 agent credentials, allocate communication ids in CLI code, or move
 Cursor-specific behavior into shared CLI or `RielflowCore` concepts. Residual
 low risks remain: TASK-002 and TASK-003 remain in progress, release/Homebrew
-cutover remains deferred to TASK-008, direct `--workflow-definition-dir` runs
+cutover remains deferred to TASK-009, direct `--workflow-definition-dir` runs
 remain caller-trusted local input, and default `swift` lookup may still require
 the Xcode `DEVELOPER_DIR`/`SDKROOT` override.
+
+For the 2026-06-12 TASK-008 `swift-migration` run, Step 7 adversarial review
+accepted Swift packaging readiness after the checksum sidecar fix. Keep the
+slice additive and local-only. The Swift executable artifact is the `rielflow`
+SwiftPM product discovered with Xcode
+`swift build -c release --product rielflow --show-bin-path`, staged at
+`dist/swift-homebrew/work/rielflow-<version>-darwin-<arch>/bin/rielflow`, and
+archived as `dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz`
+or `dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz` with
+portable basename-only `.sha256` sidecars. Production Homebrew remains on the
+TypeScript/Bun archives under
+`dist/homebrew/rielflow-<version>-<target>.tar.gz`; do not tag, publish GitHub
+release assets, update `tacogips/homebrew-tap`, run production formula
+rendering, remove TypeScript/Bun packaging, or make Swift production by
+default. The TASK-008 cutover manifest is
+`packaging/homebrew/swift-cutover-gates.json`; all final Homebrew cutover gates
+remain blocked until TASK-009 accepts parity, security, persistence, macOS
+archive smoke, and adversarial review. Accepted verification included Xcode
+Swift 6.3.2 `swift test` passing 197 tests, `bun run typecheck:server`,
+`bun run lint:biome`, TypeScript/Bun workflow validation, dry-run and real
+`scripts/build-swift-homebrew-readiness.sh` checks, archive listing, relocated
+checksum verification from `dist/swift-homebrew`, and host-path rejection in
+the `.sha256` sidecar.
 
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via

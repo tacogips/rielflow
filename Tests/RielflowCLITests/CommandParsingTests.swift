@@ -2,6 +2,11 @@ import XCTest
 @testable import RielflowCLI
 
 final class CommandParsingTests: XCTestCase {
+  func testParsesTopLevelHelp() throws {
+    XCTAssertEqual(try RielflowArgumentParser().parse(["--help"]), .help)
+    XCTAssertEqual(try RielflowArgumentParser().parse(["-h"]), .help)
+  }
+
   func testParsesValidateInspectAndRunOptions() throws {
     let parser = RielflowArgumentParser()
 

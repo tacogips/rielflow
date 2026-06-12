@@ -46,6 +46,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `swift-native-migration-task-008-packaging-cutover-readiness` | 2026-06-12 | `design-swift-native-migration#task-008-packaging-and-homebrew-cutover-readiness-gates` |
 | `swift-native-migration-task-007-cli-parity` | 2026-06-12 | `design-swift-native-migration#task-007-swift-cli-validate-inspect-and-deterministic-run-parity`, `command#swift-native-migration-cli-parity` |
 | `swift-native-migration-task-006-contracts` | 2026-06-12 | `design-swift-native-migration#task-006-package-add-on-event-hook-graphql-and-server-contract-boundary` |
 | `swift-native-migration-task-005-runtime-session` | 2026-06-12 | `design-swift-native-migration#task-005-runtime-session-message-store-and-publication-boundary` |

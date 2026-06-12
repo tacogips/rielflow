@@ -4,6 +4,15 @@ import XCTest
 @testable import RielflowCLI
 
 final class WorkflowCommandTests: XCTestCase {
+  func testTopLevelHelpReturnsSuccessfulSmokeOutput() async {
+    let result = await RielflowCLIApplication().run(["--help"])
+
+    XCTAssertEqual(result.exitCode, .success)
+    XCTAssertTrue(result.stderr.isEmpty)
+    XCTAssertTrue(result.stdout.contains("workflow validate"))
+    XCTAssertTrue(result.stdout.contains("TypeScript/Bun remains the production runtime"))
+  }
+
   func testValidateInspectAndDeterministicRunWorkerFixture() async throws {
     let root = repositoryRoot()
     let app = RielflowCLIApplication()
