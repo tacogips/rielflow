@@ -21,8 +21,11 @@ proven. The branch currently includes Swift targets for `RielflowCore`,
 `RielflowServer`, `RielflowHook`, `CodexAgent`, `ClaudeCodeAgent`,
 `CursorCLIAgent`, and the `rielflow` executable; see
 `design-docs/specs/design-swift-native-migration.md` and
-`impl-plans/active/swift-native-migration.md`. Completed focused migration
-slices are archived under `impl-plans/completed/`, including
+`impl-plans/active/swift-native-migration.md`. TASK-002 and TASK-003 are now
+complete for the current additive Swift migration scope; TASK-009 remains the
+final parity, security, persistence, macOS archive smoke, and cutover review
+gate before any production switch. Completed focused migration slices are
+archived under `impl-plans/completed/`, including
 `impl-plans/completed/swift-native-migration-task-007-cli-parity.md` for the
 Swift CLI validate, inspect, and deterministic mock-run parity slice and
 `impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`
@@ -137,6 +140,35 @@ and official SDK adapter tests use injected process runners, readiness probes,
 request executors, or HTTP transports with synthetic responses; they do not
 require live local CLI tools, provider credentials, or network access.
 
+The TASK-002/TASK-003 Swift prerequisite closure adds prompt rendering, prompt
+asset loading, and output-envelope parity needed before TASK-009. Swift
+`renderPromptTemplate` now matches the TypeScript/Bun placeholder contract for
+`{{ path }}` dotted object traversal: strings render unchanged, booleans and
+numbers render as scalar text, arrays and objects render as compact JSON,
+missing or null values render as an empty string, and unsupported placeholder
+syntax stays literal. Number formatting follows the TypeScript/Bun fixed
+decimal thresholds, including `0.000001` for `1e-6`, exponential output for
+`1e-7`, and decimal output for `1e20`.
+
+Prompt template asset loading supports `systemPromptTemplateFile`,
+`promptTemplateFile`, and `sessionStartPromptTemplateFile` on top-level agent
+payloads and prompt variants. Paths are workflow-relative only; empty paths,
+absolute paths, Windows drive-letter paths, `.` or `..` segments, symlink
+escapes, `workflow.json`, and canonical `node-*.json` targets fail
+deterministically. Hydration preserves the authored file-reference fields while
+populating the inline templates used for execution.
+
+Swift adapter output normalization now covers output-contract envelopes without
+moving publication ownership into backend adapters. When no node output
+contract is present, provider text remains provider text even when it looks
+like JSON. When a contract is present, provider text must yield a JSON object
+candidate; `when` must be an object of booleans, `payload` must be an object,
+and `completionPassed` must be a boolean when supplied. Candidate extraction
+ignores braces inside quoted and escaped string content. Runtime-owned
+candidate-path handling, output validation, accepted output artifacts, workflow
+message publication, communication ids, and final root output selection remain
+outside backend adapters.
+
 The TASK-005 Swift runtime slice adds deterministic in-memory
 `RielflowCore` APIs for runtime-owned workflow sessions, step executions,
 workflow message records, message input resolution, candidate-path staging,
@@ -240,11 +272,16 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 197 tests across the current local-agent command-builder,
+`swift test` passed 209 tests across the current prompt rendering and prompt
+asset loading contracts, output-envelope normalization, local-agent command-builder,
 official OpenAI/Anthropic SDK scaffold, TASK-005 runtime publication coverage,
 TASK-006 package/add-on/event/hook/GraphQL/server contracts, TASK-007 Swift CLI
 validate/inspect/deterministic-run coverage, and TASK-008 packaging readiness
-coverage. The same accepted TASK-008 run passed `git diff --check`,
+coverage. The accepted TASK-002/TASK-003 closure passed focused Swift prompt,
+deterministic-runner, adapter-utility, and resolver tests, the JavaScript
+reference checks for `String(number)` and `JSON.stringify(number)` thresholds,
+`jq empty impl-plans/PROGRESS.json`, and `git diff --check`. The accepted
+TASK-008 run passed `git diff --check`,
 `jq empty impl-plans/PROGRESS.json`,
 `jq empty packaging/homebrew/swift-cutover-gates.json`,
 `RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64`,

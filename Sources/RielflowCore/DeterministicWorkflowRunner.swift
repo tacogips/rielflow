@@ -110,17 +110,28 @@ public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
       }
       let executionIndex = (executionCounts[step.id] ?? 0) + 1
       executionCounts[step.id] = executionIndex
-      var executionPayload = basePayload
+      var executionPayload = try payload(basePayload, applyingPromptVariantFrom: step)
       executionPayload.id = step.id
       let resolvedInput = try await inputResolver.resolveInput(for: session.sessionId, stepId: step.id, store: store)
-      let adapterInput = resolvedInput.applying(
-        to: AdapterExecutionInput(
-          node: executionPayload,
-          promptText: step.description ?? request.workflow.description,
-          systemPromptText: request.workflow.prompts?.workerSystemPromptTemplate,
-          arguments: request.variables,
-          mergedVariables: request.variables
-        )
+      let mergedVariables = promptVariables(
+        workflow: request.workflow,
+        step: step,
+        payload: executionPayload,
+        requestVariables: request.variables,
+        resolvedInputPayload: resolvedInput.payload
+      )
+      let prompts = composedPrompts(
+        workflow: request.workflow,
+        step: step,
+        payload: executionPayload,
+        variables: mergedVariables
+      )
+      let adapterInput = AdapterExecutionInput(
+        node: executionPayload,
+        promptText: prompts.promptText,
+        systemPromptText: prompts.systemPromptText,
+        arguments: request.variables,
+        mergedVariables: mergedVariables
       )
       let transitions = step.transitions ?? []
       let publishResult = try await executeAndPublish(
@@ -268,6 +279,88 @@ public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
     max(1, output?.maxValidationAttempts ?? 1)
   }
 
+  private func payload(_ basePayload: AgentNodePayload, applyingPromptVariantFrom step: WorkflowStepRef) throws -> AgentNodePayload {
+    guard let promptVariantName = step.promptVariant else {
+      return basePayload
+    }
+    guard let promptVariant = basePayload.promptVariants?[promptVariantName] else {
+      throw DeterministicWorkflowRunnerError.missingPromptVariant(step.id, promptVariantName)
+    }
+
+    var payload = basePayload
+    if promptVariant.systemPromptTemplate != nil || promptVariant.systemPromptTemplateFile != nil {
+      payload.systemPromptTemplate = promptVariant.systemPromptTemplate
+      payload.systemPromptTemplateFile = promptVariant.systemPromptTemplateFile
+    }
+    if promptVariant.promptTemplate != nil || promptVariant.promptTemplateFile != nil {
+      payload.promptTemplate = promptVariant.promptTemplate
+      payload.promptTemplateFile = promptVariant.promptTemplateFile
+    }
+    if promptVariant.sessionStartPromptTemplate != nil || promptVariant.sessionStartPromptTemplateFile != nil {
+      payload.sessionStartPromptTemplate = promptVariant.sessionStartPromptTemplate
+      payload.sessionStartPromptTemplateFile = promptVariant.sessionStartPromptTemplateFile
+    }
+    return payload
+  }
+
+  private func promptVariables(
+    workflow: WorkflowDefinition,
+    step: WorkflowStepRef,
+    payload: AgentNodePayload,
+    requestVariables: JSONObject,
+    resolvedInputPayload: JSONObject
+  ) -> JSONObject {
+    var variables = payload.variables
+    for (key, value) in requestVariables {
+      variables[key] = value
+    }
+    for (key, value) in resolvedInputPayload {
+      variables[key] = value
+    }
+    variables["workflowId"] = .string(workflow.workflowId)
+    variables["workflowDescription"] = .string(workflow.description)
+    variables["nodeId"] = .string(step.id)
+    variables["nodeKind"] = .string(step.role?.rawValue ?? "task")
+    return variables
+  }
+
+  private func composedPrompts(
+    workflow: WorkflowDefinition,
+    step: WorkflowStepRef,
+    payload: AgentNodePayload,
+    variables: JSONObject
+  ) -> (promptText: String, systemPromptText: String?) {
+    let fallbackPrompt = step.description ?? workflow.description
+    let usesConfiguredPromptTemplate = payload.promptTemplate != nil
+    let promptTemplate = payload.promptTemplate ?? fallbackPrompt
+    let sessionStartPrompt = payload.sessionStartPromptTemplate.map {
+      renderPromptTemplate($0, variables: variables).trimmingCharacters(in: .whitespacesAndNewlines)
+    } ?? ""
+    let promptText = renderPromptTemplate(promptTemplate, variables: variables)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let renderedPromptText = [sessionStartPrompt, promptText]
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n\n")
+
+    let systemPromptText = [
+      workflow.prompts?.workerSystemPromptTemplate,
+      payload.systemPromptTemplate,
+    ]
+      .compactMap { template in
+        template.map {
+          renderPromptTemplate($0, variables: variables)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+      }
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n\n")
+
+    return (
+      promptText: renderedPromptText.isEmpty && !usesConfiguredPromptTemplate ? fallbackPrompt : renderedPromptText,
+      systemPromptText: systemPromptText.isEmpty ? nil : systemPromptText
+    )
+  }
+
   private func multiplePublishableTransitionFailure(
     transitions: [WorkflowStepTransition],
     candidate: RuntimeOutputCandidate
@@ -298,6 +391,7 @@ public enum DeterministicWorkflowRunnerError: Error, Equatable, Sendable {
   case invalidWorkflow(String)
   case missingStep(String)
   case missingNodePayload(String)
+  case missingPromptVariant(String, String)
   case maxStepsExceeded(Int)
 }
 

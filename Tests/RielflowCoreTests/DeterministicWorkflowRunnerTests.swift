@@ -309,6 +309,103 @@ final class DeterministicWorkflowRunnerTests: XCTestCase {
     XCTAssertGreaterThan(deadline.timeIntervalSinceNow, 0)
   }
 
+  func testRunRendersHydratedPromptTemplateAndPromptVariantBeforeAdapterExecution() async throws {
+    let adapter = InputCapturingAdapter()
+    let workflow = WorkflowDefinition(
+      workflowId: "runner",
+      description: "fallback {{topic}}",
+      defaults: WorkflowDefaults(nodeTimeoutMs: 120_000, maxLoopIterations: 3),
+      prompts: WorkflowPrompts(workerSystemPromptTemplate: "workflow system {{topic}}"),
+      entryStepId: "step",
+      nodeRegistry: [WorkflowNodeRegistryRef(id: "node", nodeFile: "nodes/node.json")],
+      steps: [
+        WorkflowStepRef(
+          id: "step",
+          nodeId: "node",
+          description: "step fallback {{topic}}",
+          role: .worker,
+          promptVariant: "review"
+        )
+      ],
+      nodes: [WorkflowNodeRef(id: "step", nodeFile: "nodes/node.json")]
+    )
+    let node = AgentNodePayload(
+      id: "node",
+      executionBackend: .codexAgent,
+      model: "gpt-5-nano",
+      systemPromptTemplate: "base system {{topic}}",
+      promptTemplate: "base prompt {{topic}}",
+      sessionStartPromptTemplate: "base start {{topic}}",
+      promptVariants: [
+        "review": NodePromptVariant(
+          systemPromptTemplate: "variant system {{topic}}",
+          promptTemplate: "variant prompt {{topic}} {{nodeId}} {{nodeKind}}",
+          sessionStartPromptTemplate: "variant start {{topic}}"
+        )
+      ],
+      variables: ["topic": .string("base")]
+    )
+    let runner = DeterministicWorkflowRunner(adapter: adapter)
+
+    _ = try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: workflow,
+      nodePayloads: ["node": node],
+      variables: ["topic": .string("release")]
+    ))
+
+    let capturedInput = await adapter.capturedInput()
+    let input = try XCTUnwrap(capturedInput)
+    XCTAssertEqual(
+      input.promptText,
+      "variant start release\n\nvariant prompt release step worker"
+    )
+    XCTAssertEqual(
+      input.systemPromptText,
+      "workflow system release\n\nvariant system release"
+    )
+    XCTAssertFalse(input.promptText.contains("fallback"))
+    XCTAssertFalse(input.promptText.contains("base prompt"))
+    XCTAssertEqual(input.node.promptTemplateFile, nil)
+    XCTAssertEqual(input.node.id, "step")
+  }
+
+  func testRunPreservesConfiguredPromptTemplateThatRendersEmpty() async throws {
+    let adapter = InputCapturingAdapter()
+    let workflow = WorkflowDefinition(
+      workflowId: "runner",
+      description: "workflow fallback",
+      defaults: WorkflowDefaults(nodeTimeoutMs: 120_000, maxLoopIterations: 3),
+      entryStepId: "step",
+      nodeRegistry: [WorkflowNodeRegistryRef(id: "node", nodeFile: "nodes/node.json")],
+      steps: [
+        WorkflowStepRef(
+          id: "step",
+          nodeId: "node",
+          description: "step fallback must not run",
+          role: .worker
+        )
+      ],
+      nodes: [WorkflowNodeRef(id: "step", nodeFile: "nodes/node.json")]
+    )
+    let node = AgentNodePayload(
+      id: "node",
+      executionBackend: .codexAgent,
+      model: "gpt-5-nano",
+      promptTemplate: "{{ missing.path }}"
+    )
+    let runner = DeterministicWorkflowRunner(adapter: adapter)
+
+    _ = try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: workflow,
+      nodePayloads: ["node": node]
+    ))
+
+    let capturedInput = await adapter.capturedInput()
+    let input = try XCTUnwrap(capturedInput)
+    XCTAssertEqual(input.promptText, "")
+    XCTAssertFalse(input.promptText.contains("fallback"))
+  }
+
   func testMaxLoopIterationsBoundsDeterministicRun() async throws {
     let loopingWorkflow = workflow(
       defaults: WorkflowDefaults(nodeTimeoutMs: 120_000, maxLoopIterations: 10),
@@ -405,6 +502,25 @@ private actor DeadlineCapturingAdapter: NodeAdapter {
 
   func capturedDeadline() -> Date? {
     deadline
+  }
+}
+
+private actor InputCapturingAdapter: NodeAdapter {
+  private var input: AdapterExecutionInput?
+
+  func execute(_ input: AdapterExecutionInput, context: AdapterExecutionContext) async throws -> AdapterExecutionOutput {
+    self.input = input
+    return AdapterExecutionOutput(
+      provider: "test",
+      model: input.node.model,
+      promptText: input.promptText,
+      completionPassed: true,
+      payload: ["status": .string("ok")]
+    )
+  }
+
+  func capturedInput() -> AdapterExecutionInput? {
+    input
   }
 }
 

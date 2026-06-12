@@ -54,6 +54,8 @@ The preferred `codex-agent` local reference root is `../../codex-agent`, but it 
 - `packages/rielflow-adapters/src/claude.ts` and `packages/rielflow-adapters/src/readiness.ts` define current `claude-code-agent` execution, auth/readiness probes, session handling, and failure mapping.
 - `packages/rielflow-adapters/src/cursor.ts` and `packages/rielflow-adapters/src/readiness.ts` define current `cursor-cli-agent` behavior through the Cursor adapter SDK boundary.
 - `packages/rielflow-adapters/src/dispatch.ts`, `packages/rielflow-adapters/src/shared.ts`, `packages/rielflow-adapters/src/openai-sdk.ts`, and `packages/rielflow-adapters/src/anthropic-sdk.ts` define current official SDK dispatch, API-key lookup, retry/error handling, timeout behavior, request construction, response text extraction, and output-envelope normalization.
+- `packages/rielflow-core/src/render.ts`, `packages/rielflow-core/src/prompt-template-context.ts`, `packages/rielflow-core/src/prompt-template-file.ts`, `packages/rielflow-core/src/node-template-fields.ts`, `packages/rielflow/src/workflow/load.ts`, and `packages/rielflow/src/workflow/prompt-composition.ts` define current prompt rendering, prompt variable roots, template-file safety, asset loading, and composed prompt behavior.
+- `packages/rielflow/src/workflow/adapter.ts`, `packages/rielflow/src/workflow/output-attempt-runner.ts`, and `packages/rielflow/src/workflow/engine/step-result-finalization.ts` define current JSON candidate extraction, output-contract retry/finalization, and runtime-owned publication behavior.
 - `packages/rielflow-adapters/package.json` pins repository-owned references for `codex-agent`, `claude-code-agent`, and `cursor-cli-agent`; Swift target behavior should be mapped from those package contracts, not copied blindly.
 
 Swift target mapping:
@@ -132,6 +134,74 @@ The Swift migration should preserve these Cursor contracts:
 - readiness checks report unavailable tools, auth failures, model reachability, and policy-blocked states without requiring live workflow execution
 
 The `official/cursor-sdk` backend is a separate official SDK adapter and must not be conflated with `cursor-cli-agent`. Any Swift port of `official/cursor-sdk` should be a later, separately gated adapter slice unless implementation parity requires a minimal compatibility shim.
+
+## TASK-002/TASK-003 Prompt, JSON, And Envelope Prerequisite Closure
+
+This prerequisite slice closes the remaining Swift migration blockers before
+TASK-009. TASK-002 is implementation-complete for the current Swift model and
+validation scaffold, but the active implementation plan must record fresh
+Swift-capable verification evidence before marking it complete. TASK-003 remains
+open until prompt rendering fixtures, prompt asset loading, escaped and missing
+variable behavior, and output-envelope normalization are all covered by
+deterministic Swift tests.
+
+Prompt rendering contracts:
+
+- Swift prompt rendering must match the TypeScript `renderPromptTemplate`
+  behavior for `{{ path }}` placeholders using dotted object traversal.
+- Missing, undefined, null, or non-traversable paths render as an empty string.
+- String values render unchanged; booleans and numbers render as scalar text;
+  object and array values render as compact JSON.
+- Unmatched text and unsupported placeholder syntax remain literal text.
+- Tests must include literal brace text, backslash-escaped JSON string content,
+  multiple placeholders, dotted paths, object and array substitutions, falsey
+  scalar values, missing variables, and null values.
+
+Prompt asset loading contracts:
+
+- The supported template-file fields are `systemPromptTemplateFile`,
+  `promptTemplateFile`, and `sessionStartPromptTemplateFile` on node payloads and
+  prompt variants.
+- Template-file paths are workflow-relative only. Empty paths, absolute paths,
+  `.` or `..` segments, traversal above the workflow root, and canonical
+  workflow definition targets such as `workflow.json` or `node-*.json` fail
+  deterministically.
+- Loading a template file populates the corresponding inline template field for
+  execution while preserving authored file references for save and validation
+  workflows.
+- Missing or unreadable template files fail during workflow loading or
+  validation with field-specific diagnostics; tests must not depend on external
+  package installation or live runtime state.
+
+Output-envelope normalization contracts:
+
+- Adapter and SDK output may be plain text when no node output contract is
+  present; JSON-looking text must stay a text payload in that case.
+- When a node output contract is present, provider text must yield a JSON object
+  candidate or fail with `invalid_output`.
+- A candidate object with `when` is an output-contract envelope. `when` must be
+  an object of booleans, `payload` must be an object, and `completionPassed`
+  must be a boolean when supplied. Missing `completionPassed` defaults to true.
+- A candidate object without `when` is treated as the business payload with the
+  default successful routing condition.
+- JSON candidate extraction must ignore braces inside quoted strings and escaped
+  string characters while finding the first balanced object candidate.
+- Runtime-owned publication remains outside backend adapters. Swift adapters
+  normalize provider text into adapter output only; candidate-path handling,
+  output validation, accepted output artifacts, workflow messages,
+  communication ids, and final root output selection remain runtime-owned.
+
+Current verification evidence:
+
+- Xcode Swift toolchain command:
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version`
+- Current result: Apple Swift 6.3.2, target `arm64-apple-macosx26.0`.
+- Swift test command:
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test`
+- Current result: 197 tests passed with 0 failures on 2026-06-12. This is the
+  TASK-002 evidence to mirror into the active implementation plan; TASK-003
+  must stay in progress until the prompt and envelope test gaps above are
+  implemented and rerun.
 
 ## TASK-005 Runtime Session, Message Store, And Publication Boundary
 
@@ -570,7 +640,7 @@ Each migrated package needs:
   `scripts/build-swift-homebrew-readiness.sh`, archive naming, `.sha256`
   sidecars, and the absence of production publishing side effects.
 
-The current branch has been verified with Xcode Swift 6.3.2 by setting `DEVELOPER_DIR` and `SDKROOT` to `/Applications/Xcode.app`; `swift test` passed 65 tests for the current local-agent command-builder, bounded preflight, readiness, redaction, descriptor-isolation, and official OpenAI/Anthropic SDK scaffold coverage. Default `swift` lookup can still point at a Nix Apple SDK path, so use the Xcode toolchain command recorded in the implementation plan until local toolchain selection is fixed.
+The current branch has been verified with Xcode Swift 6.3.2 by setting `DEVELOPER_DIR` and `SDKROOT` to `/Applications/Xcode.app`; `swift test` passed 197 tests for the current Swift scaffold, model validation, adapter, runtime publication, deterministic CLI, package/event/GraphQL/server contracts, and packaging-readiness coverage. Default `swift` lookup can still point at a Nix Apple SDK path, so use the Xcode toolchain command recorded in the implementation plan until local toolchain selection is fixed.
 
 Additional required verification:
 

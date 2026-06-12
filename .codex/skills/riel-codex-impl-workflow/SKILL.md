@@ -174,9 +174,10 @@ style Swift validation APIs; Cursor/Codex stream normalization; Codex argv
 option termination; child descriptor isolation; configured-secret redaction;
 and the previously accepted official OpenAI/Anthropic SDK scaffold. Residual
 low risks remained: the preferred local `../../codex-agent` reference was
-unavailable, `official/cursor-sdk` stayed deferred, TASK-002 and TASK-003
-remained in progress, and default `swift` lookup still required the Xcode
-`DEVELOPER_DIR`/`SDKROOT` override.
+unavailable, `official/cursor-sdk` stayed deferred, and default `swift` lookup
+still required the Xcode `DEVELOPER_DIR`/`SDKROOT` override. TASK-002 and
+TASK-003 were open during this TASK-004 run and were later closed by the
+TASK-002/TASK-003 prerequisite-closure run.
 
 For the 2026-06-12 TASK-005 `swift-migration` run, Step 7 adversarial review
 accepted the runtime session and message publication boundary after Xcode
@@ -227,11 +228,12 @@ trusted built-in source metadata for built-in add-ons, effective webhook, S3,
 and chat-sdk route conflict validation, canonical hook payload hashes, redacted
 hook backend metadata, duplicate-safe server header normalization, and
 continue-session GraphQL input parity. Residual low risks remain: the
-preferred `../../codex-agent` reference is unavailable, TASK-002 and TASK-003
-remain in progress, TypeScript/Bun remains the production fallback, Swift
-SQLite/CLI/package/event/GraphQL/server/Homebrew cutover remains deferred, and
-the default `swift` lookup may still require the Xcode `DEVELOPER_DIR`/
-`SDKROOT` override.
+preferred `../../codex-agent` reference is unavailable, TypeScript/Bun remains
+the production fallback, Swift SQLite/CLI/package/event/GraphQL/server/Homebrew
+cutover remains deferred, and the default `swift` lookup may still require the
+Xcode `DEVELOPER_DIR`/`SDKROOT` override. TASK-002 and TASK-003 were open
+during this TASK-006 run and were later closed by the TASK-002/TASK-003
+prerequisite-closure run.
 
 For the 2026-06-12 TASK-007 `swift-migration` run, Step 7 adversarial review
 accepted the Swift CLI validate, inspect, and deterministic mock-run parity
@@ -248,17 +250,17 @@ containment with symlink checks, and TypeScript/Bun mock-scenario sequence
 parity based on execution index and validation attempt. The focused TASK-007
 implementation plan is archived at
 `impl-plans/completed/swift-native-migration-task-007-cli-parity.md`; the
-parent Swift migration plan remains active for TASK-002, TASK-003, and TASK-009.
+parent Swift migration plan remains active for TASK-009 after the later
+TASK-002/TASK-003 prerequisite closure.
 Keep the slice deterministic and local until later cutover gates:
 do not replace the
 TypeScript/Bun production CLI, mutate package checkout or registry state, run
 remote `--endpoint` workflows, start live gateways or servers, require live
 agent credentials, allocate communication ids in CLI code, or move
 Cursor-specific behavior into shared CLI or `RielflowCore` concepts. Residual
-low risks remain: TASK-002 and TASK-003 remain in progress, release/Homebrew
-cutover remains deferred to TASK-009, direct `--workflow-definition-dir` runs
-remain caller-trusted local input, and default `swift` lookup may still require
-the Xcode `DEVELOPER_DIR`/`SDKROOT` override.
+low risks remain: release/Homebrew cutover remains deferred to TASK-009, direct
+`--workflow-definition-dir` runs remain caller-trusted local input, and default
+`swift` lookup may still require the Xcode `DEVELOPER_DIR`/`SDKROOT` override.
 
 For the 2026-06-12 TASK-008 `swift-migration` run, Step 7 adversarial review
 accepted Swift packaging readiness after the checksum sidecar fix. Keep the
@@ -282,6 +284,42 @@ Swift 6.3.2 `swift test` passing 197 tests, `bun run typecheck:server`,
 `scripts/build-swift-homebrew-readiness.sh` checks, archive listing, relocated
 checksum verification from `dist/swift-homebrew`, and host-path rejection in
 the `.sha256` sidecar.
+
+For the 2026-06-12 TASK-002/TASK-003 `swift-migration` prerequisite-closure
+run, Step 7 adversarial review accepted the Swift prompt, JSON, and output
+envelope contracts after Xcode Swift 6.3.2 `swift test` passed 209 tests.
+The accepted slice completes TASK-002 and TASK-003 for the current additive
+Swift scope before TASK-009. It adds Swift `renderPromptTemplate` parity for
+TypeScript/Bun dotted `{{ path }}` placeholders, empty rendering for missing
+or null variables, literal preservation for unsupported placeholder syntax,
+compact JSON object/array substitution without slash escaping, and
+TypeScript-compatible numeric display thresholds including `0.000001` for
+`1e-6`, exponential output for `1e-7`, and decimal output for `1e20`.
+It also adds workflow-relative prompt asset hydration for
+`systemPromptTemplateFile`, `promptTemplateFile`, and
+`sessionStartPromptTemplateFile` on top-level agent payloads and prompt
+variants while preserving authored file-reference fields. Prompt file paths
+must reject empty values, absolute paths, Windows drive-letter paths, `.` or
+`..` segments, symlink escapes, `workflow.json`, and canonical `node-*.json`
+targets. Output-envelope normalization must treat provider text as text when no
+node output contract is present; require a JSON object candidate when a
+contract exists; validate `when` as object<boolean>, `payload` as an object,
+and `completionPassed` as boolean when supplied; default missing
+`completionPassed` to true; and ignore quoted or escaped braces while extracting
+balanced JSON candidates. Keep runtime-owned publication outside backend
+adapters: Swift adapters may normalize provider output, but candidate-path
+handling, output validation, accepted output artifacts, workflow messages,
+communication ids, and final root output selection remain runtime-owned.
+Accepted review decisions included fixing prior adversarial finding
+`comm-000021` and ordinary review finding `comm-000035`; no high or mid
+findings remained. Verification commands included JavaScript reference checks
+for `String(number)` and `JSON.stringify(number)`, focused Swift tests for
+`PromptTemplateTests`, deterministic-runner prompt rendering, adapter utility
+envelope handling, and resolver prompt-file hydration, full Xcode
+`swift test`, `jq empty impl-plans/PROGRESS.json`, and `git diff --check`.
+Residual low risks remain: TASK-009 final parity/security/cutover review is
+not started, TypeScript/Bun remains the production fallback, and the preferred
+local `../../codex-agent` reference remains unavailable.
 
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via

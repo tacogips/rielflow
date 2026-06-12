@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-12T18:35:00+09:00",
+  "lastUpdated": "2026-06-12T20:35:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -7582,12 +7582,12 @@
       "phase": 195,
       "status": "In Progress",
       "path": "impl-plans/active/swift-native-migration.md",
-      "designReference": "design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md#task-002task-003-prompt-json-and-envelope-prerequisite-closure; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
       "workflowMode": "issue-resolution",
-      "issueReference": "tacogips/rielflow; issue title: Prepare Swift packaging and cutover readiness gates; workflowInput.requestedBehavior TASK-008; no matching GitHub issue URL or number supplied",
+      "issueReference": "tacogips/rielflow; issue title: Complete Swift prompt JSON envelope contracts and close migration prerequisites; workflowInput.issueBody TASK-002/TASK-003 prerequisite closure; no matching GitHub issue URL or number supplied",
       "workflowId": "codex-design-and-implement-review-loop",
-      "lastPlanningNode": "step4-impl-plan-create",
-      "codexAgentReference": "Preferred ../../codex-agent root unavailable; adjacent ../codex-agent/package.json is reference-only for explicit bin/file/prepack packaging structure. TypeScript/Bun packaging references remain scripts/build-homebrew-release.sh, scripts/render-homebrew-formula.sh, packaging/homebrew/README.md, and packages/rielflow/package.json. TASK-008 keeps TypeScript/Bun as production fallback and prepares only local Swift readiness artifacts under dist/swift-homebrew with rielflow-swift archive names.",
+      "lastPlanningNode": "step6-implement",
+      "codexAgentReference": "Preferred ../../codex-agent root unavailable; use TypeScript/Bun fallback references for TASK-003 prompt and envelope contracts: packages/rielflow-core/src/render.ts, packages/rielflow-core/src/prompt-template-context.ts, packages/rielflow-core/src/prompt-template-file.ts, packages/rielflow-core/src/node-template-fields.ts, packages/rielflow/src/workflow/load.ts, packages/rielflow/src/workflow/prompt-composition.ts, packages/rielflow/src/workflow/adapter.ts, packages/rielflow/src/workflow/output-attempt-runner.ts, and packages/rielflow/src/workflow/engine/step-result-finalization.ts. TypeScript/Bun remains production fallback; Swift adapters normalize provider output only while runtime-owned publication remains outside backend adapters.",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
@@ -7595,14 +7595,14 @@
           "deps": []
         },
         "TASK-002": {
-          "status": "In Progress",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "TASK-001"
           ]
         },
         "TASK-003": {
-          "status": "In Progress",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "TASK-001",
@@ -7653,6 +7653,7 @@
           "status": "Not Started",
           "parallelizable": false,
           "deps": [
+            "TASK-003",
             "TASK-007",
             "TASK-008"
           ]
@@ -7768,7 +7769,23 @@
         "RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64",
         "tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz",
         "(cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz.sha256)",
-        "rg -n \"gh release|git push|brew tap|render-homebrew-formula|Formula/rielflow.rb\" scripts/build-swift-homebrew-readiness.sh packaging/homebrew/swift-cutover-gates.json packaging/homebrew/README.md"
+        "rg -n \"gh release|git push|brew tap|render-homebrew-formula|Formula/rielflow.rb\" scripts/build-swift-homebrew-readiness.sh packaging/homebrew/swift-cutover-gates.json packaging/homebrew/README.md",
+        "rg -n \"TASK-002|197 tests|Swift 6.3.2\" impl-plans/active/swift-native-migration.md design-docs/specs/design-swift-native-migration.md",
+        "rg -n \"renderPromptTemplate|promptTemplateFile|systemPromptTemplateFile|sessionStartPromptTemplateFile|completionPassed|candidate-path|runtime-owned\" impl-plans/active/swift-native-migration.md design-docs/specs/design-swift-native-migration.md",
+        "rg -n \"renderPromptTemplate|PromptTemplate|promptTemplateFile|systemPromptTemplateFile|sessionStartPromptTemplateFile\" Sources/RielflowCore Tests/RielflowCoreTests",
+        "rg -n \"normalizeOutputContractEnvelope|parseJSONObjectCandidate|extractBalancedJSONObject|completionPassed|usedEnvelope\" Sources/RielflowCore Sources/RielflowAdapters Tests/RielflowAdaptersTests Tests/AgentAdapterTests",
+        "rg -n \"candidatePath|WorkflowMessageRecord|communicationId|WorkflowOutputPublishing\" Sources/RielflowAdapters Tests/RielflowAdaptersTests Tests/AgentAdapterTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'PromptTemplateTests|AdapterUtilitiesTests|WorkflowCommandTests/testResolverHydratesPromptTemplateFilesForTopLevelAndVariantPayloads'",
+        "node -e 'console.log(String(1.0e20)); console.log(JSON.stringify(1.0e20)); console.log(String(1.0e21)); console.log(JSON.stringify(1.0e21)); console.log(String(0)); console.log(JSON.stringify(0))'",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter PromptTemplateTests/testPromptRenderingFormatsLargeIntegralNumbersWithoutTrapping",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter DeterministicWorkflowRunnerTests/testRunRendersHydratedPromptTemplateAndPromptVariantBeforeAdapterExecution",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter DeterministicWorkflowRunnerTests/testRunPreservesConfiguredPromptTemplateThatRendersEmpty",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "node -e 'console.log(JSON.stringify({total:1e20})); console.log(JSON.stringify([1e20]));'",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter PromptTemplateTests/testPromptRenderingFormatsNestedLargeNumbersLikeTypeScriptJSONStringify",
+        "node -e 'console.log(JSON.stringify({total:1e20,url:\"https://example.test/a/b\"})); console.log(JSON.stringify([1e20,\"https://example.test/a/b\"]));'",
+        "node -e 'console.log(String(1e-6)); console.log(JSON.stringify(1e-6)); console.log(String(1e-7)); console.log(JSON.stringify(1e-7)); console.log(JSON.stringify({threshold:1e-6,total:1e20,url:\"https://example.test/a/b\"})); console.log(JSON.stringify([1e20,1e-6,\"https://example.test/a/b\"]));'",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'PromptTemplateTests/testPromptRenderingFormatsLargeIntegralNumbersWithoutTrapping|PromptTemplateTests/testPromptRenderingFormatsNestedLargeNumbersLikeTypeScriptJSONStringify'"
       ],
       "residualRisks": [
         "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select points at a Nix Apple SDK path.",
@@ -7777,7 +7794,7 @@
         "Swift local-agent command/readiness parity maps current TypeScript adapter behavior because dedicated Swift references for codex-agent, claude-code-agent, and cursor-cli-agent are not supplied; preferred ../../codex-agent remains unavailable.",
         "TASK-005 starts with deterministic in-memory runtime behavior; SQLite-backed Swift persistence is deferred.",
         "TASK-005 currently provides deterministic in-memory Swift runtime behavior; SQLite-backed Swift persistence remains deferred.",
-        "Parent TASK-002 and TASK-003 remain active for broader Swift migration parity, though current model and JSON/envelope contracts were stable for this TASK-005 slice.",
+        "TASK-002 and TASK-003 are now complete, but final TASK-009 parity/security/cutover review remains not started.",
         "High-risk runtime publication boundary still requires adversarial implementation review before any Swift runtime cutover.",
         "TASK-005 remains deterministic in-memory Swift runtime behavior; SQLite-backed Swift persistence remains deferred.",
         "TASK-005 message input resolution and root-output publication are deterministic in-memory APIs; SQLite-backed Swift persistence remains deferred.",
@@ -7789,6 +7806,78 @@
         "Swift readiness archives intentionally use rielflow-swift names under dist/swift-homebrew until TASK-009 accepts final cutover."
       ],
       "addressedReviewFindings": [
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000035",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/PromptTemplate.swift; Tests/RielflowCoreTests/PromptTemplateTests.swift",
+          "finding": "Numeric prompt rendering normalized 1.0e-6 to 1e-6, diverging from TypeScript/Bun String(number) and JSON.stringify fixed-decimal output 0.000001 at the lower decimal threshold.",
+          "resolution": "Prompt number formatting now expands negative exponents for finite values with abs(value) >= 1.0e-6 and < 1.0e21 while preserving exponential output for 1.0e-7. Scalar and nested prompt JSON tests now cover 1.0e-6. JavaScript reference command, focused Swift tests, and full Xcode Swift 6.3.2 swift test passed 209 tests."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "communication": "comm-000031",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/PromptTemplate.swift; Tests/RielflowCoreTests/PromptTemplateTests.swift",
+          "finding": "Recursive prompt JSON rendering used default JSONEncoder string escaping, so nested array/object string values escaped forward slashes unlike TypeScript/Bun JSON.stringify and the prior .withoutEscapingSlashes compactJSONString contract.",
+          "resolution": "Prompt JSON string rendering now uses .withoutEscapingSlashes while preserving recursive TypeScript-compatible number formatting. The nested prompt JSON regression now covers 1.0e20 plus URL-like strings in objects and arrays. JavaScript reference command, focused Swift test, and full Xcode Swift 6.3.2 swift test passed 209 tests."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "communication": "comm-000029",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/PromptTemplate.swift; Tests/RielflowCoreTests/PromptTemplateTests.swift",
+          "finding": "Array/object prompt rendering still used JSONEncoder compact JSON for nested numbers, so nested large numbers rendered as 1e+20 instead of TypeScript/Bun JSON.stringify decimal output.",
+          "resolution": "Prompt JSON rendering now recursively uses the TypeScript-compatible numeric formatter for nested arrays and objects while preserving deterministic sorted object keys. Added nested 1.0e20 object/array regression coverage. JavaScript reference command, focused Swift test, and full Xcode Swift 6.3.2 swift test passed 209 tests."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "communication": "comm-000027",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/PromptTemplate.swift; Tests/RielflowCoreTests/PromptTemplateTests.swift",
+          "finding": "The 1.0e20 formatting fix still used Decimal(value) for ordinary finite numbers, exposing binary approximation tails unlike TypeScript/Bun String(number) for values such as 0.30000000000000004 and 1.2345678901234567.",
+          "resolution": "Prompt rendering now starts from Swift's shortest round-tripping String(Double), expands positive exponents below 1.0e21, normalizes exponent zero padding, strips .0 from whole numbers, and covers representative TypeScript/Bun String(number) cases. Focused Swift test passed and full Xcode Swift 6.3.2 swift test passed 208 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000025",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/PromptTemplate.swift; Tests/RielflowCoreTests/PromptTemplateTests.swift",
+          "finding": "Numeric prompt rendering avoided the large-number Int64 trap but used compact JSON formatting, causing 1.0e20 to render as 1e+20 instead of TypeScript/Bun String(number) output 100000000000000000000.",
+          "resolution": "Prompt rendering now formats finite numbers with TypeScript-like display rules, including decimal output for 1.0e20 and exponent normalization, while still avoiding unchecked Int64 conversion. The large-number regression now expects 100000000000000000000. JavaScript reference command, focused Swift test, and full Xcode Swift 6.3.2 swift test passed 208 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000021",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/PromptTemplate.swift; Tests/RielflowCoreTests/PromptTemplateTests.swift",
+          "finding": "Prompt rendering could crash the Swift process for integral JSON numbers outside Int64 bounds because formatTemplateValue converted integral Double values through unchecked Int64(value).",
+          "resolution": "Prompt rendering no longer uses unchecked Int64 conversion for numeric JSONValue values. Added regression coverage for 1.0e20. Focused Swift test passed and full Xcode Swift 6.3.2 swift test passed 208 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000016",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift",
+          "finding": "Rendered prompt templates resolving to an empty string were replaced with step or workflow fallback prompt text, violating TASK-003 missing/null variable behavior.",
+          "resolution": "DeterministicWorkflowRunner now uses fallback prompt text only when no promptTemplate is configured, preserving configured templates that render empty. Added regression coverage for '{{ missing.path }}' with non-empty step description. Focused Swift test passed and full Xcode Swift 6.3.2 swift test passed 207 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000012",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift",
+          "finding": "Swift execution built AdapterExecutionInput.promptText from step.description or workflow.description and never rendered AgentNodePayload prompt templates or applied WorkflowStepRef.promptVariant.",
+          "resolution": "DeterministicWorkflowRunner now applies prompt variants, renders composed session-start, prompt, and system templates with merged variables before adapter execution, and adds regression coverage asserting adapter input receives hydrated/rendered prompt text. Focused Swift test passed and full Xcode Swift 6.3.2 swift test passed 206 tests."
+        },
+        {
+          "nodeId": "step6-implement",
+          "communication": "comm-000008",
+          "severity": "implemented",
+          "file": "Sources/RielflowCore/PromptTemplateAssets.swift; Sources/RielflowCore/WorkflowModel.swift; Sources/RielflowCLI/WorkflowResolution.swift; Tests/RielflowCoreTests/PromptTemplateTests.swift; Tests/RielflowAdaptersTests/AdapterUtilitiesTests.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "TASK-003 required Swift prompt rendering fixtures, prompt asset loading contracts, escaped and missing variable behavior, output-envelope normalization coverage, and runtime-owned publication preservation before TASK-009.",
+          "resolution": "Added Swift prompt template asset fields and hydration, deterministic path and unreadable-file diagnostics, resolver integration, prompt rendering fixture tests, strict output-envelope and escaped-brace candidate extraction tests, and verified that runtime-owned publication remains outside backend adapters. Xcode Swift 6.3.2 swift test passed 205 tests; TypeScript/Bun fallback checks passed."
+        },
         {
           "nodeId": "step5-impl-plan-review",
           "severity": "mid",
@@ -8455,14 +8544,6 @@
         },
         {
           "nodeId": "step7-review",
-          "communication": "comm-000029",
-          "severity": "mid-fixed",
-          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift",
-          "finding": "Step 7 review found multiple-transition fail-closed logic checked AdapterExecutionOutput.when before output-contract envelope normalization, allowing envelope when labels to publish multiple direct messages while executing only the first.",
-          "resolution": "The TASK-007 sequential runner now normalizes adapter output to RuntimeOutputCandidate before counting publishable transitions and fails closed on normalized multi-transition candidates. Added envelope-override regression coverage. Focused DeterministicWorkflowRunnerTests passed 9 tests; full swift test passed 169 tests; git diff --check and jq empty impl-plans/PROGRESS.json passed."
-        },
-        {
-          "nodeId": "step7-review",
           "communication": "comm-000033",
           "severity": "mid-fixed",
           "file": "Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
@@ -8547,14 +8628,31 @@
           "file": "impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/PROGRESS.json",
           "finding": "Focused TASK-008 plan status for TASK-008E implied implementation progress before predecessor tasks started.",
           "resolution": "TASK-008E is now Not Started in the plan and PROGRESS.json; progress log records plan/progress alignment as completed setup, not active implementation."
+        },
+        {
+          "node": "step4-impl-plan-create",
+          "communication": "comm-000005",
+          "severity": "plan-only",
+          "file": "impl-plans/active/swift-native-migration.md; impl-plans/PROGRESS.json",
+          "finding": "Step 3 accepted TASK-002/TASK-003 design with no high or mid findings; issue requires TASK-002 Swift-capable verification evidence mirrored into the active plan and TASK-003 prompt/render/load/envelope gaps made actionable before TASK-009.",
+          "resolution": "Marked TASK-002 completed with Xcode Swift 6.3.2 swift test evidence, expanded TASK-003 deliverables and completion criteria for prompt rendering fixtures, prompt asset loading contracts, escaped/missing variable behavior, output-envelope normalization, runtime-owned publication boundaries, and TypeScript/Bun fallback preservation."
         }
       ],
       "dependencies": [
-        "impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md"
+        "TASK-003 depends on completed TASK-001 and TASK-002",
+        "design-docs/specs/design-swift-native-migration.md#task-002task-003-prompt-json-and-envelope-prerequisite-closure",
+        "TypeScript fallback prompt/envelope references because ../../codex-agent is unavailable"
       ],
       "parallelizableTasks": [
-        "TASK-008 documentation/skill fallback guidance and gate manifest work may run in parallel only with disjoint write scopes; archive builder/dry-run surface, deterministic tests, and progress evidence are sequential."
-      ]
+        "No top-level TASK-003 work is parallelizable; prompt rendering, template asset loading, and output-envelope parsing share RielflowCore JSON and adapter-contract behavior.",
+        "Focused test files may be grouped by concern only after the shared prompt/template loading API shape is accepted and write scopes are disjoint."
+      ],
+      "lastImplementationNode": "step6-implement",
+      "lastImplementationExec": "exec-000036",
+      "lastSelfReviewNode": "step6-implement-self-review",
+      "lastSelfReviewExec": "exec-000031",
+      "lastReviewNode": "step7-review",
+      "lastReviewExec": "exec-000035"
     },
     "completed/swift-native-migration-task-005-runtime-session": {
       "phase": 196,

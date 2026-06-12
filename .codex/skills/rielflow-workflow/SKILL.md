@@ -108,6 +108,15 @@ Agent node payload:
 - Manager steps must reference file-backed nodes; add-on-backed nodes are worker-only.
 - Prefer DRY workflow composition over combined one-off nodes. If behavior can be expressed as reusable primitive nodes chained by `steps[].transitions`, author it that way; for example, model commit-and-push as a git commit step followed by a git push step instead of duplicating commit logic in a separate commit-and-push node.
 - Agent nodes require `executionBackend`, backend-specific `model`, `promptTemplate` or `promptTemplateFile`, and `variables`.
+- Prompt files may use `systemPromptTemplateFile`, `promptTemplateFile`, and
+  `sessionStartPromptTemplateFile` on top-level agent payloads and
+  `promptVariants`. Keep them workflow-relative; do not use empty, absolute,
+  Windows drive-letter, `.`, `..`, `workflow.json`, or `node-*.json` paths.
+- Prompt file loading preserves the authored `*TemplateFile` field and hydrates
+  the matching inline template for execution.
+- `{{ path }}` template placeholders use dotted object lookup. Missing or null
+  values render as an empty string; unsupported placeholder syntax stays
+  literal.
 - Valid `executionBackend` values are `codex-agent`, `claude-code-agent`,
   `cursor-cli-agent`, `official/openai-sdk`, `official/anthropic-sdk`, and
   `official/cursor-sdk`.

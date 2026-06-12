@@ -114,6 +114,7 @@ public struct FileSystemWorkflowBundleResolver: WorkflowBundleResolving {
       throw WorkflowResolutionError.invalidWorkflow(validation.diagnostics)
     }
     var nodePayloads: [String: AgentNodePayload] = [:]
+    let promptTemplateLoader = PromptTemplateAssetLoader()
     for registryNode in workflow.nodeRegistry {
       guard let nodeFile = registryNode.nodeFile else {
         continue
@@ -126,7 +127,13 @@ public struct FileSystemWorkflowBundleResolver: WorkflowBundleResolving {
       )
       let data = try Data(contentsOf: payloadURL)
       let payload = try JSONDecoder().decode(AgentNodePayload.self, from: data)
-      nodePayloads[registryNode.id] = payload
+      let hydratedPayload: AgentNodePayload
+      do {
+        hydratedPayload = try promptTemplateLoader.hydrate(payload, workflowDirectory: directory)
+      } catch let error as PromptTemplateAssetLoadingError {
+        throw WorkflowResolutionError.invalidWorkflow([error.diagnostic])
+      }
+      nodePayloads[registryNode.id] = hydratedPayload
     }
     return ResolvedWorkflowBundle(
       workflow: workflow,

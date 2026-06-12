@@ -98,6 +98,54 @@ final class WorkflowCommandTests: XCTestCase {
     )
   }
 
+  func testResolverHydratesPromptTemplateFilesForTopLevelAndVariantPayloads() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("rielflow-cli-tests-\(UUID().uuidString)", isDirectory: true)
+    let workflowDirectory = root.appendingPathComponent("template-workflow", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: workflowDirectory.appendingPathComponent("nodes"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: workflowDirectory.appendingPathComponent("prompts"), withIntermediateDirectories: true)
+    try """
+    {
+      "workflowId": "template-workflow",
+      "defaults": { "maxLoopIterations": 3, "nodeTimeoutMs": 120000 },
+      "entryStepId": "worker",
+      "nodes": [{ "id": "worker", "nodeFile": "nodes/node-worker.json" }],
+      "steps": [{ "id": "worker", "nodeId": "worker", "role": "worker", "promptVariant": "review" }]
+    }
+    """.write(to: workflowDirectory.appendingPathComponent("workflow.json"), atomically: true, encoding: .utf8)
+    try """
+    {
+      "id": "worker",
+      "executionBackend": "codex-agent",
+      "model": "gpt-5-nano",
+      "systemPromptTemplateFile": "prompts/system.md",
+      "promptTemplateFile": "prompts/main.md",
+      "sessionStartPromptTemplateFile": "prompts/start.md",
+      "promptVariants": {
+        "review": { "promptTemplateFile": "prompts/review.md" }
+      },
+      "variables": {}
+    }
+    """.write(to: workflowDirectory.appendingPathComponent("nodes/node-worker.json"), atomically: true, encoding: .utf8)
+    try "system".write(to: workflowDirectory.appendingPathComponent("prompts/system.md"), atomically: true, encoding: .utf8)
+    try "main".write(to: workflowDirectory.appendingPathComponent("prompts/main.md"), atomically: true, encoding: .utf8)
+    try "start".write(to: workflowDirectory.appendingPathComponent("prompts/start.md"), atomically: true, encoding: .utf8)
+    try "review".write(to: workflowDirectory.appendingPathComponent("prompts/review.md"), atomically: true, encoding: .utf8)
+
+    let bundle = try FileSystemWorkflowBundleResolver().resolve(
+      WorkflowResolutionOptions(workflowName: "template-workflow", scope: .direct, workflowDefinitionDir: root.path)
+    )
+    let payload = try XCTUnwrap(bundle.nodePayloads["worker"])
+
+    XCTAssertEqual(payload.systemPromptTemplate, "system")
+    XCTAssertEqual(payload.promptTemplate, "main")
+    XCTAssertEqual(payload.sessionStartPromptTemplate, "start")
+    XCTAssertEqual(payload.promptVariants?["review"]?.promptTemplate, "review")
+    XCTAssertEqual(payload.promptTemplateFile, "prompts/main.md")
+    XCTAssertEqual(payload.promptVariants?["review"]?.promptTemplateFile, "prompts/review.md")
+  }
+
   func testRunAcceptsTemporaryWorkflowJSONFileTarget() async throws {
     let root = repositoryRoot()
     let app = RielflowCLIApplication()

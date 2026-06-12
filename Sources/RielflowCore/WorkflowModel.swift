@@ -406,6 +406,13 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
   public var model: String
   public var effort: NodeReasoningEffort?
   public var workingDirectory: String?
+  public var systemPromptTemplate: String?
+  public var systemPromptTemplateFile: String?
+  public var promptTemplate: String?
+  public var promptTemplateFile: String?
+  public var sessionStartPromptTemplate: String?
+  public var sessionStartPromptTemplateFile: String?
+  public var promptVariants: [String: NodePromptVariant]?
   public var variables: JSONObject
   public var input: NodeInputContract?
   public var output: NodeOutputContract?
@@ -418,6 +425,13 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
     model: String,
     effort: NodeReasoningEffort? = nil,
     workingDirectory: String? = nil,
+    systemPromptTemplate: String? = nil,
+    systemPromptTemplateFile: String? = nil,
+    promptTemplate: String? = nil,
+    promptTemplateFile: String? = nil,
+    sessionStartPromptTemplate: String? = nil,
+    sessionStartPromptTemplateFile: String? = nil,
+    promptVariants: [String: NodePromptVariant]? = nil,
     variables: JSONObject = [:],
     input: NodeInputContract? = nil,
     output: NodeOutputContract? = nil
@@ -429,9 +443,41 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
     self.model = model
     self.effort = effort
     self.workingDirectory = workingDirectory
+    self.systemPromptTemplate = systemPromptTemplate
+    self.systemPromptTemplateFile = systemPromptTemplateFile
+    self.promptTemplate = promptTemplate
+    self.promptTemplateFile = promptTemplateFile
+    self.sessionStartPromptTemplate = sessionStartPromptTemplate
+    self.sessionStartPromptTemplateFile = sessionStartPromptTemplateFile
+    self.promptVariants = promptVariants
     self.variables = variables
     self.input = input
     self.output = output
+  }
+}
+
+public struct NodePromptVariant: Codable, Equatable, Sendable {
+  public var systemPromptTemplate: String?
+  public var systemPromptTemplateFile: String?
+  public var promptTemplate: String?
+  public var promptTemplateFile: String?
+  public var sessionStartPromptTemplate: String?
+  public var sessionStartPromptTemplateFile: String?
+
+  public init(
+    systemPromptTemplate: String? = nil,
+    systemPromptTemplateFile: String? = nil,
+    promptTemplate: String? = nil,
+    promptTemplateFile: String? = nil,
+    sessionStartPromptTemplate: String? = nil,
+    sessionStartPromptTemplateFile: String? = nil
+  ) {
+    self.systemPromptTemplate = systemPromptTemplate
+    self.systemPromptTemplateFile = systemPromptTemplateFile
+    self.promptTemplate = promptTemplate
+    self.promptTemplateFile = promptTemplateFile
+    self.sessionStartPromptTemplate = sessionStartPromptTemplate
+    self.sessionStartPromptTemplateFile = sessionStartPromptTemplateFile
   }
 }
 

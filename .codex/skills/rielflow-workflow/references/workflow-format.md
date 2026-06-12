@@ -240,6 +240,19 @@ Valid `executionBackend` values:
 
 `model` must be backend/provider-specific. Do not use CLI-wrapper identifiers as model values.
 
+Prompt template files:
+
+- Supported file-backed fields are `systemPromptTemplateFile`,
+  `promptTemplateFile`, and `sessionStartPromptTemplateFile`.
+- These fields are valid on top-level agent payloads and `promptVariants`.
+- Paths are workflow-relative only. Do not author empty paths, absolute paths,
+  Windows drive-letter paths, `.`, `..`, `workflow.json`, or canonical
+  `node-*.json` targets.
+- Loading a prompt file hydrates the matching inline template for execution and
+  keeps the authored `*TemplateFile` reference in the workflow data.
+- `{{ path }}` placeholders use dotted object lookup. Missing or null values
+  render as an empty string; unsupported placeholder syntax remains literal.
+
 ## Prompt Variants
 
 Use `promptVariants` on the node payload and `promptVariant` on a step when multiple steps reuse the same node with different prompt text.

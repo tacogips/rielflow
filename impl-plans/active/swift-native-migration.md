@@ -18,6 +18,7 @@ Source of truth:
 - `design-docs/specs/design-swift-native-migration.md#task-005-runtime-session-message-store-and-publication-boundary`
 - `design-docs/specs/design-swift-native-migration.md#task-007-swift-cli-validate-inspect-and-deterministic-run-parity`
 - `design-docs/specs/design-swift-native-migration.md#task-008-packaging-and-homebrew-cutover-readiness-gates`
+- `design-docs/specs/design-swift-native-migration.md#task-002task-003-prompt-json-and-envelope-prerequisite-closure`
 - `design-docs/specs/design-swift-native-migration.md#migration-strategy`
 - `design-docs/specs/design-swift-native-migration.md#verification-gates`
 - `design-docs/specs/architecture.md`
@@ -64,6 +65,8 @@ Out of scope for this plan:
 - Workflow mode: `issue-resolution`
 - Workflow ID: `codex-design-and-implement-review-loop`
 - Current workflow session:
+  `riel-codex-design-and-implement-review-loop-1781255384-68cdb70c`
+- Earlier TASK-008 workflow session:
   `riel-codex-design-and-implement-review-loop-1781250760-faba89fb`
 - Earlier TASK-005 workflow session:
   `riel-codex-design-and-implement-review-loop-1781211309-5fe4a54a`
@@ -72,23 +75,25 @@ Out of scope for this plan:
 - Current planning node: `step4-impl-plan-create`
 - Repository: `tacogips/rielflow`
 - Issue title:
-  `Prepare Swift packaging and cutover readiness gates`
+  `Complete Swift prompt JSON envelope contracts and close migration prerequisites`
 - GitHub issue: none supplied by runtime input
 - Branch: `swift-migration`
 - Risk level: high; adversarial implementation review required before cutover
 
 Workflow execution note:
 
-- Current TASK-008 planning run
-  `riel-codex-design-and-implement-review-loop-1781250760-faba89fb` scopes the
-  next implementation step to Swift packaging and Homebrew cutover readiness
-  gates without release publication or production cutover.
-- Step 3 design review accepted the TASK-008 design update with no findings in
-  the supplied workflow input.
-- The previous TASK-004 adapter parity, TASK-005 runtime publication, and
-  TASK-006 contract slices remain completed and are not reopened by this plan
-  revision. TASK-007 CLI parity is complete and archived at
-  `impl-plans/completed/swift-native-migration-task-007-cli-parity.md`.
+- Current TASK-002/TASK-003 prerequisite closure planning run
+  `riel-codex-design-and-implement-review-loop-1781255384-68cdb70c` scopes the
+  next implementation step to Swift prompt rendering, prompt template asset
+  loading, escaped and missing variable behavior, JSON candidate extraction, and
+  output-envelope normalization before TASK-009.
+- Step 3 design review accepted the TASK-002/TASK-003 design update with no
+  high or mid findings in the supplied workflow input.
+- TASK-002 is now completion-evidenced by current Xcode Swift 6.3.2
+  verification: `swift test` passed 197 tests with 0 failures on 2026-06-12.
+- The previous TASK-004 adapter parity, TASK-005 runtime publication,
+  TASK-006 contract, TASK-007 CLI parity, and TASK-008 packaging readiness
+  slices remain completed and are not reopened by this plan revision.
 
 ## Codex Agent References
 
@@ -102,6 +107,12 @@ Workflow execution note:
 - `packages/rielflow-adapters/src/readiness.ts`
 - `packages/rielflow-adapters/src/dispatch.ts`
 - `packages/rielflow-adapters/src/shared.ts`
+- `packages/rielflow-core/src/render.ts`
+- `packages/rielflow-core/src/prompt-template-context.ts`
+- `packages/rielflow-core/src/prompt-template-file.ts`
+- `packages/rielflow-core/src/node-template-fields.ts`
+- `packages/rielflow/src/workflow/load.ts`
+- `packages/rielflow/src/workflow/prompt-composition.ts`
 - `packages/rielflow/src/workflow/runtime-readiness-agent-probes.ts`
 - `packages/rielflow/src/workflow/validate/node-executability-validation.ts`
 - `packages/rielflow-adapters/src/openai-sdk.ts`
@@ -146,6 +157,10 @@ Intentional divergences accepted by design:
   `rielflow-swift-<version>-darwin-<arch>.tar.gz` names under
   `dist/swift-homebrew/` so they cannot be confused with Bun production
   `dist/homebrew/rielflow-<version>-...` archives before cutover.
+- Current TASK-003 closure keeps Swift adapters limited to provider-output
+  normalization; candidate-path handling, output validation, accepted-output
+  artifacts, workflow messages, communication ids, and final root output
+  selection remain runtime-owned.
 
 ## Modules
 
@@ -227,7 +242,7 @@ public protocol WorkflowValidating: Sendable {
 #### `Tests/RielflowCoreTests/*`
 #### `Tests/RielflowAdaptersTests/*`
 
-**Status**: IN_PROGRESS
+**Status**: COMPLETED
 
 ```swift
 public protocol PromptRendering: Sendable {
@@ -244,11 +259,24 @@ public struct OutputContractEnvelope: Codable, Equatable, Sendable {
 **Checklist**:
 
 - [x] Port basic prompt template rendering for dotted JSON object paths.
-- [ ] Port prompt asset loading contracts.
+- [x] Port prompt asset loading contracts.
 - [x] Preserve initial JSON boundary behavior for authored payloads and output
       envelopes.
-- [ ] Add deterministic tests for escaped variables, missing variables, and
-      envelope normalization.
+- [x] Add prompt rendering fixture tests for literal brace text,
+      backslash-escaped JSON string content, multiple placeholders, dotted
+      paths, object and array substitutions, falsey scalar values, missing
+      variables, and null values.
+- [x] Add prompt asset loading tests for `systemPromptTemplateFile`,
+      `promptTemplateFile`, and `sessionStartPromptTemplateFile` on node
+      payloads and prompt variants.
+- [x] Reject empty, absolute, traversal, `.` / `..`, canonical workflow
+      definition, missing, and unreadable prompt template asset paths with
+      field-specific diagnostics.
+- [x] Add output-envelope tests for no-contract JSON-looking text, contracted
+      plain text rejection, default `completionPassed`, strict boolean `when`,
+      object-only `payload`, business-payload fallback, and escaped-string brace
+      candidate extraction.
+- [x] Keep runtime-owned publication outside backend adapters.
 
 ### 4. Backend-Faithful Agent And Official SDK Adapters
 
@@ -465,8 +493,8 @@ public struct SwiftReleaseArtifact: Equatable, Sendable {
 | Module | File Path | Status | Tests |
 | ------ | --------- | ------ | ----- |
 | Swift package boundary scaffold | `Package.swift`, `Sources/*`, `Tests/*` | COMPLETED | Initial scaffold tests present |
-| Core workflow model and validation | `Sources/RielflowCore/WorkflowModel.swift`, `Sources/RielflowCore/WorkflowValidation.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
-| Prompt and JSON boundary contracts | `Sources/RielflowCore/PromptTemplate.swift`, `Sources/RielflowCore/JSONValue.swift`, `Sources/RielflowAdapters/AdapterUtilities.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
+| Core workflow model and validation | `Sources/RielflowCore/WorkflowModel.swift`, `Sources/RielflowCore/WorkflowValidation.swift` | COMPLETED | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed 197 tests with 0 failures on 2026-06-12 |
+| Prompt and JSON boundary contracts | `Sources/RielflowCore/PromptTemplate.swift`, `Sources/RielflowCore/PromptTemplateAssets.swift`, `Sources/RielflowCore/JSONValue.swift`, `Sources/RielflowAdapters/AdapterUtilities.swift`, `Sources/RielflowCore/DeterministicWorkflowRunner.swift` | COMPLETED | `Tests/RielflowCoreTests/PromptTemplateTests.swift`, `Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift`, `Tests/RielflowAdaptersTests/AdapterUtilitiesTests.swift`, `Tests/RielflowCLITests/WorkflowCommandTests.swift`; Xcode Swift 6.3.2 `swift test` passed 209 tests with 0 failures on 2026-06-12 |
 | Backend-faithful agent and official SDK adapters | `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*` | COMPLETED | `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed 65 tests for local-agent command builders, bounded preflights, Cursor/Codex stream normalization, Codex argv option termination, descriptor isolation, configured-secret redaction, readiness parity, and official OpenAI/Anthropic SDK scaffold |
 | Runtime session and message publication | `Sources/RielflowCore/*`, `Sources/RielflowCLI/*` | COMPLETED | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed 93 tests for TASK-005 in-memory runtime APIs |
 | Add-on, package, event, hook, GraphQL, and server boundaries | `Sources/RielflowAddons/*`, `Sources/RielflowEvents/*`, `Sources/RielflowHook/*`, `Sources/RielflowGraphQL/*`, `Sources/RielflowServer/*` | COMPLETED | `Tests/RielflowAddonsTests/*`, `Tests/RielflowEventsTests/*`, `Tests/RielflowHookTests/*`, `Tests/RielflowGraphQLTests/*`, `Tests/RielflowServerTests/*`; Xcode Swift 6.3.2 `swift test` passed 125 tests |
@@ -495,7 +523,7 @@ it with accepted target boundaries.
 
 ### TASK-002: Port Core Workflow Model And Validation
 
-**Status**: In Progress
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `Sources/RielflowCore/WorkflowModel.swift`, `Sources/RielflowCore/WorkflowValidation.swift`, `Tests/RielflowCoreTests/*`
 **Dependencies**: TASK-001
@@ -515,26 +543,60 @@ runtime, package, CLI, GraphQL, and event slices.
       paths and `.` / `..` segments.
 - [x] Public typed validation cannot bypass workflow-relative path guards.
 - [x] Backend strings remain stable.
-- [ ] `swift test` confirms the new fixture and diagnostic tests in a
+- [x] `swift test` confirms the new fixture and diagnostic tests in a
       Swift-capable environment.
 
 ### TASK-003: Port Prompt, JSON, And Output Envelope Contracts
 
-**Status**: In Progress
+**Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `Sources/RielflowCore/PromptTemplate.swift`, `Sources/RielflowCore/JSONValue.swift`, `Sources/RielflowAdapters/AdapterUtilities.swift`, `Tests/RielflowCoreTests/*`, `Tests/RielflowAdaptersTests/*`
+**Deliverables**: `Sources/RielflowCore/PromptTemplate.swift`, `Sources/RielflowCore/PromptTemplateAssets.swift`, `Sources/RielflowCore/JSONValue.swift`, `Sources/RielflowAdapters/AdapterUtilities.swift`, `Sources/RielflowCLI/WorkflowResolution.swift`, `Tests/RielflowCoreTests/*`, `Tests/RielflowAdaptersTests/*`, `Tests/RielflowCLITests/*`
 **Dependencies**: TASK-001, TASK-002
 
 **Description**:
 Port prompt rendering, JSON boundary, and adapter envelope normalization so
 agents and runtime output publication share one contract.
+This closure slice must use the TypeScript fallback references
+`packages/rielflow-core/src/render.ts`,
+`packages/rielflow-core/src/prompt-template-context.ts`,
+`packages/rielflow-core/src/prompt-template-file.ts`,
+`packages/rielflow-core/src/node-template-fields.ts`,
+`packages/rielflow/src/workflow/load.ts`,
+`packages/rielflow/src/workflow/prompt-composition.ts`,
+`packages/rielflow/src/workflow/adapter.ts`,
+`packages/rielflow/src/workflow/output-attempt-runner.ts`, and
+`packages/rielflow/src/workflow/engine/step-result-finalization.ts` because
+`../../codex-agent` is unavailable in this checkout.
 
 **Completion Criteria**:
 
-- [ ] Prompt rendering fixture tests pass.
-- [ ] Envelope normalization preserves `completionPassed`, `when`, and
-      `payload`.
-- [ ] Runtime publication remains outside backend adapters.
+- [x] Prompt rendering fixture tests cover literal brace text,
+      backslash-escaped JSON string content, multiple placeholders, dotted
+      paths, object and array substitutions, falsey scalar values, missing
+      variables, and null values.
+- [x] Prompt asset loading covers `systemPromptTemplateFile`,
+      `promptTemplateFile`, and `sessionStartPromptTemplateFile` on node
+      payloads and prompt variants.
+- [x] Prompt asset loading rejects empty paths, absolute paths, `.` / `..`
+      segments, traversal above the workflow root, canonical workflow
+      definition targets such as `workflow.json` and `node-*.json`, and missing
+      or unreadable files with field-specific diagnostics.
+- [x] Loaded template files populate the corresponding inline template fields
+      for execution while preserving authored file references for save and
+      validation workflows.
+- [x] No-contract adapter output preserves JSON-looking text as text payload.
+- [x] Contracted provider text yields a JSON object candidate or fails with
+      `invalid_output`.
+- [x] Envelope normalization preserves `completionPassed`, `when`, and
+      `payload`; defaults missing `completionPassed` to true; rejects non-boolean
+      `when` entries and non-object `payload`; and treats objects without
+      `when` as business payloads.
+- [x] JSON candidate extraction ignores braces inside quoted strings and
+      escaped string characters while finding the first balanced object.
+- [x] Runtime publication remains outside backend adapters; candidate-path
+      handling, workflow messages, communication ids, output validation, and
+      final root output selection stay runtime-owned.
+- [x] Xcode Swift 6.3.2 `swift test` passes after TASK-003 closure.
 
 ### TASK-004: Port Backend-Specific Agent And Official SDK Adapter Behavior
 
@@ -701,7 +763,7 @@ packaging checks remain traceable to the accepted design.
 **Status**: Not Started
 **Parallelizable**: No
 **Deliverables**: verification logs, review notes, updated progress log
-**Dependencies**: TASK-007, TASK-008
+**Dependencies**: TASK-003, TASK-007, TASK-008
 
 **Description**:
 Run required verification, document residual risks, and hand the migration to
@@ -726,7 +788,7 @@ high-risk implementation review before any TypeScript removal or release switch.
 | TASK-006 | TASK-002, TASK-003, TASK-005 | Package/add-on/event/GraphQL/server parity depends on runtime contracts. |
 | TASK-007 | TASK-004, TASK-005, TASK-006 | CLI parity depends on adapters, runtime, and compatibility surfaces. |
 | TASK-008 | TASK-007 | Packaging cutover readiness depends on CLI parity. |
-| TASK-009 | TASK-007, TASK-008 | Final review depends on verified runtime and cutover gates. |
+| TASK-009 | TASK-003, TASK-007, TASK-008 | Final review depends on TASK-003 closure, verified runtime, and cutover gates. |
 
 ## Parallelization
 
@@ -761,6 +823,10 @@ Within that plan, docs/skill fallback guidance and gate manifest work may run
 in parallel only if write scopes stay disjoint. Archive builder or dry-run
 surface work, deterministic readiness tests, and progress evidence are
 sequential because they share the artifact contract and verification outputs.
+Current TASK-003 closure is sequential because prompt rendering, template asset
+loading, and output-envelope candidate extraction share `RielflowCore` JSON and
+adapter-contract behavior. Focused tests may be grouped by file, but no task is
+parallelizable until the shared prompt/template loading API shape is accepted.
 
 ## Verification Plan
 
@@ -779,6 +845,23 @@ Swift commands:
 - `swift run rielflow workflow validate codex-design-and-implement-review-loop --scope project`
 - `swift run rielflow workflow inspect codex-design-and-implement-review-loop --scope project`
 - `swift run rielflow workflow run examples/temporary-workflow/workflow.json --mock --output json`
+
+TASK-002/TASK-003 prerequisite closure checks:
+
+- TASK-002 evidence check:
+  `rg -n "TASK-002|197 tests|Swift 6.3.2" impl-plans/active/swift-native-migration.md design-docs/specs/design-swift-native-migration.md`.
+- TASK-003 planning check:
+  `rg -n "renderPromptTemplate|promptTemplateFile|systemPromptTemplateFile|sessionStartPromptTemplateFile|completionPassed|candidate-path|runtime-owned" impl-plans/active/swift-native-migration.md design-docs/specs/design-swift-native-migration.md`.
+- TASK-003 implementation checks:
+  `rg -n "renderPromptTemplate|PromptTemplate|promptTemplateFile|systemPromptTemplateFile|sessionStartPromptTemplateFile" Sources/RielflowCore Tests/RielflowCoreTests`.
+  `rg -n "normalizeOutputContractEnvelope|parseJSONObjectCandidate|extractBalancedJSONObject|completionPassed|usedEnvelope" Sources/RielflowCore Sources/RielflowAdapters Tests/RielflowAdaptersTests Tests/AgentAdapterTests`.
+  `rg -n "candidatePath|WorkflowMessageRecord|communicationId|WorkflowOutputPublishing" Sources/RielflowAdapters Tests/RielflowAdaptersTests Tests/AgentAdapterTests` must not show backend adapters taking runtime-owned publication responsibilities.
+- Add or update XCTest coverage for prompt literal braces, escaped string
+  content, multiple placeholders, dotted paths, object/array substitutions,
+  falsey scalar values, missing and null variables, template-file loading and
+  rejection diagnostics, no-contract JSON-looking text, contracted plain text
+  rejection, strict envelope validation, business-payload fallback, and escaped
+  brace candidate extraction.
 
 Agent adapter checks:
 
@@ -851,8 +934,9 @@ Cutover checks:
 
 Current environment note:
 
-- Xcode Swift 6.3.2 is available and `swift test` passed 45 tests with
-  `DEVELOPER_DIR` and `SDKROOT` pointed at `/Applications/Xcode.app`.
+- Xcode Swift 6.3.2 is available and `swift test` passed 197 tests with
+  0 failures on 2026-06-12 using `DEVELOPER_DIR` and `SDKROOT` pointed at
+  `/Applications/Xcode.app`.
 - Default `swift` lookup can still point at a Nix Apple SDK path, so use the
   explicit Xcode toolchain command above until local toolchain selection is
   fixed.
@@ -880,6 +964,190 @@ Current environment note:
       change status.
 
 ## Progress Log
+
+### Session: 2026-06-12 20:35
+
+**Tasks Completed**: TASK-003 Step 7 review revision for JavaScript decimal
+threshold numeric rendering.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000035` found one mid
+issue: Swift numeric prompt rendering left `1.0e-6` as `1e-6`, while
+TypeScript/Bun `String(number)` and `JSON.stringify` render `1e-6` as
+`0.000001`.
+**Notes**: Prompt numeric rendering now expands negative exponents for finite
+values whose absolute value is within JavaScript's fixed-decimal display range
+`>= 1.0e-6 && < 1.0e21`, while keeping `1.0e-7` exponential. Scalar and nested
+prompt JSON regressions now cover `1.0e-6` alongside `1.0e20` and
+slash-preserving strings. Verification passed: JavaScript reference evidence,
+focused prompt tests, and full Xcode `swift test` passed 209 tests with 0
+failures.
+
+### Session: 2026-06-12 20:30
+
+**Tasks Completed**: TASK-003 Step 6 self-review revision for slash-preserving
+nested prompt JSON string rendering.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 6 self-review `comm-000031` found one mid
+issue: the recursive prompt JSON renderer used default JSONEncoder string
+encoding, which escaped forward slashes inside nested array/object strings and
+diverged from TypeScript/Bun `JSON.stringify`.
+**Notes**: Prompt JSON string rendering now uses `.withoutEscapingSlashes`,
+preserving URL-like string values inside nested object and array variables.
+The nested large-number regression also asserts slash-preserving string output.
+Verification passed: JavaScript `JSON.stringify` reference evidence, focused
+nested prompt JSON test, and full Xcode `swift test` passed 209 tests with 0
+failures.
+
+### Session: 2026-06-12 20:25
+
+**Tasks Completed**: TASK-003 Step 6 self-review revision for nested
+TypeScript-compatible JSON number rendering.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 6 self-review `comm-000029` found one mid
+issue: array/object prompt rendering still used JSONEncoder compact JSON for
+nested numbers, so nested `1.0e20` rendered as `1e+20` instead of TypeScript/Bun
+`JSON.stringify` decimal output.
+**Notes**: Prompt JSON rendering now recursively uses the same
+TypeScript-compatible numeric formatter for array and object values while
+preserving deterministic sorted object keys. Added regression coverage for
+nested object and array variables containing `1.0e20`. Verification passed:
+JavaScript `JSON.stringify` reference evidence and focused nested prompt JSON
+test; full Xcode `swift test` passed 209 tests with 0 failures.
+
+### Session: 2026-06-12 20:20
+
+**Tasks Completed**: TASK-003 Step 6 self-review revision for broader
+TypeScript-compatible number formatting.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 6 self-review `comm-000027` found one mid
+issue: the `1.0e20` formatting fix still used `Decimal(value)` for ordinary
+finite numbers, exposing binary approximation tails unlike TypeScript/Bun
+`String(number)`.
+**Notes**: Numeric prompt rendering now starts from Swift's shortest
+round-tripping `String(Double)` output, expands positive exponents below
+`1.0e21` to match JavaScript's decimal range, normalizes exponent zero padding,
+and strips `.0` from whole numbers. The regression now covers `1.0e20`,
+`0.30000000000000004`, `1.2345678901234567`, `1.0e21`, `1.0e-7`, and `0`.
+Verification passed: focused number-format test, full Xcode `swift test`
+passed 208 tests, and `git diff --check`.
+
+### Session: 2026-06-12 20:15
+
+**Tasks Completed**: TASK-003 Step 7 review revision for TypeScript-compatible
+large numeric prompt rendering.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000025` reported one mid
+finding that the large-number crash fix used compact JSON numeric formatting
+instead of the TypeScript/Bun `String(number)` prompt rendering contract.
+**Notes**: Prompt rendering now formats finite numbers using TypeScript-like
+display rules, including decimal output for `1.0e20` and exponent normalization
+for exponential notation. The large-number regression now expects
+`100000000000000000000`, matching JavaScript `String(1.0e20)`, while still
+avoiding unchecked `Int64` conversion. Verification passed: JavaScript
+number-format evidence, focused large-number prompt rendering test, full Xcode
+`swift test` passed 208 tests, and `git diff --check`.
+
+### Session: 2026-06-12 20:05
+
+**Tasks Completed**: TASK-003 Step 7 adversarial review revision for numeric
+prompt rendering.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000021`
+reported one mid finding that large integral JSON numbers could trap during
+prompt rendering because `formatTemplateValue` converted integral `Double`
+values through unchecked `Int64`.
+**Notes**: Prompt rendering now avoids unchecked integer conversion for numeric
+`JSONValue` values. Added regression coverage for `{{ total }}` with `1.0e20`.
+Verification passed: focused large-number prompt rendering test, full Xcode
+`swift test` passed 208 tests, and `git diff --check`.
+
+### Session: 2026-06-12 19:55
+
+**Tasks Completed**: TASK-003 Step 7 review revision for empty configured
+prompt templates.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000016` reported one mid
+finding that configured prompt templates rendering to an empty string were
+replaced with step or workflow fallback instructions.
+**Notes**: `DeterministicWorkflowRunner` now uses fallback prompt text only when
+no `promptTemplate` is configured. Authored configured templates that render
+empty after missing/null variable substitution remain empty instead of silently
+executing fallback instructions. Added deterministic runner coverage for
+`{{ missing.path }}` with a non-empty step description. Verification passed:
+focused empty-template runner test, full Xcode `swift test` passed 207 tests,
+and `git diff --check`.
+
+### Session: 2026-06-12 19:45
+
+**Tasks Completed**: TASK-003 Step 7 review revision for Swift prompt
+composition and prompt variants.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000012` reported one mid
+finding that deterministic Swift execution still built adapter prompt text from
+step or workflow descriptions and never rendered hydrated prompt templates or
+applied `WorkflowStepRef.promptVariant`.
+**Notes**: `DeterministicWorkflowRunner` now applies prompt variants before
+adapter execution, renders session-start, prompt, and system templates with
+merged payload/request/message variables, and sends the composed prompt fields
+through `AdapterExecutionInput`. Added deterministic regression coverage that
+asserts the adapter receives the hydrated variant prompt instead of fallback
+text. Verification passed: focused Xcode Swift 6.3.2 runner test, full Xcode
+`swift test` passed 206 tests, and `git diff --check`.
+
+### Session: 2026-06-12 19:20
+
+**Tasks Completed**: TASK-003 prompt, JSON, and output envelope closure.
+**Tasks In Progress**: None before TASK-009.
+**Blockers**: TASK-009 final parity/security/cutover review remains not
+started; TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 5 implementation-plan review
+`comm-000008` accepted the TASK-002/TASK-003 plan with no high or mid
+findings. Low stale TASK-006/TASK-007 module-row cleanup remains unrelated to
+the accepted TASK-003 scope.
+**Notes**: Added Swift prompt template asset contracts and resolver hydration
+for `systemPromptTemplateFile`, `promptTemplateFile`,
+`sessionStartPromptTemplateFile`, and prompt variants while preserving authored
+file references. Added deterministic Swift tests for prompt rendering fixtures,
+template asset loading and rejection diagnostics, output-envelope defaults and
+strict validation, business-payload fallback, and escaped-brace JSON candidate
+extraction. Runtime-owned publication remains outside backend adapters.
+Verification passed: Xcode Swift 6.3.2 `swift --version`, full Xcode
+`swift test` passed 205 tests, `bun run typecheck:server`,
+`bun run lint:biome`, TypeScript/Bun workflow validation, and
+`git diff --check`.
+
+### Session: 2026-06-12 19:05
+
+**Tasks Completed**: TASK-002 verification evidence alignment in the active
+plan.
+**Tasks In Progress**: TASK-003.
+**Blockers**: TASK-003 implementation still must add deterministic Swift prompt
+rendering, prompt asset loading, escaped/missing variable, JSON candidate
+extraction, and output-envelope normalization coverage before TASK-009.
+**Review Feedback Addressed**: Step 3 design review
+`riel-codex-design-and-implement-review-loop-1781255384-68cdb70c`
+accepted the TASK-002/TASK-003 design update with no high or mid findings.
+**Notes**: The plan now mirrors current Xcode Swift 6.3.2 evidence
+(`swift test` passed 197 tests with 0 failures on 2026-06-12) and narrows the
+next implementation step to TASK-003 contracts while preserving TypeScript/Bun
+as production fallback and keeping runtime-owned publication outside backend
+adapters.
 
 ### Session: 2026-06-12 18:35
 
