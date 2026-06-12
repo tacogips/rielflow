@@ -113,6 +113,15 @@ Current direction:
   Staging verifies existing path components before creation and resolved
   directories after creation to reject symlink escapes, and message input
   resolution excludes created, failed, and superseded rows.
+- The Swift TASK-006 contract slice adds additive package manifest, declarative
+  add-on, event dry-run, hook recording, GraphQL inspection, and server request
+  contracts across `RielflowAddons`, `RielflowEvents`, `RielflowHook`,
+  `RielflowGraphQL`, and `RielflowServer`. The slice is contract-first and
+  test-only: it preserves TypeScript/Bun fallback behavior, uses injected ports
+  and deterministic value projections, avoids engine-internal add-on leakage,
+  and does not introduce live gateway loops, live HTTP server loops, package
+  installation side effects, or final CLI cutover. See
+  `design-docs/specs/design-swift-native-migration.md#task-006-package-add-on-event-hook-graphql-and-server-contract-boundary`.
 
 ### Native Command Script Dispatch
 

@@ -50,7 +50,12 @@ let package = Package(
       ]
     ),
     .testTarget(name: "RielflowCoreTests", dependencies: ["RielflowCore"]),
+    .testTarget(name: "RielflowAddonsTests", dependencies: ["RielflowCore", "RielflowAddons"]),
     .testTarget(name: "RielflowAdaptersTests", dependencies: ["RielflowCore", "RielflowAdapters"]),
+    .testTarget(name: "RielflowEventsTests", dependencies: ["RielflowCore", "RielflowEvents"]),
+    .testTarget(name: "RielflowHookTests", dependencies: ["RielflowCore", "RielflowHook"]),
+    .testTarget(name: "RielflowGraphQLTests", dependencies: ["RielflowCore", "RielflowGraphQL"]),
+    .testTarget(name: "RielflowServerTests", dependencies: ["RielflowCore", "RielflowGraphQL", "RielflowServer"]),
     .testTarget(
       name: "AgentAdapterTests",
       dependencies: ["RielflowCore", "RielflowAdapters", "CodexAgent", "ClaudeCodeAgent", "CursorCLIAgent"]

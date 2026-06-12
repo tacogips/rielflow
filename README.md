@@ -157,6 +157,29 @@ TypeScript/Bun runtime is still the production fallback until later validation,
 inspect, deterministic run, package, event, GraphQL, hook, adapter, SQLite,
 and Homebrew parity gates pass.
 
+The TASK-006 Swift contract slice adds deterministic compatibility surfaces in
+`RielflowAddons`, `RielflowEvents`, `RielflowHook`, `RielflowGraphQL`, and
+`RielflowServer`. It ports package manifest loading and validation contracts,
+declarative add-on resolve/execute boundaries, event source and dry-run
+contracts, hook context parsing with redaction-safe recording, GraphQL DTO and
+control-plane result projections, and server request/route descriptors for
+`/`, `/overview`, `/graphql`, and `/healthz`. These surfaces are additive
+contracts only: they do not install packages, execute package scripts, start
+live gateways, send replies, run workflows from event dry-runs, publish
+workflow messages, allocate communication ids, expose candidate paths to
+add-ons, or replace the TypeScript/Bun HTTP and GraphQL server.
+
+TASK-006 also keeps the package/add-on boundary deterministic. Package
+manifest loading is local-file only, package-relative paths reject traversal,
+Windows drive-letter paths, and UNC paths, built-in add-on resolution requires
+trusted built-in source metadata instead of package add-on name spoofing, event
+route validation includes effective webhook, S3, and chat-sdk HTTP routes, hook
+payload hashes are canonical, and server header normalization is
+duplicate-safe. `codex-agent` remains an execution-backend identifier; the
+preferred local reference root `../../codex-agent` was unavailable for this
+slice, so the accepted parity reference remained the repository TypeScript/Bun
+adapter and contract sources.
+
 If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
 toolchain explicitly:
 
@@ -168,12 +191,15 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 93 tests for the current local-agent command-builder,
+`swift test` passed 149 tests for the current local-agent command-builder,
 bounded preflight, readiness, redaction, descriptor-isolation, official
-OpenAI/Anthropic SDK scaffold, and TASK-005 in-memory runtime publication
-coverage. Keep using the Bun commands in this README for the production
-runtime until Swift validation, inspect, deterministic run, package, event,
-GraphQL, hook, adapter, SQLite, and Homebrew parity gates pass.
+OpenAI/Anthropic SDK scaffold, TASK-005 in-memory runtime publication coverage,
+and TASK-006 package/add-on/event/hook/GraphQL/server contract coverage. The
+same accepted run also passed `bun run typecheck:server`, `bun run lint:biome`,
+and `bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project`.
+Keep using the Bun commands in this README for the production runtime until
+Swift validation, inspect, deterministic run, package, event, GraphQL, hook,
+adapter, SQLite, and Homebrew parity gates pass.
 
 ### Optional LLM Agent Setup
 

@@ -62,27 +62,28 @@ Out of scope for this plan:
 - Workflow mode: `issue-resolution`
 - Workflow ID: `codex-design-and-implement-review-loop`
 - Current workflow session:
+  `riel-codex-design-and-implement-review-loop-1781219857-4913c906`
+- Earlier TASK-005 workflow session:
   `riel-codex-design-and-implement-review-loop-1781211309-5fe4a54a`
 - Earlier TASK-004 workflow session:
   `riel-codex-design-and-implement-review-loop-1781203096-8dcd5023`
-- Current planning nodes: `step4-impl-plan-create`,
-  `step4-impl-plan-self-review`
+- Current planning node: `step4-impl-plan-create`
 - Repository: `tacogips/rielflow`
-- Issue title: `Port Swift runtime session and message publication boundary`
+- Issue title:
+  `Port Swift package add-on event hook GraphQL and server contracts`
 - GitHub issue: none supplied by runtime input
 - Branch: `swift-migration`
 - Risk level: high; adversarial implementation review required before cutover
 
 Workflow execution note:
 
-- Current TASK-005 planning run
-  `riel-codex-design-and-implement-review-loop-1781211309-5fe4a54a` scopes the
-  next implementation step to the Swift runtime-owned session, workflow
-  message store, candidate-path publication, and output-validation boundary.
-- Step 3 design review accepted the TASK-005 design update with no findings.
-- The previous TASK-004 official OpenAI/Anthropic SDK and local-agent
-  command-builder/readiness slices remain completed and are not reopened by
-  this plan revision.
+- Current TASK-006 planning run
+  `riel-codex-design-and-implement-review-loop-1781219857-4913c906` scopes the
+  next implementation step to Swift package manifest, add-on execution, event
+  dry-run, hook recording, GraphQL DTO, and server request contracts.
+- Step 3 design review accepted the TASK-006 design update with no findings.
+- The previous TASK-004 adapter parity and TASK-005 runtime publication slices
+  remain completed and are not reopened by this plan revision.
 
 ## Codex Agent References
 
@@ -456,7 +457,7 @@ public struct SwiftReleaseArtifact: Equatable, Sendable {
 | Prompt and JSON boundary contracts | `Sources/RielflowCore/PromptTemplate.swift`, `Sources/RielflowCore/JSONValue.swift`, `Sources/RielflowAdapters/AdapterUtilities.swift` | IN_PROGRESS | `Tests/RielflowCoreTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed for current scaffold |
 | Backend-faithful agent and official SDK adapters | `Sources/CodexAgent/*`, `Sources/ClaudeCodeAgent/*`, `Sources/CursorCLIAgent/*`, `Sources/RielflowAdapters/*` | COMPLETED | `Tests/AgentAdapterTests/*`, `Tests/RielflowAdaptersTests/*`; Xcode Swift 6.3.2 `swift test` passed 65 tests for local-agent command builders, bounded preflights, Cursor/Codex stream normalization, Codex argv option termination, descriptor isolation, configured-secret redaction, readiness parity, and official OpenAI/Anthropic SDK scaffold |
 | Runtime session and message publication | `Sources/RielflowCore/*`, `Sources/RielflowCLI/*` | COMPLETED | `Tests/RielflowCoreTests/*`; Xcode Swift 6.3.2 `swift test` passed 93 tests for TASK-005 in-memory runtime APIs |
-| Add-on, package, event, hook, GraphQL, and server boundaries | `Sources/RielflowAddons/*`, `Sources/RielflowEvents/*`, `Sources/RielflowHook/*`, `Sources/RielflowGraphQL/*`, `Sources/RielflowServer/*` | NOT_STARTED | `Tests/*` |
+| Add-on, package, event, hook, GraphQL, and server boundaries | `Sources/RielflowAddons/*`, `Sources/RielflowEvents/*`, `Sources/RielflowHook/*`, `Sources/RielflowGraphQL/*`, `Sources/RielflowServer/*` | COMPLETED | `Tests/RielflowAddonsTests/*`, `Tests/RielflowEventsTests/*`, `Tests/RielflowHookTests/*`, `Tests/RielflowGraphQLTests/*`, `Tests/RielflowServerTests/*`; Xcode Swift 6.3.2 `swift test` passed 125 tests |
 | CLI parity slice | `Sources/RielflowCLI/main.swift` | NOT_STARTED | `Tests/RielflowCLITests/*` |
 | Packaging and release cutover readiness | `packaging/homebrew/*`, `README.md`, `design-docs/user-qa/qa-swift-native-migration.md` | NOT_STARTED | macOS archive smoke checks |
 
@@ -616,20 +617,28 @@ traceable to the accepted design.
 
 ### TASK-006: Port Package, Add-on, Event, Hook, GraphQL, And Server Contracts
 
-**Status**: Not Started
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `Sources/RielflowAddons/*`, `Sources/RielflowEvents/*`, `Sources/RielflowHook/*`, `Sources/RielflowGraphQL/*`, `Sources/RielflowServer/*`, `Tests/*`
 **Dependencies**: TASK-002, TASK-003, TASK-005
 
 **Description**:
-Port compatibility surfaces needed by parity gates while preserving add-on and
-package boundaries.
+Port compatibility surfaces needed by parity gates while preserving package,
+add-on, event, hook, GraphQL, and server ownership boundaries.
+Implementation detail is split into the focused TASK-006 plan so this parent
+plan stays navigable while the contract slice remains traceable to the accepted
+design.
 
 **Completion Criteria**:
 
-- [ ] Package validation and manifest loading parity tests pass.
-- [ ] Event trigger dry-run and hook context parsing tests pass.
-- [ ] GraphQL/server inspection contracts expose the same runtime state shape.
+- [x] Package validation and manifest loading parity tests pass.
+- [x] Declarative add-on execution boundaries expose resolver inputs without
+      engine internals, session stores, communication ids, candidate paths, or
+      direct agent backend execution.
+- [x] Event trigger dry-run and hook context parsing tests pass.
+- [x] GraphQL/server inspection contracts expose the same runtime state shape.
+- [x] Focused plan exists at
+      `impl-plans/completed/swift-native-migration-task-006-contracts.md`.
 
 ### TASK-007: Implement Swift CLI Parity Commands
 
@@ -712,6 +721,13 @@ TASK-005 is split into the focused plan
 `impl-plans/completed/swift-native-migration-task-005-runtime-session.md`; that
 plan starts sequential because its runtime store, candidate normalization,
 validation, and publication APIs share `RielflowCore` type ownership.
+TASK-006 is split into the focused plan
+`impl-plans/completed/swift-native-migration-task-006-contracts.md`. Within that
+plan, package manifest (`RielflowAddons`), event (`RielflowEvents`), and hook
+(`RielflowHook`) contract tasks may run in parallel only if write scopes remain
+confined to their target and test directories. Add-on execution depends on
+manifest contracts, GraphQL depends on event and hook projections, server
+depends on GraphQL, and final verification runs last.
 
 ## Verification Plan
 
@@ -767,6 +783,16 @@ Agent adapter checks:
   in-memory message append failures, candidate-path rejection, output-contract
   failure paths, candidate-path provisioning/clearing/cleanup lifecycle, and
   no-publication provider/policy/timeout failures.
+- TASK-006 planning check:
+  `rg -n "WorkflowPackageManifest|AddonExecutionInput|ExternalEventEnvelope|HookContext|GraphQLWorkflowSessionDTO|ServerRequestEnvelope" impl-plans/completed/swift-native-migration-task-006-contracts.md`.
+- TASK-006 implementation checks:
+  `rg -n "WorkflowPackageManifest|WorkflowPackageManifestLoading|WorkflowPackageValidationIssue" Sources/RielflowAddons Tests/RielflowAddonsTests`.
+  `rg -n "AddonExecutionInput|AddonResolveRequest|AddonExecutionOutput|communicationId|candidatePath|WorkflowRuntimeStore" Sources/RielflowAddons Tests/RielflowAddonsTests`.
+  `rg -n "ExternalEventEnvelope|EventDryRunRequest|EventDryRunResult|EventReceipt|ReplyDispatch" Sources/RielflowEvents Tests/RielflowEventsTests`.
+  `rg -n "HookContext|HookRecordRequest|RIEL_HOOK_RECORDING|RIEL_HOOK_CAPTURE_RAW|redact" Sources/RielflowHook Tests/RielflowHookTests`.
+  `rg -n "GraphQLWorkflowSessionDTO|GraphQLControlPlaneServicing|schema" Sources/RielflowGraphQL Tests/RielflowGraphQLTests`.
+  `rg -n "ServerRequestEnvelope|ServerResponseDescriptor|healthz|overview|GraphQL" Sources/RielflowServer Tests/RielflowServerTests`.
+  `rg -n "URLSession|listen|bind|accept|install|checkout|copyItem|RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json" Sources/RielflowAddons Sources/RielflowEvents Sources/RielflowHook Sources/RielflowGraphQL Sources/RielflowServer Tests`.
 
 Cutover checks:
 
@@ -1613,3 +1639,378 @@ be silently converted to direct in-workflow messages.
 `RuntimePublicationTests.swift`. Unsupported `toWorkflowId`, `resumeStepId`,
 and `fanout` transitions now fail before accepted output or workflow message
 publication. Xcode Swift 6.3.2 `swift test` passes 89 tests.
+
+### Session: 2026-06-12 08:45
+
+**Tasks Completed**: None
+**Tasks In Progress**: TASK-002, TASK-003
+**Blockers**: None for planning. TASK-006 implementation must remain additive
+and contract-only while TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 3 accepted the TASK-006 design update with
+no findings; no Step 5 implementation-plan feedback exists for this run.
+**Notes**: Created focused TASK-006 implementation plan at
+`impl-plans/completed/swift-native-migration-task-006-contracts.md` covering Swift
+package manifest validation, declarative add-on execution boundaries, event
+trigger dry-run contracts, hook parsing and redaction-safe recording, GraphQL
+DTO/control-plane contracts, server request descriptors, no-side-effect
+constraints, and verification commands.
+
+### Session: 2026-06-12 08:40
+
+**Tasks Completed**: TASK-006.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 5 accepted the TASK-006 focused
+implementation plan with no high or mid findings; no Step 7 feedback exists
+for this implementation run.
+**Notes**: Implemented the focused TASK-006 contract slice across
+`RielflowAddons`, `RielflowEvents`, `RielflowHook`, `RielflowGraphQL`, and
+`RielflowServer`. Added deterministic XCTest coverage for manifest validation,
+add-on resolver isolation, event dry-runs, hook parsing/redaction, GraphQL DTO
+projection, and server descriptors. Xcode Swift 6.3.2 `swift test` passed 113
+tests; TypeScript/Bun fallback checks and targeted no-side-effect probes
+passed.
+
+### Session: 2026-06-12 08:46
+
+**Tasks Completed**: TASK-006 self-review fixes.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None.
+**Review Feedback Addressed**: Step 6 self-review found package manifest parity
+gaps before independent review: `"."` package-relative paths were rejected and
+nested manifest objects did not fail closed on unsupported keys.
+**Notes**: Tightened `RielflowAddons` manifest decoding and added focused
+regressions. Xcode Swift 6.3.2 `swift test` passed 113 tests; TypeScript/Bun
+fallback checks passed.
+
+### Session: 2026-06-12 08:56
+
+**Tasks Completed**: TASK-006 Step 7 review revision.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000012` reported two mid
+findings: Swift package manifest metadata/validation parity gaps and event
+validation parity gaps versus the TypeScript contracts.
+**Notes**: Added TS-compatible manifest metadata fields, dependency string
+decoding, add-on capabilities/content-digest validation, node-addon metadata
+validation, file-change and s3-repository event source contracts, template
+reference validation, and output-destination validation. Xcode Swift 6.3.2
+`swift test` passed 113 tests; TypeScript/Bun fallback checks passed.
+
+### Session: 2026-06-12 09:01
+
+**Tasks Completed**: TASK-006 Step 6 self-review decoder hardening.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Implementation author self-review found newly
+added and previously uncovered nested package manifest DTOs could still ignore
+unsupported keys.
+**Notes**: Added unsupported-key rejection for add-on capabilities, workflow
+metadata, integrity metadata, and signatures, plus deterministic decoder
+regressions. Xcode Swift 6.3.2 `swift test` passed 113 tests; TypeScript/Bun
+fallback checks passed.
+
+### Session: 2026-06-12 09:10
+
+**Tasks Completed**: TASK-006 Step 7 review revision for capability grants and
+event template dry-run mapping.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000016` reported two mid
+findings: incomplete add-on capability/capabilityGrant parity and dry-run
+input mapping that did not render TypeScript-compatible event templates.
+**Notes**: Added capability name, defaultPolicy, sensitive reason, duplicate,
+scope, and dependency capabilityGrant validation. Added event-input/template
+dry-run mapping with event, source, and binding roots, exact-reference object
+preservation, array traversal, and deterministic regressions. Xcode Swift 6.3.2
+`swift test` passed 115 tests.
+
+### Session: 2026-06-12 09:21
+
+**Tasks Completed**: TASK-006 Step 7 review revision for event binding match
+contracts and hook event-name catalog parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000020` reported two mid
+findings: event binding dry-run matching omitted enabled/match rules and hook
+event normalization omitted the full TypeScript hook event catalog.
+**Notes**: Added EventBindingContract enabled and match rules with eventType,
+conversationId, and pathPrefix dry-run matching. Expanded hook event
+normalization to the full known TypeScript HookEventName catalog and added
+deterministic regressions. Xcode Swift 6.3.2 `swift test` passed 117 tests.
+
+### Session: 2026-06-12 09:24
+
+**Tasks Completed**: TASK-006 Step 6 self-review optional enabled decoding
+fix.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Implementation author self-review found Swift
+synthesized Decodable would require `enabled` on event sources and bindings,
+even though the TypeScript event config treats it as optional.
+**Notes**: Added custom decoding defaults for EventSourceContract.enabled and
+EventBindingContract.enabled, plus a deterministic decoding regression. Xcode
+Swift 6.3.2 `swift test` passed 118 tests.
+
+### Session: 2026-06-12 09:32
+
+**Tasks Completed**: TASK-006 Step 7 review revision for HookContext backward
+decoding.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000024` reported one mid
+finding: HookContext Codable decode required newly added non-optional fields
+and broke pre-TASK-006 minimal JSON.
+**Notes**: Added custom HookContext decoding defaults for vendor, eventName,
+workingDirectory, and backendMetadata, plus a deterministic regression for the
+pre-TASK-006 shape. Xcode Swift 6.3.2 `swift test` passed 119 tests.
+
+### Session: 2026-06-12 09:45
+
+**Tasks Completed**: TASK-006 Step 7 review revision for event binding and
+input mapping TypeScript parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000028` reported two mid
+findings: EventBindingContract required `workflowId` instead of TypeScript
+`workflowName`, and dry-run input mapping accepted unsupported merge fallback
+while omitting `outputDestinations` runtime-variable evidence.
+**Notes**: Added workflowName/execution-mode binding contracts, typed
+event-input/template input mapping decoding, workflowName validation exceptions
+for supervisor-dispatch and schedule-registration, outputDestinations dry-run
+runtime variables, and deterministic regressions. Xcode Swift 6.3.2
+`swift test` passed 120 tests.
+
+### Session: 2026-06-12 09:55
+
+**Tasks Completed**: TASK-006 Step 7 review revision for event runtime
+variables, GraphQL schema contract, and hook context resolution parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000032` reported three mid
+findings: event dry-run runtime variables omitted humanInput and
+eventMailboxBridgePolicy, GraphQL schemaContract omitted DTO inspection fields
+and undefined ControlPlaneResult, and hook context resolution missed Rielflow
+env context plus invalid recording/capture validation.
+**Notes**: Added humanInput mirroring and eventMailboxBridgePolicy runtime
+variables, expanded schemaContract and schema assertions, added Rielflow hook
+context resolver/env validation, and deterministic regressions. Xcode Swift
+6.3.2 `swift test` passed 125 tests.
+
+### Session: 2026-06-12 10:09
+
+**Tasks Completed**: TASK-006 Step 7 review revision for add-on
+execution-artifact validation and authored event mailbox bridge policy.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000036` reported two mid
+findings: add-on manifest validation did not preserve TypeScript
+execution-artifact safety, and EventBindingContract omitted authored
+mailboxBridge policy overrides.
+**Notes**: Tightened add-on source/execution artifact path and descriptor
+validation, added authored EventMailboxBridgePolicy decoding and dry-run
+application, and added deterministic regressions. Xcode Swift 6.3.2
+`swift test` passed 129 tests.
+
+### Session: 2026-06-12 10:21
+
+**Tasks Completed**: TASK-006 Step 7 review revision for TypeScript-shaped
+event source config, mailboxBridge validation, and GraphQL envelope parsing.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000040` reported three mid
+findings: EventSourceContract missed TypeScript webhook/S3 keys, mailboxBridge
+consumer compatibility validation was missing, and GraphQL envelope parsing
+did not trim/normalize query, operationName, and variables like TypeScript.
+**Notes**: Added TypeScript-shaped webhook and nested S3 event source
+decode/encode support, mailboxBridge consumer mode validation, GraphQL query
+and operationName trimming plus variables null normalization, and deterministic
+regressions. Xcode Swift 6.3.2 `swift test` passed 131 tests.
+
+### Session: 2026-06-12 10:32
+
+**Tasks Completed**: TASK-006 Step 7 review revision for effective event HTTP
+route validation and server ambient manager environment stripping.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000044` reported three mid
+findings: event route conflict validation ignored effective S3/default HTTP
+paths, webhook and S3 required-field validation was incomplete, and server
+context sanitization leaked ambient workflow execution keys.
+**Notes**: Added effective event HTTP path resolution for webhook and
+s3-repository sources, route conflict validation across explicit and default
+paths, required webhook path and S3 eventReceiver validation, ambient workflow
+environment stripping in ServerRequestContext, and deterministic regressions.
+Xcode Swift 6.3.2 `swift test` passed 132 tests.
+
+### Session: 2026-06-12 10:48
+
+**Tasks Completed**: TASK-006 Step 7 adversarial review revision for package
+bundle existence validation and chat-sdk webhook route parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000049`
+reported two mid findings: workflow package manifest validation ignored
+`packageRoot` and accepted missing `workflow.json` bundles, and event HTTP
+path resolution omitted chat-sdk webhook routes from conflict detection.
+**Notes**: Added non-destructive `workflow.json` file existence validation to
+`FileWorkflowPackageManifestLoader.validate`, added TypeScript-shaped
+chat-sdk `webhook` decode/encode and effective route conflict validation, and
+added deterministic regressions. Xcode Swift 6.3.2 `swift test` passed 135
+tests.
+
+### Session: 2026-06-12 10:52
+
+**Tasks Completed**: TASK-006 Step 6 self-review hardening for chat-sdk
+webhook required-field parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 6 self-review after `comm-000050`
+confirmed `comm-000049` was fixed and tightened chat-sdk validation to reject
+missing webhook configuration before independent review.
+**Notes**: Added `hasChatWebhook` tracking, required chat-sdk webhook/path/auth
+diagnostics, updated chat dry-run fixtures to use valid webhook contracts, and
+re-ran targeted and full Swift tests. Xcode Swift 6.3.2 `swift test` passed
+135 tests.
+
+### Session: 2026-06-12 11:04
+
+**Tasks Completed**: TASK-006 Step 7 adversarial review revision for hook
+metadata redaction and duplicate-safe server header normalization.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000054`
+reported two mid findings: `HookParsing.parse` copied raw sensitive hook
+payloads into public `HookContext.backendMetadata`, and server header
+normalization could trap on duplicate mixed-case headers.
+**Notes**: Redacted parsed hook backendMetadata with the existing hook
+redaction policy, replaced header normalization with deterministic duplicate
+handling, and added focused regressions. Xcode Swift 6.3.2 `swift test`
+passed 137 tests.
+
+### Session: 2026-06-12 11:18
+
+**Tasks Completed**: TASK-006 Step 7 review revision for chat-sdk provider and
+event type capability validation parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000058` reported one mid
+finding: chat-sdk event validation accepted missing or unsupported providers
+and did not reject binding `match.eventType` values unsupported by the
+TypeScript chat-sdk provider capability set.
+**Notes**: Added Swift chat-sdk provider validation for the TypeScript provider
+set, provider event-type capability validation for binding `match.eventType`,
+and deterministic validation and dry-run regressions. Xcode Swift 6.3.2
+`swift test` passed 141 tests.
+
+### Session: 2026-06-12 11:46
+
+**Tasks Completed**: TASK-006 Step 7 review revision for top-level chat-sdk
+binding `eventType` capability validation.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000062` reported one mid
+finding: chat-sdk capability validation checked only binding `match.eventType`
+while dry-run matching also honors top-level `EventBindingContract.eventType`.
+**Notes**: Applied the same provider capability validation to top-level
+chat-sdk binding `eventType`, and added deterministic validation and dry-run
+regressions for unsupported top-level chat-sdk event types. Xcode Swift 6.3.2
+`swift test` passed 143 tests.
+
+### Session: 2026-06-12 11:58
+
+**Tasks Completed**: TASK-006 Step 7 adversarial review revision for local-only
+package manifest loading and canonical hook payload hashes.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000067`
+reported two mid findings: `FileWorkflowPackageManifestLoader` accepted
+non-file URLs through `Data(contentsOf:)`, and hook payload hashes depended on
+unsorted JSON encoder dictionary output.
+**Notes**: Added deterministic non-file URL rejection before manifest reads,
+canonicalized hook payload hash encoding with sorted JSON keys, and added
+focused regressions. Xcode Swift 6.3.2 `swift test` passed 145 tests.
+
+### Session: 2026-06-12 12:09
+
+**Tasks Completed**: TASK-006 Step 7 review revision for manifest tag presence
+and package-relative traversal rejection.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 review `comm-000071` reported two mid
+findings: manifest decoding defaulted missing `tags` to `[]` without
+validation, and `normalizePackageRelativePath` accepted `..` segments such as
+`a/..`.
+**Notes**: Added decoded tag-field tracking for top-level and workflow metadata
+manifests, tag validation for missing and empty entries, and fail-closed
+package-relative path normalization for any raw `..` segment. Added focused
+regressions for missing tags, empty tags, and `a/..` plus `a/../b` traversal.
+Xcode Swift 6.3.2 `swift test` passed 146 tests.
+
+### Session: 2026-06-12 12:12
+
+**Tasks Completed**: TASK-006 Step 6 self-review hardening for null tag
+decoding.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 6 self-review confirmed `comm-000071` was
+fixed and tightened tag decoding to reject explicit JSON `null`, matching the
+TypeScript manifest requirement that `tags` must be an array of strings.
+**Notes**: Changed decoded tag handling to decode `[String]` when the field is
+present instead of accepting `null` through `decodeIfPresent`, and added
+regressions for top-level and workflow metadata `tags: null`. Xcode Swift
+6.3.2 `swift test` passed 147 tests.
+
+### Session: 2026-06-12 12:23
+
+**Tasks Completed**: TASK-006 Step 7 adversarial review revision for
+continue-session GraphQL input contract parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000076`
+reported one mid finding: `schemaContract` exposed `continueSession` without a
+request input payload argument even though `GraphQLContinueSessionRequest`
+carries `input`.
+**Notes**: Added `ContinueSessionInput` to the Swift GraphQL schema contract
+with `workflowId`, `sessionId`, and `input: JSONObject!`, changed
+`continueSession` to accept that structured input object, and added schema
+regressions that fail if the old no-input mutation signature returns. Xcode
+Swift 6.3.2 `swift test` passed 147 tests.
+
+### Session: 2026-06-12 12:33
+
+**Tasks Completed**: TASK-006 Step 7 adversarial review revision for add-on
+built-in source trust and portable package-relative path validation.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-006. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000081`
+reported two mid findings: `DeterministicAddonResolver` allowed package
+add-ons to spoof built-in names through `allowedBuiltins`, and
+`normalizePackageRelativePath` did not reject Windows absolute paths.
+**Notes**: Required built-in resolution to have trusted `source.builtin`
+metadata and an allowed built-in name, rejected Windows absolute paths in
+general package-relative path normalization, and added focused regressions for
+built-in spoofing plus `C:\...` and UNC path rejection. Xcode Swift 6.3.2
+`swift test` passed 149 tests.

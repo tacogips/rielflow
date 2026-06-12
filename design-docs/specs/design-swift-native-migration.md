@@ -184,6 +184,159 @@ Rollout constraints:
 - Cursor-specific behavior remains isolated in `CursorCLIAgent`; TASK-005 adds no Cursor CLI mode, stream, auth, or `official/cursor-sdk` behavior.
 - Tests must use injected adapters/stores/clocks and synthetic candidates. They must not require live LLM credentials, local agent binaries, network access, or the TypeScript runtime.
 
+## TASK-006 Package, Add-on, Event, Hook, GraphQL, And Server Contract Boundary
+
+TASK-006 extends the additive Swift migration beyond the core runtime session
+shape into the compatibility contracts needed by package discovery, add-on
+resolution, event dry-runs, hook recording, GraphQL inspection, and server
+request routing. This slice is contract-first: it should expose deterministic
+Swift value types, parsers, validators, projections, and injected ports without
+making the Swift runtime the production server or package installer.
+
+Scope:
+
+- `RielflowAddons` owns workflow package manifest loading and validation
+  contracts, node add-on descriptors, declarative add-on execution requests,
+  add-on resolve results, and add-on failure diagnostics.
+- `RielflowEvents` owns event source and binding DTOs, external event envelopes,
+  event validation diagnostics, dry-run trigger requests/results, receipt
+  projection contracts, and injected trigger/reply/receipt ports.
+- `RielflowHook` owns hook vendor/event parsing, hook recording controls, hook
+  context extraction from environment and payload, redaction-safe payload
+  capture, and hook-event store records.
+- `RielflowGraphQL` owns Swift DTO projections over the TASK-005 runtime session,
+  step execution, workflow message, hook event, event receipt/reply dispatch,
+  and control-plane result shapes. It should expose schema-compatible contract
+  text or field descriptors without requiring a live GraphQL HTTP stack.
+- `RielflowServer` owns request and route contracts for `/`, `/overview`,
+  `/graphql`, and `/healthz`, including request envelope parsing, method
+  handling, status/content-type response descriptors, and server context
+  projection. It must not start long-running HTTP loops in this slice.
+
+Package manifest compatibility:
+
+- The Swift package manifest contract maps the TypeScript surfaces in
+  `packages/rielflow/src/workflow/packages/manifest.ts`,
+  `packages/rielflow/src/workflow/packages/types.ts`, and
+  `packages/rielflow/src/workflow/packages/install-validation.ts`.
+- Manifest names must use the same safe package-name rule, including optional
+  scope prefixes and lower-case package identifiers.
+- Package-relative paths must normalize using POSIX separators and reject empty
+  paths, absolute paths, `..`, and traversal above the package root.
+- Supported package kinds remain `workflow` and `node-addon`; omitted kind
+  defaults to `workflow`.
+- Skills, workflow metadata, dependency declarations, dependency add-on locks,
+  integrity metadata, and add-on entries should be modeled as value contracts
+  with deterministic validation issues. Unknown or unsupported keys should fail
+  closed where the TypeScript validator currently rejects them.
+- Validation workflow roots should be represented as an injected filesystem
+  planning contract. TASK-006 must not copy directories, install packages, run
+  package scripts, or mutate project/user scopes.
+
+Add-on execution compatibility:
+
+- The Swift add-on boundary maps
+  `packages/rielflow/src/workflow/addon-types.ts`,
+  `packages/rielflow/src/workflow/addon-package-boundary.ts`, and
+  `packages/rielflow-addons/src/node-addons/*`.
+- Add-on definitions remain declarative. Resolvers receive node payload,
+  variables, source metadata, and explicit options, not workflow engine
+  internals, session stores, communication ids, candidate paths, or mutable
+  runtime state.
+- Sync and async add-on boundaries must be distinguishable so an async-only
+  add-on cannot accidentally run through a sync validation path.
+- Built-in add-on names and versions should remain stable in authored workflow
+  JSON. Swift may expose typed config DTOs for known built-ins, but unknown
+  third-party add-ons stay data-driven and fail with deterministic diagnostics
+  when no resolver is injected.
+- Add-ons may construct candidate business payloads or dispatch intent records
+  through injected ports. They must not publish workflow messages, allocate
+  communication ids, execute agent backends directly, or reach into runtime
+  internals.
+
+Event dry-run compatibility:
+
+- The Swift event contract maps `packages/rielflow-events/src/types.ts`,
+  `packages/rielflow-events/src/runtime-ports.ts`,
+  `packages/rielflow/src/events/validate.ts`,
+  `packages/rielflow/src/events/manual-emit.ts`, and related input-mapping
+  helpers.
+- Event source validation should cover supported source kinds, unique ids,
+  route path conflicts, HTTP path syntax, secret/env var names, template
+  reference validation, and binding output-destination checks.
+- Dry-run trigger execution should normalize an external event envelope, apply
+  matching bindings and input mappings, and return deterministic trigger
+  summaries through injected ports. It must not open live gateways, poll remote
+  APIs, write receipts, send chat replies, or run workflows unless a test
+  supplies an explicit mock port.
+- Event envelopes preserve `sourceId`, `eventId`, `provider`, `eventType`,
+  `receivedAt`, `dedupeKey`, actor, conversation, input, and optional artifact
+  references. Raw payload persistence must use redacted or metadata-only
+  contracts where the TypeScript path redacts provider payloads.
+
+Hook compatibility:
+
+- The Swift hook contract maps `packages/rielflow-hook/src/types.ts`,
+  `packages/rielflow-hook/src/parse.ts`,
+  `packages/rielflow-hook/src/context.ts`,
+  `packages/rielflow-hook/src/redaction.ts`, and
+  `packages/rielflow-hook/src/recorder-contracts.ts`.
+- Supported hook vendors remain `claude-code`, `codex`, and `gemini`. Known
+  event names should normalize case and punctuation like the TypeScript parser,
+  with unknown events represented explicitly instead of rejected solely for
+  being new.
+- Hook payload parsing must require non-empty `session_id`,
+  `hook_event_name`, and `cwd`; optional `transcript_path` may be string, null,
+  or omitted; optional `model` must be a string when present.
+- Recording controls preserve `RIEL_HOOK_RECORDING=auto|off|required`,
+  `RIEL_HOOK_STRICT`, and `RIEL_HOOK_CAPTURE_RAW=redacted|metadata-only|full`.
+  Required mode fails when workflow/node execution environment is incomplete;
+  auto mode returns no Rielflow context instead of failing.
+- Redaction must replace sensitive key values, including auth, API key, secret,
+  token, password, credential, private key, stdout, stderr, output, and command
+  output fields. Hook records store payload hashes and optional payload refs;
+  they must not persist full raw payloads by default.
+
+GraphQL and server compatibility:
+
+- `RielflowGraphQL` maps `packages/rielflow-graphql/src/dto.ts`,
+  `packages/rielflow-graphql/src/control-plane-service.ts`, and
+  `packages/rielflow-graphql/src/schema-contract.ts`.
+- DTO projection should be lossy only where the TypeScript control plane is
+  already projection-based: runtime-internal stores remain private, while
+  sessions, step executions, communications, hook events, event receipts, reply
+  dispatches, logs, and LLM session messages expose stable inspection fields.
+- Control-plane service protocols should be injected and deterministic. Running,
+  continuing, or mutating workflows through GraphQL may be represented as result
+  contracts, but TASK-006 should not add final CLI parity or a live control
+  server.
+- `RielflowServer` maps `packages/rielflow/src/server/api.ts`,
+  `packages/rielflow/src/server/graphql.ts`, and
+  `packages/rielflow-server/src/contracts.ts`.
+- Server request contracts should parse GraphQL JSON envelopes, reject missing
+  or non-object bodies deterministically, normalize variables to an object,
+  preserve optional operation names, propagate bearer tokens and manager session
+  ids through context, and strip ambient manager execution context from
+  inherited environment before request execution.
+- Route contracts should keep `/` and `/overview` read-only, `/graphql`
+  delegated to the GraphQL contract, and `/healthz` returning a deterministic
+  service/status body. Unsupported methods and unknown paths should produce
+  deterministic response descriptors.
+
+Rollout constraints:
+
+- TypeScript/Bun remains the production fallback. TASK-006 may add Swift tests
+  and library surfaces only.
+- No live network chat gateways, live HTTP server loops, package installation
+  side effects, package checkout mutation, or final CLI cutover belongs in this
+  slice.
+- Tests must use fixture manifests, fixture event configs, fixture hook payloads,
+  in-memory stores, injected clocks, injected filesystems, and injected
+  GraphQL/server service ports. They must not require network access, live
+  chat credentials, local agent binaries, or package installation side effects.
+- Cursor CLI behavior remains isolated in `CursorCLIAgent`; TASK-006 introduces
+  no Cursor-specific add-on, event, GraphQL, hook, or server behavior.
+
 ## Data Flow
 
 The Swift runtime should keep the same high-level execution flow as the TypeScript runtime:

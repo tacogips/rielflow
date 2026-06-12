@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-12T08:06:00+09:00",
+  "lastUpdated": "2026-06-12T12:50:51+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -578,6 +578,9 @@
       "status": "IN_PROGRESS"
     },
     "196": {
+      "status": "COMPLETED"
+    },
+    "197": {
       "status": "COMPLETED"
     }
   },
@@ -7578,10 +7581,10 @@
       "path": "impl-plans/active/swift-native-migration.md",
       "designReference": "design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
       "workflowMode": "issue-resolution",
-      "issueReference": "Port Swift runtime session and message publication boundary; workflowInput.requestedBehavior TASK-005; no matching GitHub issue URL or number supplied",
+      "issueReference": "Port Swift package add-on event hook GraphQL and server contracts; workflowInput.requestedBehavior TASK-006; no matching GitHub issue URL or number supplied",
       "workflowId": "codex-design-and-implement-review-loop",
-      "lastPlanningNode": "step6-implement",
-      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use TypeScript adapter/runtime references and pinned package metadata until Swift references are supplied. TASK-004 local-agent and official OpenAI/Anthropic SDK parity are complete; TASK-005 is split to impl-plans/completed/swift-native-migration-task-005-runtime-session.md for runtime session, message store, candidate-path publication, and output validation; official/cursor-sdk remains explicitly deferred unless separately scoped.",
+      "lastPlanningNode": "step4-impl-plan-create",
+      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use TypeScript adapter/runtime references and pinned package metadata until Swift references are supplied. TASK-004 local-agent and official OpenAI/Anthropic SDK parity are complete; TASK-005 runtime publication is complete; TASK-006 is split to impl-plans/completed/swift-native-migration-task-006-contracts.md for package manifest, add-on execution, event dry-run, hook, GraphQL, and server contract surfaces; official/cursor-sdk remains explicitly deferred unless separately scoped.",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
@@ -7619,7 +7622,7 @@
           ]
         },
         "TASK-006": {
-          "status": "Not Started",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "TASK-002",
@@ -7737,7 +7740,22 @@
         "rg -n \"WorkflowResolvedMessageInput|WorkflowMessageInputResolving|DefaultWorkflowMessageInputResolver|testMessageInputResolverFiltersOrdersAndMergesPayloads\" Sources/RielflowCore Tests/RielflowCoreTests",
         "rg -n \"publishesRootOutput|testTerminalNonOutputStepDoesNotPublishRootOutput|testRootOutputComesFromAcceptedOutputWithoutDownstreamMessages\" Sources/RielflowCore/RuntimePublication.swift Tests/RielflowCoreTests/RuntimePublicationTests.swift",
         "rg -n \"testCandidatePathStagingRejectsSymlinkEscapeUnderSafeComponent|resolvedStagingDirectory|stagingPathEscapesRoot\" Sources/RielflowCore/RuntimeCandidatePathStaging.swift Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift",
-        "rg -n \"lifecycleStatus: \\.delivered|isResolvableInput|testMessageInputResolverUsesOnlyDeliveredAndConsumedMessages|testPublicationRecordsAcceptedOutputAndRuntimeGeneratedMessages\" Sources/RielflowCore/RuntimeStore.swift Tests/RielflowCoreTests/RuntimeStoreTests.swift Tests/RielflowCoreTests/RuntimePublicationTests.swift"
+        "rg -n \"lifecycleStatus: \\.delivered|isResolvableInput|testMessageInputResolverUsesOnlyDeliveredAndConsumedMessages|testPublicationRecordsAcceptedOutputAndRuntimeGeneratedMessages\" Sources/RielflowCore/RuntimeStore.swift Tests/RielflowCoreTests/RuntimeStoreTests.swift Tests/RielflowCoreTests/RuntimePublicationTests.swift",
+        "rg -n \"WorkflowPackageManifest|AddonExecutionInput|ExternalEventEnvelope|HookContext|GraphQLWorkflowSessionDTO|ServerRequestEnvelope\" impl-plans/completed/swift-native-migration-task-006-contracts.md",
+        "rg -n \"WorkflowPackageManifest|WorkflowPackageManifestLoading|WorkflowPackageValidationIssue\" Sources/RielflowAddons Tests/RielflowAddonsTests",
+        "rg -n \"AddonExecutionInput|AddonResolveRequest|AddonExecutionOutput|communicationId|candidatePath|WorkflowRuntimeStore\" Sources/RielflowAddons Tests/RielflowAddonsTests",
+        "rg -n \"ExternalEventEnvelope|EventDryRunRequest|EventDryRunResult|EventReceipt|ReplyDispatch\" Sources/RielflowEvents Tests/RielflowEventsTests",
+        "rg -n \"HookContext|HookRecordRequest|RIEL_HOOK_RECORDING|RIEL_HOOK_CAPTURE_RAW|redact\" Sources/RielflowHook Tests/RielflowHookTests",
+        "rg -n \"GraphQLWorkflowSessionDTO|GraphQLControlPlaneServicing|schema\" Sources/RielflowGraphQL Tests/RielflowGraphQLTests",
+        "rg -n \"ServerRequestEnvelope|ServerResponseDescriptor|healthz|overview|GraphQL\" Sources/RielflowServer Tests/RielflowServerTests",
+        "rg -n \"URLSession|listen|bind|accept|install|checkout|copyItem|RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json\" Sources/RielflowAddons Sources/RielflowEvents Sources/RielflowHook Sources/RielflowGraphQL Sources/RielflowServer Tests",
+        "rg -n \"tagsFieldPresent|validateTags|testManifestValidationRequiresDecodedTagsAndRejectsEmptyTags|a/\\.\\.|a/\\.\\./b\" Sources/RielflowAddons/WorkflowPackageManifest.swift Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowPackageManifestTests",
+        "rg -n \"testManifestDecodingRejectsNullTags|self.tags = self.tagsFieldPresent ? try container.decode\\(\\[String\\]\\.self, forKey: \\.tags\\) : \\[\\]\" Sources/RielflowAddons/WorkflowPackageManifest.swift Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
+        "rg -n \"ContinueSessionInput|continueSession\\(input: ContinueSessionInput!\\)|continueSession\\(workflowId: String!, sessionId: String!\\)\" Sources/RielflowGraphQL/GraphQLContracts.swift Tests/RielflowGraphQLTests/GraphQLContractsTests.swift",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter GraphQLContractsTests",
+        "rg -n \"testAllowedBuiltinNamesDoNotAuthorizePackageAddons|testManifestValidationRejectsWindowsAbsoluteDirectories|isWindowsAbsolutePath|source.builtin && request.allowedBuiltins\" Sources/RielflowAddons Tests/RielflowAddonsTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter AddonExecutionContractsTests"
       ],
       "residualRisks": [
         "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select points at a Nix Apple SDK path.",
@@ -8205,6 +8223,185 @@
           "file": "Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Sources/RielflowCore/RuntimeStore.swift; Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift; Tests/RielflowCoreTests/RuntimeStoreTests.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift; design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; impl-plans/completed/swift-native-migration-task-005-runtime-session.md; impl-plans/PROGRESS.json",
           "finding": "Step 7 review found candidate-path staging could follow safe-named symlink components outside the staging root and message input resolution consumed created, failed, or superseded workflow message rows.",
           "resolution": "Candidate staging now validates existing path components before creation, validates the resolved staging directory after creation, and rejects symlink escapes without returning outside-root candidate paths. Runtime message append now stores direct messages as delivered, and DefaultWorkflowMessageInputResolver includes only delivered or consumed messages. Added symlink escape and lifecycle filtering regressions. Xcode Swift 6.3.2 swift test passed 93 tests."
+        },
+        {
+          "node": "step4-impl-plan-create",
+          "finding": "Step 3 accepted TASK-006 design with no findings; no Step 5 feedback exists for this run.",
+          "resolution": "Created focused TASK-006 implementation plan and linked parent plan, README, PROGRESS.json, task breakdown, and verification commands.",
+          "paths": [
+            "impl-plans/completed/swift-native-migration-task-006-contracts.md",
+            "impl-plans/active/swift-native-migration.md",
+            "impl-plans/README.md",
+            "impl-plans/PROGRESS.json"
+          ]
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000012",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Sources/RielflowEvents/EventContracts.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 7 review reported two TASK-006 mid findings: Swift package manifest metadata and validation parity gaps, and event validation parity gaps versus the TypeScript contracts.",
+          "resolution": "Added TS-compatible manifest metadata fields, dependency string decoding, required metadata/checksum/add-on safety validation, file-change and s3-repository event contracts, template reference validation, and output destination validation with deterministic XCTest regressions."
+        },
+        {
+          "node": "step6-implement-self-review",
+          "communication": "comm-000013",
+          "severity": "self-review-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
+          "finding": "Implementation author self-review found nested package manifest DTOs for add-on capabilities, workflow metadata, integrity metadata, and signatures could still ignore unsupported keys.",
+          "resolution": "Added fail-closed unsupported-key decoding for those nested DTOs and deterministic decoder regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000016",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Sources/RielflowEvents/EventDryRun.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 7 review reported incomplete add-on capability/capabilityGrant parity and dry-run input mapping that did not render TypeScript-compatible event templates.",
+          "resolution": "Added capability name, defaultPolicy, sensitive reason, duplicate, scope, and dependency capabilityGrant validation. Added event-input/template dry-run rendering with event, source, and binding roots, exact-reference object preservation, array traversal, and deterministic regressions. Xcode Swift 6.3.2 swift test passed 115 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000020",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowEvents/EventContracts.swift; Sources/RielflowEvents/EventDryRun.swift; Sources/RielflowHook/HookContracts.swift; Tests/RielflowEventsTests/EventDryRunTests.swift; Tests/RielflowHookTests/HookContractsTests.swift",
+          "finding": "Step 7 review reported EventBindingContract omitted enabled and match rules, and hook event normalization omitted the full TypeScript HookEventName catalog.",
+          "resolution": "Added EventBindingContract enabled and match rules with eventType, conversationId, and pathPrefix dry-run matching. Expanded hook event normalization to the full known TypeScript HookEventName catalog and added deterministic regressions. Xcode Swift 6.3.2 swift test passed 117 tests."
+        },
+        {
+          "node": "step6-implement-self-review",
+          "communication": "comm-000021",
+          "severity": "self-review-fixed",
+          "file": "Sources/RielflowEvents/EventContracts.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Implementation author self-review found Swift synthesized Decodable would require enabled on event sources and bindings even though TypeScript event config treats enabled as optional.",
+          "resolution": "Added custom decoding defaults for EventSourceContract.enabled and EventBindingContract.enabled, plus deterministic decoding regression. Xcode Swift 6.3.2 swift test passed 118 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000024",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowHook/RielflowHook.swift; Tests/RielflowHookTests/HookContractsTests.swift",
+          "finding": "Step 7 review found HookContext Codable decode required newly added non-optional fields, breaking pre-TASK-006 minimal JSON with only agentSessionId and optional agentBackend.",
+          "resolution": "Added custom HookContext decoding defaults for vendor, eventName, workingDirectory, and backendMetadata, plus deterministic regression. Xcode Swift 6.3.2 swift test passed 119 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000028",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowEvents/EventContracts.swift; Sources/RielflowEvents/EventDryRun.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 7 review found EventBindingContract required workflowId instead of TypeScript workflowName, dry-run input mapping accepted unsupported merge fallback, and outputDestinations were omitted from runtime-variable evidence.",
+          "resolution": "Added workflowName and execution-mode binding contracts, typed event-input/template input mapping decoding, workflowName validation exceptions for supervisor-dispatch and schedule-registration, outputDestinations dry-run runtime variables, and deterministic regressions. Xcode Swift 6.3.2 swift test passed 120 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000032",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowEvents/EventDryRun.swift; Sources/RielflowGraphQL/GraphQLContracts.swift; Sources/RielflowHook/HookContracts.swift; Tests/RielflowEventsTests/EventDryRunTests.swift; Tests/RielflowGraphQLTests/GraphQLContractsTests.swift; Tests/RielflowHookTests/HookContractsTests.swift",
+          "finding": "Step 7 review found event dry-run runtime variables omitted humanInput and eventMailboxBridgePolicy, GraphQL schemaContract omitted DTO inspection fields and undefined ControlPlaneResult, and hook context resolution missed Rielflow env context plus invalid recording/capture validation.",
+          "resolution": "Added humanInput mirroring and eventMailboxBridgePolicy runtime variables, expanded schemaContract and schema assertions, added Rielflow hook context resolver/env validation, and deterministic regressions. Xcode Swift 6.3.2 swift test passed 125 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000036",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Sources/RielflowEvents/EventContracts.swift; Sources/RielflowEvents/EventDryRun.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 7 review found add-on manifest validation did not preserve TypeScript execution-artifact safety and EventBindingContract omitted authored mailboxBridge policy overrides.",
+          "resolution": "Tightened add-on source/execution artifact path and descriptor validation, added authored EventMailboxBridgePolicy decoding and dry-run application, and added deterministic regressions. Xcode Swift 6.3.2 swift test passed 129 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000040",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowEvents/EventContracts.swift; Sources/RielflowServer/ServerContracts.swift; Tests/RielflowEventsTests/EventDryRunTests.swift; Tests/RielflowServerTests/ServerContractsTests.swift",
+          "finding": "Step 7 review found EventSourceContract missed TypeScript webhook/S3 keys, EventContractValidator omitted mailboxBridge consumer compatibility rules, and GraphQL envelope parsing did not trim or normalize query, operationName, and variables like TypeScript.",
+          "resolution": "Added TypeScript-shaped webhook and nested S3 event source decode/encode support, mailboxBridge consumer mode validation, GraphQL query and operationName trimming plus variables null normalization, and deterministic regressions. Xcode Swift 6.3.2 swift test passed 131 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000044",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowEvents/EventContracts.swift; Sources/RielflowServer/ServerContracts.swift; Tests/RielflowEventsTests/EventDryRunTests.swift; Tests/RielflowServerTests/ServerContractsTests.swift",
+          "finding": "Step 7 review found event route conflict validation ignored effective S3/default HTTP paths, webhook and S3 required-field validation was incomplete, and server context sanitization leaked ambient workflow execution keys.",
+          "resolution": "Added effective event HTTP path resolution for webhook and s3-repository sources, route conflict validation across explicit and default paths, required webhook path and S3 eventReceiver validation, ambient workflow environment stripping in ServerRequestContext, and deterministic regressions. Xcode Swift 6.3.2 swift test passed 132 tests."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000049",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Sources/RielflowEvents/EventContracts.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 7 adversarial review found workflow package manifest validation ignored packageRoot and accepted missing workflow.json bundles, and event HTTP path resolution omitted chat-sdk webhook routes from conflict detection.",
+          "resolution": "Added non-destructive workflow.json file existence validation to FileWorkflowPackageManifestLoader.validate, added TypeScript-shaped chat-sdk webhook decode/encode and effective route conflict validation, and added deterministic regressions. Xcode Swift 6.3.2 swift test passed 135 tests."
+        },
+        {
+          "node": "step6-implement-self-review",
+          "communication": "comm-000050",
+          "severity": "self-review-hardening",
+          "file": "Sources/RielflowEvents/EventContracts.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 6 self-review confirmed chat-sdk webhook route parity and tightened missing webhook/path/auth validation before independent review.",
+          "resolution": "Added hasChatWebhook tracking, required chat-sdk webhook/path/auth diagnostics, updated dry-run chat fixtures to use valid webhook contracts, and re-ran targeted and full Swift tests. Xcode Swift 6.3.2 swift test passed 135 tests."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000054",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowHook/HookContracts.swift; Sources/RielflowServer/ServerContracts.swift; Tests/RielflowHookTests/HookContractsTests.swift; Tests/RielflowServerTests/ServerContractsTests.swift",
+          "finding": "Step 7 adversarial review found HookParsing copied raw sensitive hook payloads into public HookContext.backendMetadata and server header normalization could trap on duplicate mixed-case headers.",
+          "resolution": "Redacted parsed hook backendMetadata with the existing hook redaction policy, replaced header normalization with deterministic duplicate handling, and added focused regressions. Xcode Swift 6.3.2 swift test passed 137 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000058",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowEvents/EventContracts.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 7 review found chat-sdk event validation accepted missing or unsupported providers and did not reject binding match.eventType values unsupported by the TypeScript chat-sdk provider capability set.",
+          "resolution": "Added Swift chat-sdk provider validation for the TypeScript provider set, added provider event-type capability validation for binding match.eventType, and added deterministic validation and dry-run regressions. Xcode Swift 6.3.2 swift test passed 141 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000062",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowEvents/EventContracts.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 7 review found chat-sdk capability validation checked only binding match.eventType while dry-run matching also honors top-level EventBindingContract.eventType.",
+          "resolution": "Applied the same provider capability validation to top-level chat-sdk binding eventType, and added deterministic validation and dry-run regressions for unsupported top-level chat-sdk event types. Xcode Swift 6.3.2 swift test passed 143 tests."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000067",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Sources/RielflowHook/HookContracts.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift; Tests/RielflowHookTests/HookContractsTests.swift",
+          "finding": "Step 7 adversarial review found FileWorkflowPackageManifestLoader accepted arbitrary URL schemes through Data(contentsOf:) and hook payload hashes used unsorted JSON encoder output.",
+          "resolution": "Added deterministic non-file URL rejection before manifest reads, canonicalized hook payload hash encoding with sorted JSON keys, and added focused regressions. Xcode Swift 6.3.2 swift test passed 145 tests."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000071",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
+          "finding": "Step 7 review found manifest decoding defaulted missing tags to [] without validation and normalizePackageRelativePath accepted raw .. segments such as a/.. and a/../b.",
+          "resolution": "Added decoded tag-field tracking for top-level and workflow metadata manifests, tag validation for missing and empty entries, fail-closed package-relative path normalization for any raw .. segment, and focused regressions. Xcode Swift 6.3.2 swift test passed 146 tests."
+        },
+        {
+          "node": "step6-implement-self-review",
+          "communication": "comm-000072",
+          "severity": "self-review-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
+          "finding": "Step 6 self-review found explicit JSON null tags could still be accepted by decodeIfPresent despite comm-000071 requiring tags to be an array of strings.",
+          "resolution": "Changed present tag fields to decode [String] directly, rejecting null, and added top-level plus workflow metadata null-tag regressions. Xcode Swift 6.3.2 swift test passed 147 tests."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000076",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowGraphQL/GraphQLContracts.swift; Tests/RielflowGraphQLTests/GraphQLContractsTests.swift",
+          "finding": "Step 7 adversarial review found GraphQL schemaContract exposed continueSession without an input payload argument even though GraphQLContinueSessionRequest carries input.",
+          "resolution": "Added ContinueSessionInput with workflowId, sessionId, and input: JSONObject!, changed continueSession to accept the structured input object, and added schema regressions that reject the old no-input mutation signature. Xcode Swift 6.3.2 swift test passed 147 tests."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000081",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAddons/AddonExecutionContracts.swift; Sources/RielflowAddons/WorkflowPackageManifest.swift; Tests/RielflowAddonsTests/AddonExecutionContractsTests.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
+          "finding": "Step 7 adversarial review found allowedBuiltins could authorize untrusted package add-ons with built-in names and normalizePackageRelativePath did not reject Windows absolute paths.",
+          "resolution": "Required trusted source.builtin metadata together with allowedBuiltins for built-in resolution, rejected Windows absolute paths in general package-relative path normalization, and added focused regressions. Xcode Swift 6.3.2 swift test passed 149 tests."
         }
       ]
     },
@@ -8404,8 +8601,253 @@
           "file": "Sources/RielflowCore/RuntimeCandidatePathStaging.swift; Sources/RielflowCore/RuntimeStore.swift; Tests/RielflowCoreTests/RuntimeOutputCandidateTests.swift; Tests/RielflowCoreTests/RuntimeStoreTests.swift; Tests/RielflowCoreTests/RuntimePublicationTests.swift; design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; impl-plans/completed/swift-native-migration-task-005-runtime-session.md; impl-plans/PROGRESS.json",
           "finding": "Step 7 review found candidate-path staging could follow safe-named symlink components outside the staging root and message input resolution consumed created, failed, or superseded workflow message rows.",
           "resolution": "Candidate staging now validates existing path components before creation, validates the resolved staging directory after creation, and rejects symlink escapes without returning outside-root candidate paths. Runtime message append now stores direct messages as delivered, and DefaultWorkflowMessageInputResolver includes only delivered or consumed messages. Added symlink escape and lifecycle filtering regressions. Xcode Swift 6.3.2 swift test passed 93 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000012",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowAddons/WorkflowPackageManifest.swift; Sources/RielflowEvents/EventContracts.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift; Tests/RielflowEventsTests/EventDryRunTests.swift",
+          "finding": "Step 7 review found TASK-006 Swift package manifest metadata and event validation parity gaps versus the TypeScript package and event contracts.",
+          "resolution": "Added TS-compatible manifest metadata fields, dependency string decoding, required metadata/checksum/add-on safety validation, file-change and s3-repository event contracts, template reference validation, and output destination validation. Xcode Swift 6.3.2 swift test passed 113 tests."
         }
       ]
+    },
+    "completed/swift-native-migration-task-006-contracts": {
+      "phase": 197,
+      "status": "Completed",
+      "path": "impl-plans/completed/swift-native-migration-task-006-contracts.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md#task-006-package-add-on-event-hook-graphql-and-server-contract-boundary",
+      "workflowMode": "issue-resolution",
+      "issueReference": "Port Swift package add-on event hook GraphQL and server contracts; workflowInput.requestedBehavior TASK-006; no matching GitHub issue URL or number supplied",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastPlanningNode": "step4-impl-plan-create",
+      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use package/add-on/event/hook/GraphQL/server TypeScript references and current Swift scaffold until Swift references are supplied.",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "active/swift-native-migration:TASK-002",
+            "active/swift-native-migration:TASK-003"
+          ]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "active/swift-native-migration:TASK-005"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "active/swift-native-migration:TASK-002",
+            "active/swift-native-migration:TASK-003"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "active/swift-native-migration:TASK-002",
+            "active/swift-native-migration:TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-003",
+            "TASK-004",
+            "active/swift-native-migration:TASK-005"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-005"
+          ]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005",
+            "TASK-006"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "git status --short --branch",
+        "git diff --check",
+        "bun run typecheck:server",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "jq empty impl-plans/PROGRESS.json",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "rg -n \"WorkflowPackageManifest|WorkflowPackageManifestLoading|WorkflowPackageValidationIssue\" Sources/RielflowAddons Tests/RielflowAddonsTests",
+        "rg -n \"AddonExecutionInput|AddonResolveRequest|AddonExecutionOutput|communicationId|candidatePath|WorkflowRuntimeStore\" Sources/RielflowAddons Tests/RielflowAddonsTests",
+        "rg -n \"ExternalEventEnvelope|EventDryRunRequest|EventDryRunResult|EventReceipt|ReplyDispatch\" Sources/RielflowEvents Tests/RielflowEventsTests",
+        "rg -n \"HookContext|HookRecordRequest|RIEL_HOOK_RECORDING|RIEL_HOOK_CAPTURE_RAW|redact\" Sources/RielflowHook Tests/RielflowHookTests",
+        "rg -n \"GraphQLWorkflowSessionDTO|GraphQLControlPlaneServicing|schema\" Sources/RielflowGraphQL Tests/RielflowGraphQLTests",
+        "rg -n \"ServerRequestEnvelope|ServerResponseDescriptor|healthz|overview|GraphQL\" Sources/RielflowServer Tests/RielflowServerTests",
+        "rg -n \"URLSession|listen|bind|accept|install|checkout|copyItem|RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json\" Sources/RielflowAddons Sources/RielflowEvents Sources/RielflowHook Sources/RielflowGraphQL Sources/RielflowServer Tests",
+        "! rg -n \"URLSession|\\\\.listen|listen\\\\(|bind\\\\(|accept\\\\(|install\\\\(|checkout\\\\(|copyItem|RIEL_MAILBOX_DIR|inbox/input\\\\.json|outbox/output\\\\.json\" Sources/RielflowAddons Sources/RielflowEvents Sources/RielflowHook Sources/RielflowGraphQL Sources/RielflowServer Tests/RielflowAddonsTests Tests/RielflowEventsTests Tests/RielflowHookTests Tests/RielflowGraphQLTests Tests/RielflowServerTests",
+        "rg -n \"tagsFieldPresent|validateTags|testManifestValidationRequiresDecodedTagsAndRejectsEmptyTags|a/\\.\\.|a/\\.\\./b\" Sources/RielflowAddons/WorkflowPackageManifest.swift Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowPackageManifestTests",
+        "rg -n \"testManifestDecodingRejectsNullTags|self.tags = self.tagsFieldPresent ? try container.decode\\(\\[String\\]\\.self, forKey: \\.tags\\) : \\[\\]\" Sources/RielflowAddons/WorkflowPackageManifest.swift Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
+        "rg -n \"ContinueSessionInput|continueSession\\(input: ContinueSessionInput!\\)|continueSession\\(workflowId: String!, sessionId: String!\\)\" Sources/RielflowGraphQL/GraphQLContracts.swift Tests/RielflowGraphQLTests/GraphQLContractsTests.swift",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter GraphQLContractsTests",
+        "rg -n \"testAllowedBuiltinNamesDoNotAuthorizePackageAddons|testManifestValidationRejectsWindowsAbsoluteDirectories|isWindowsAbsolutePath|source.builtin && request.allowedBuiltins\" Sources/RielflowAddons Tests/RielflowAddonsTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter AddonExecutionContractsTests"
+      ],
+      "addressedReviewFindings": [
+        {
+          "node": "step3-design-review",
+          "finding": "No high or mid findings; design accepted.",
+          "resolution": "Implementation plan traces accepted TASK-006 contract boundaries and no-side-effect constraints."
+        },
+        {
+          "node": "step5-impl-plan-review",
+          "finding": "No high or mid findings; TASK-006 implementation plan accepted.",
+          "resolution": "Implemented additive Swift contracts and deterministic tests across RielflowAddons, RielflowEvents, RielflowHook, RielflowGraphQL, and RielflowServer while preserving TypeScript/Bun fallback and no-side-effect constraints."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000012",
+          "finding": "Step 7 review reported two mid findings: Swift package manifest metadata and validation parity gaps, and event validation parity gaps versus the TypeScript contracts.",
+          "resolution": "Added TS-compatible manifest metadata fields, dependency string decoding, required metadata/checksum/add-on safety validation, file-change and s3-repository event contracts, template reference validation, and output destination validation with deterministic XCTest regressions."
+        },
+        {
+          "node": "step6-implement-self-review",
+          "communication": "comm-000013",
+          "finding": "Implementation author self-review found nested package manifest DTOs for add-on capabilities, workflow metadata, integrity metadata, and signatures could still ignore unsupported keys.",
+          "resolution": "Added fail-closed unsupported-key decoding for those nested DTOs and deterministic decoder regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000016",
+          "finding": "Step 7 review reported incomplete add-on capability/capabilityGrant parity and dry-run input mapping that did not render TypeScript-compatible event templates.",
+          "resolution": "Added capability name, defaultPolicy, sensitive reason, duplicate, scope, and dependency capabilityGrant validation. Added event-input/template dry-run rendering with event, source, and binding roots, exact-reference object preservation, array traversal, and deterministic regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000020",
+          "finding": "Step 7 review reported EventBindingContract omitted enabled and match rules, and hook event normalization omitted the full TypeScript HookEventName catalog.",
+          "resolution": "Added EventBindingContract enabled and match rules with eventType, conversationId, and pathPrefix dry-run matching. Expanded hook event normalization to the full known TypeScript HookEventName catalog and added deterministic regressions."
+        },
+        {
+          "node": "step6-implement-self-review",
+          "communication": "comm-000021",
+          "finding": "Implementation author self-review found Swift synthesized Decodable would require enabled on event sources and bindings even though TypeScript event config treats enabled as optional.",
+          "resolution": "Added custom decoding defaults for EventSourceContract.enabled and EventBindingContract.enabled, plus deterministic decoding regression."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000024",
+          "finding": "Step 7 review found HookContext Codable decode required newly added non-optional fields, breaking pre-TASK-006 minimal JSON with only agentSessionId and optional agentBackend.",
+          "resolution": "Added custom HookContext decoding defaults for vendor, eventName, workingDirectory, and backendMetadata, plus deterministic regression."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000028",
+          "finding": "Step 7 review found EventBindingContract required workflowId instead of TypeScript workflowName, dry-run input mapping accepted unsupported merge fallback, and outputDestinations were omitted from runtime-variable evidence.",
+          "resolution": "Added workflowName and execution-mode binding contracts, typed event-input/template input mapping decoding, workflowName validation exceptions for supervisor-dispatch and schedule-registration, outputDestinations dry-run runtime variables, and deterministic regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000032",
+          "finding": "Step 7 review found event dry-run runtime variables omitted humanInput and eventMailboxBridgePolicy, GraphQL schemaContract omitted DTO inspection fields and undefined ControlPlaneResult, and hook context resolution missed Rielflow env context plus invalid recording/capture validation.",
+          "resolution": "Added humanInput mirroring and eventMailboxBridgePolicy runtime variables, expanded schemaContract and schema assertions, added Rielflow hook context resolver/env validation, and deterministic regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000036",
+          "finding": "Step 7 review found add-on manifest validation did not preserve TypeScript execution-artifact safety and EventBindingContract omitted authored mailboxBridge policy overrides.",
+          "resolution": "Tightened add-on source/execution artifact path and descriptor validation, added authored EventMailboxBridgePolicy decoding and dry-run application, and added deterministic regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000040",
+          "finding": "Step 7 review found EventSourceContract missed TypeScript webhook/S3 keys, EventContractValidator omitted mailboxBridge consumer compatibility rules, and GraphQL envelope parsing did not trim or normalize query, operationName, and variables like TypeScript.",
+          "resolution": "Added TypeScript-shaped webhook and nested S3 event source decode/encode support, mailboxBridge consumer mode validation, GraphQL query and operationName trimming plus variables null normalization, and deterministic regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000044",
+          "finding": "Step 7 review found event route conflict validation ignored effective S3/default HTTP paths, webhook and S3 required-field validation was incomplete, and server context sanitization leaked ambient workflow execution keys.",
+          "resolution": "Added effective event HTTP path resolution for webhook and s3-repository sources, route conflict validation across explicit and default paths, required webhook path and S3 eventReceiver validation, ambient workflow environment stripping in ServerRequestContext, and deterministic regressions."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000049",
+          "finding": "Step 7 adversarial review found workflow package manifest validation ignored packageRoot and accepted missing workflow.json bundles, and event HTTP path resolution omitted chat-sdk webhook routes from conflict detection.",
+          "resolution": "Added non-destructive workflow.json file existence validation to FileWorkflowPackageManifestLoader.validate, added TypeScript-shaped chat-sdk webhook decode/encode and effective route conflict validation, and deterministic regressions."
+        },
+        {
+          "node": "step6-implement-self-review",
+          "communication": "comm-000050",
+          "finding": "Step 6 self-review confirmed chat-sdk webhook route parity and tightened missing webhook/path/auth validation before independent review.",
+          "resolution": "Added hasChatWebhook tracking, required chat-sdk webhook/path/auth diagnostics, updated dry-run chat fixtures to use valid webhook contracts, and re-ran targeted and full Swift tests."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000054",
+          "finding": "Step 7 adversarial review found HookParsing copied raw sensitive hook payloads into public HookContext.backendMetadata and server header normalization could trap on duplicate mixed-case headers.",
+          "resolution": "Redacted parsed hook backendMetadata with the existing hook redaction policy, replaced header normalization with deterministic duplicate handling, and added focused regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000058",
+          "finding": "Step 7 review found chat-sdk event validation accepted missing or unsupported providers and did not reject binding match.eventType values unsupported by the TypeScript chat-sdk provider capability set.",
+          "resolution": "Added Swift chat-sdk provider validation for the TypeScript provider set, provider event-type capability validation for binding match.eventType, and deterministic validation and dry-run regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000062",
+          "finding": "Step 7 review found chat-sdk capability validation checked only binding match.eventType while dry-run matching also honors top-level EventBindingContract.eventType.",
+          "resolution": "Applied the same provider capability validation to top-level chat-sdk binding eventType, and added deterministic validation and dry-run regressions for unsupported top-level chat-sdk event types."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000067",
+          "finding": "Step 7 adversarial review found FileWorkflowPackageManifestLoader accepted arbitrary URL schemes through Data(contentsOf:) and hook payload hashes used unsorted JSON encoder output.",
+          "resolution": "Added deterministic non-file URL rejection before manifest reads, canonicalized hook payload hash encoding with sorted JSON keys, and added focused regressions."
+        },
+        {
+          "node": "step7-review",
+          "communication": "comm-000071",
+          "finding": "Step 7 review found manifest decoding defaulted missing tags to [] without validation and normalizePackageRelativePath accepted raw .. segments such as a/.. and a/../b.",
+          "resolution": "Added decoded tag-field tracking, tag validation for missing and empty entries, fail-closed raw .. path rejection, and focused regressions."
+        },
+        {
+          "node": "step6-implement-self-review",
+          "communication": "comm-000072",
+          "finding": "Step 6 self-review found explicit JSON null tags could still be accepted by decodeIfPresent despite comm-000071 requiring tags to be an array of strings.",
+          "resolution": "Changed present tag fields to decode [String] directly and added top-level plus workflow metadata null-tag regressions."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000076",
+          "finding": "Step 7 adversarial review found GraphQL schemaContract exposed continueSession without an input payload argument even though GraphQLContinueSessionRequest carries input.",
+          "resolution": "Added ContinueSessionInput, changed continueSession to accept structured input, and added schema regressions."
+        },
+        {
+          "node": "step7-adversarial-review",
+          "communication": "comm-000081",
+          "finding": "Step 7 adversarial review found allowedBuiltins could authorize untrusted package add-ons with built-in names and normalizePackageRelativePath did not reject Windows absolute paths.",
+          "resolution": "Required trusted source.builtin metadata together with allowedBuiltins for built-in resolution, rejected Windows absolute paths in general package-relative path normalization, and added focused regressions."
+        }
+      ],
+      "completedAt": "2026-06-12"
     }
   }
 }

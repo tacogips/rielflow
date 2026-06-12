@@ -204,6 +204,35 @@ Swift persistence and CLI parity remain deferred, the preferred
 `../../codex-agent` reference is unavailable, and the default `swift` lookup
 may still require the Xcode `DEVELOPER_DIR`/`SDKROOT` override.
 
+For the 2026-06-12 TASK-006 `swift-migration` run, Step 7 adversarial review
+accepted the package, add-on, event, hook, GraphQL, and server compatibility
+contract slice after Xcode Swift 6.3.2 `swift test` passed 149 tests,
+`bun run typecheck:server` passed, `bun run lint:biome` passed, and
+`bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project`
+passed. The accepted slice adds additive Swift contracts in `RielflowAddons`,
+`RielflowEvents`, `RielflowHook`, `RielflowGraphQL`, and `RielflowServer` for
+workflow package manifest loading and validation, declarative add-on
+resolve/execute boundaries, event source validation and dry-run mapping, hook
+context parsing and redaction-safe recording, GraphQL DTO/control-plane
+projections, and server request/route descriptors for `/`, `/overview`,
+`/graphql`, and `/healthz`. Keep the slice contract-only until later parity
+gates: do not
+install packages, execute package scripts, start live gateways, send replies,
+run workflows from event dry-runs, publish workflow messages, allocate
+communication ids, expose candidate paths to add-ons, or replace the
+TypeScript/Bun HTTP and GraphQL server. Preserve deterministic hardening from
+the accepted review loop: local-file-only package manifest loading,
+package-relative traversal, Windows drive-letter, and UNC path rejection,
+trusted built-in source metadata for built-in add-ons, effective webhook, S3,
+and chat-sdk route conflict validation, canonical hook payload hashes, redacted
+hook backend metadata, duplicate-safe server header normalization, and
+continue-session GraphQL input parity. Residual low risks remain: the
+preferred `../../codex-agent` reference is unavailable, TASK-002 and TASK-003
+remain in progress, TypeScript/Bun remains the production fallback, Swift
+SQLite/CLI/package/event/GraphQL/server/Homebrew cutover remains deferred, and
+the default `swift` lookup may still require the Xcode `DEVELOPER_DIR`/
+`SDKROOT` override.
+
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via
 an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; workflow message payloads
