@@ -250,8 +250,8 @@ containment with symlink checks, and TypeScript/Bun mock-scenario sequence
 parity based on execution index and validation attempt. The focused TASK-007
 implementation plan is archived at
 `impl-plans/completed/swift-native-migration-task-007-cli-parity.md`; the
-parent Swift migration plan remains active for TASK-009 after the later
-TASK-002/TASK-003 prerequisite closure.
+parent Swift migration plan later moved to
+`impl-plans/completed/swift-native-migration.md` after TASK-009 acceptance.
 Keep the slice deterministic and local until later cutover gates:
 do not replace the
 TypeScript/Bun production CLI, mutate package checkout or registry state, run
@@ -276,9 +276,10 @@ TypeScript/Bun archives under
 release assets, update `tacogips/homebrew-tap`, run production formula
 rendering, remove TypeScript/Bun packaging, or make Swift production by
 default. The TASK-008 cutover manifest is
-`packaging/homebrew/swift-cutover-gates.json`; all final Homebrew cutover gates
-remain blocked until TASK-009 accepts parity, security, persistence, macOS
-archive smoke, and adversarial review. Accepted verification included Xcode
+`packaging/homebrew/swift-cutover-gates.json`; TASK-008 left final Homebrew
+cutover gates blocked until TASK-009 parity, security, persistence, macOS
+archive smoke, and adversarial review evidence was accepted. Accepted
+verification included Xcode
 Swift 6.3.2 `swift test` passing 197 tests, `bun run typecheck:server`,
 `bun run lint:biome`, TypeScript/Bun workflow validation, dry-run and real
 `scripts/build-swift-homebrew-readiness.sh` checks, archive listing, relocated
@@ -317,9 +318,30 @@ for `String(number)` and `JSON.stringify(number)`, focused Swift tests for
 `PromptTemplateTests`, deterministic-runner prompt rendering, adapter utility
 envelope handling, and resolver prompt-file hydration, full Xcode
 `swift test`, `jq empty impl-plans/PROGRESS.json`, and `git diff --check`.
-Residual low risks remain: TASK-009 final parity/security/cutover review is
-not started, TypeScript/Bun remains the production fallback, and the preferred
-local `../../codex-agent` reference remains unavailable.
+At that time, residual low risks were that TASK-009 final
+parity/security/cutover review had not started, TypeScript/Bun remained the
+production fallback, and the preferred local `../../codex-agent` reference
+remained unavailable.
+
+For the 2026-06-12 TASK-009 `swift-migration` run, Step 7 adversarial review
+accepted the final parity, security, and cutover handoff with no high or mid
+findings. The accepted implementation keeps `productionRuntime` as
+`typescript-bun`, `homebrewFormulaSource` as `bun-archive`, and
+`allowsProductionCutover` as `false` in
+`packaging/homebrew/swift-cutover-gates.json` until a dedicated release cutover
+switches production Homebrew to Swift archives. The non-review gates record
+deterministic evidence for Swift workflow validate, inspect, deterministic run,
+package validation, event dry-run, GraphQL manager-control, hook context,
+adapter output normalization, SQLite/runtime publication parity, and macOS
+archive smoke. Accepted verification included `bun run typecheck:server`,
+`bun run lint:biome`, TypeScript/Bun workflow validation, Xcode Swift 6.3.2
+`swift test` passing 211 tests, focused GraphQL manager-control and packaging
+readiness tests, `RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64`,
+checksum verification from `dist/swift-homebrew`, host-path rejection for the
+checksum sidecar, and archived Swift binary `--help`, `workflow validate`,
+`workflow inspect`, and deterministic `workflow run` smokes. Keep the
+TypeScript/Bun runtime and production Homebrew formula as the user-facing
+install path until the release cutover explicitly changes them.
 
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via

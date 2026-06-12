@@ -7,9 +7,9 @@
 
 ## Related Plans
 
-- **Parent**: `impl-plans/active/swift-native-migration.md` (`TASK-008`)
+- **Parent**: `impl-plans/completed/swift-native-migration.md` (`TASK-008`)
 - **Previous**: `impl-plans/completed/swift-native-migration-task-007-cli-parity.md`
-- **Next**: `impl-plans/active/swift-native-migration.md` (`TASK-009`)
+- **Next**: `impl-plans/completed/swift-native-migration.md` (`TASK-009`)
 - **Depends On**: `impl-plans/completed/swift-native-migration-task-005-runtime-session.md`
 - **Depends On**: `impl-plans/completed/swift-native-migration-task-006-contracts.md`
 
@@ -221,7 +221,7 @@ type SwiftPackagingReadinessCheck = {
 
 ### 5. Plan And Progress Tracking
 
-#### `impl-plans/active/swift-native-migration.md`
+#### `impl-plans/completed/swift-native-migration.md`
 #### `impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`
 #### `impl-plans/PROGRESS.json`
 
@@ -252,7 +252,7 @@ type SwiftTask008Progress = {
 | Swift archive builder or dry-run surface | `scripts/build-swift-homebrew-readiness.sh`, `packaging/homebrew/swift-cutover-gates.json` | COMPLETED | dry-run/name/checksum checks |
 | Homebrew preview and gate manifest | `packaging/homebrew/README.md`, `packaging/homebrew/swift-cutover-gates.json` | COMPLETED | no-production-mutation checks |
 | Deterministic verification tests | `Sources/RielflowCore/SwiftPackagingReadiness.swift`, `Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift`, `packaging/homebrew/*` | COMPLETED | Xcode SwiftPM tests and smoke docs |
-| Plan and progress tracking | `impl-plans/active/swift-native-migration.md`, `impl-plans/PROGRESS.json` | COMPLETED | `jq empty impl-plans/PROGRESS.json` |
+| Plan and progress tracking | `impl-plans/completed/swift-native-migration.md`, `impl-plans/PROGRESS.json` | COMPLETED | `jq empty impl-plans/PROGRESS.json` |
 
 ## Task Breakdown
 
@@ -335,7 +335,7 @@ Swift-capable macOS environment.
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `impl-plans/active/swift-native-migration.md`, `impl-plans/PROGRESS.json`
+**Deliverables**: `impl-plans/completed/swift-native-migration.md`, `impl-plans/PROGRESS.json`
 **Dependencies**: TASK-008A, TASK-008B, TASK-008C, TASK-008D
 
 **Description**:
@@ -375,7 +375,7 @@ Planning and repository hygiene:
 - `git status --short --branch`
 - `git diff --check`
 - `jq empty impl-plans/PROGRESS.json`
-- `rg -n "TASK-008|rielflow-swift-|dist/swift-homebrew|TypeScript/Bun remains" impl-plans/active/swift-native-migration.md impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md README.md packaging/homebrew/README.md design-docs/user-qa/qa-swift-native-migration.md .codex/skills/riel-codex-impl-workflow/SKILL.md`
+- `rg -n "TASK-008|rielflow-swift-|dist/swift-homebrew|TypeScript/Bun remains" impl-plans/completed/swift-native-migration.md impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md README.md packaging/homebrew/README.md design-docs/user-qa/qa-swift-native-migration.md .codex/skills/riel-codex-impl-workflow/SKILL.md`
 
 TypeScript/Bun fallback:
 

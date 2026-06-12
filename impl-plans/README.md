@@ -34,7 +34,6 @@ impl-plans/
 | `active/run-log-workflow-definition-body` | Ready | `design-graphql-manager-control-plane#run-scoped-workflow-definition-body` |
 | `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
 | `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
-| `active/swift-native-migration` | In Progress | `design-swift-native-migration`, `architecture`, `qa-swift-native-migration` |
 | `active/workflow-package-checkout-search` | In Progress | `design-workflow-package-checkout-search`, `design-workflow-package-integrity`, `command` |
 | `active/workflow-package-install-scoped-callee-validation` | Ready | `design-workflow-package-checkout#scoped-cross-workflow-validation-during-install`, `architecture#workflow-checkout-boundary` |
 | `active/workflow-node-package-install` | Completed | `design-workflow-node-package-install`, `design-workflow-package-registry`, `design-workflow-package-commands` |
@@ -46,6 +45,8 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `swift-native-migration` | 2026-06-12 | `design-swift-native-migration`, `architecture`, `qa-swift-native-migration` |
+| `swift-native-migration-task-009-final-cutover-gate` | 2026-06-12 | `design-swift-native-migration#task-009-final-parity-security-and-cutover-gate` |
 | `swift-native-migration-task-008-packaging-cutover-readiness` | 2026-06-12 | `design-swift-native-migration#task-008-packaging-and-homebrew-cutover-readiness-gates` |
 | `swift-native-migration-task-007-cli-parity` | 2026-06-12 | `design-swift-native-migration#task-007-swift-cli-validate-inspect-and-deterministic-run-parity`, `command#swift-native-migration-cli-parity` |
 | `swift-native-migration-task-006-contracts` | 2026-06-12 | `design-swift-native-migration#task-006-package-add-on-event-hook-graphql-and-server-contract-boundary` |

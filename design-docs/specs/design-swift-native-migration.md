@@ -591,6 +591,101 @@ Codex-reference mapping:
   not add Cursor mode, stream, auth, or `official/cursor-sdk` behavior to
   provider-neutral modules or Homebrew scripts.
 
+## TASK-009 Final Parity, Security, And Cutover Gate
+
+TASK-009 is the final issue-resolution gate before release packaging may switch
+from the TypeScript/Bun executable to the Swift executable. It must collect
+fresh deterministic evidence, harden only the parity or security gaps exposed by
+that evidence, update the gate manifest only for gates whose verification has
+passed, and hand the result to adversarial implementation review. TASK-009 must
+not remove the TypeScript/Bun runtime, publish release assets, commit tap
+formula changes, replace `dist/homebrew` production archives, or make Swift the
+default Homebrew source before the review gate is accepted.
+
+Cutover gate ownership:
+
+- `packaging/homebrew/swift-cutover-gates.json` remains the machine-readable
+  cutover manifest. A gate status may move from `blocked` only when the
+  implementation records the exact command, fixture or archive path, and result
+  that proves the gate in the current branch.
+- `allowsProductionCutover` remains `false` until every required gate is passed
+  and the `task009-adversarial-review` gate records an accepted high-risk
+  review decision. If any required gate remains blocked, the production runtime
+  remains `typescript-bun`.
+- Gate evidence must be local, deterministic, and replayable. It may use
+  injected stores, clocks, process runners, dry-run adapters, local fixture
+  manifests, local event fixtures, local GraphQL DTO fixtures, local hook
+  fixtures, and archived Swift binaries. It must not require live LLM
+  credentials, network access, package checkout mutation, GitHub release upload,
+  tap mutation, or live long-running server loops.
+- The archived Swift executable must prove `--help`, workflow validation,
+  workflow inspect, and deterministic mock run behavior from inside the staged
+  archive, not only through `swift run`.
+
+Required TASK-009 evidence:
+
+- TypeScript/Bun baseline: typecheck, Biome lint, and project-scope workflow
+  validation must pass so Swift cutover does not hide a broken fallback runtime.
+- Swift package verification: the explicit Xcode Swift toolchain must report its
+  version and `swift test` must pass all Swift tests in the current branch.
+- CLI parity: Swift `workflow validate`, `workflow inspect`, and deterministic
+  `workflow run --mock-scenario` must pass against repository fixtures.
+- Package validation parity: Swift package manifest loading and validation must
+  match the local package fixture contract, including safe path handling and
+  deterministic diagnostics.
+- Event dry-run parity: Swift event-source dry-run mapping must preserve trigger
+  payload, runtime variables, mailbox bridge policy, reply dispatch descriptors,
+  and no-side-effect behavior from local fixtures.
+- GraphQL manager-control parity: Swift DTO and mutation/request descriptors
+  must preserve session inspection, manager-control input shapes, idempotency
+  and result fields, and deterministic schema descriptors without requiring an
+  HTTP server.
+- Hook context parity: Swift hook parsing and recording must preserve
+  `agentSessionId`, backend metadata, optional raw capture controls, and
+  credential/path redaction in persisted or test-visible records.
+- Adapter output normalization: Swift adapter output, JSON candidate extraction,
+  output-envelope handling, invalid-output failure, and redaction must remain
+  shared across local agents and official SDK adapters without giving adapters
+  ownership of workflow publication.
+- SQLite persistence parity: Swift SQLite-backed or SQLite-contract session and
+  workflow message persistence must prove runtime-generated communication ids,
+  ordered message resolution, failed-write handling, and no legacy
+  inbox/outbox/mailbox publication path.
+- macOS archive smoke: the Swift readiness archive must contain only the
+  expected payload, have a valid `.sha256` sidecar, avoid machine-local absolute
+  path leakage, and pass archived binary smoke commands.
+
+Security and boundary checks:
+
+- External process execution remains explicit argv execution with injectable
+  runners, bounded deadlines, descriptor isolation, and credential redaction.
+- Candidate-path staging, accepted-output artifacts, workflow message
+  publication, communication ids, and final root output selection remain
+  runtime-owned. Adapters, add-ons, event dry-runs, GraphQL descriptors, hooks,
+  and packaging scripts must not publish workflow messages or invent
+  communication ids.
+- Cursor-specific behavior remains isolated in `CursorCLIAgent`; TASK-009 must
+  not expose Cursor CLI modes, stream formats, auth assumptions, or
+  `official/cursor-sdk` compatibility through provider-neutral core, add-on,
+  event, GraphQL, hook, server, or packaging surfaces.
+- Swift formula previews and readiness archives are pre-cutover artifacts only.
+  Production Homebrew archive names under `dist/homebrew` remain TypeScript/Bun
+  owned until TASK-009 review accepts the full cutover.
+
+Codex-reference mapping:
+
+- Step 1 for TASK-009 used `../../codex-agent` as the preferred reference root
+  and found it unavailable, so TASK-009 must continue treating current Rielflow
+  TypeScript adapters, runtime code, and pinned package contracts as the local
+  behavioral reference.
+- The adjacent `../codex-agent` checkout may remain a reference-only structural
+  comparison for package executable metadata, but TASK-009 must not copy
+  codex-agent code or introduce npm publishing behavior.
+- Intentional Swift divergence remains structural only: repository-owned agent
+  integrations are SwiftPM targets, while backend strings, normalized adapter
+  envelopes, readiness categories, and runtime-owned publication semantics stay
+  compatible.
+
 ## Data Flow
 
 The Swift runtime should keep the same high-level execution flow as the TypeScript runtime:

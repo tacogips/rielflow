@@ -21,11 +21,15 @@ proven. The branch currently includes Swift targets for `RielflowCore`,
 `RielflowServer`, `RielflowHook`, `CodexAgent`, `ClaudeCodeAgent`,
 `CursorCLIAgent`, and the `rielflow` executable; see
 `design-docs/specs/design-swift-native-migration.md` and
-`impl-plans/active/swift-native-migration.md`. TASK-002 and TASK-003 are now
-complete for the current additive Swift migration scope; TASK-009 remains the
-final parity, security, persistence, macOS archive smoke, and cutover review
-gate before any production switch. Completed focused migration slices are
-archived under `impl-plans/completed/`, including
+`impl-plans/completed/swift-native-migration.md`. TASK-002 through TASK-009 now
+have accepted parity evidence for the current additive Swift migration scope,
+including the final security, persistence, macOS archive smoke, and
+adversarial-review handoff. Production packaging still remains on
+TypeScript/Bun until a separate release cutover updates the Homebrew formula
+and production archive source. Completed focused migration slices are archived
+under `impl-plans/completed/`, including
+`impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md`
+for the final parity/security/cutover handoff,
 `impl-plans/completed/swift-native-migration-task-007-cli-parity.md` for the
 Swift CLI validate, inspect, and deterministic mock-run parity slice and
 `impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`
@@ -251,14 +255,14 @@ archived as `dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz`
 or `dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz`, each with a
 matching `.sha256` sidecar. Current production Homebrew archives remain the
 TypeScript/Bun artifacts under `dist/homebrew/rielflow-<version>-<target>.tar.gz`.
-Homebrew stays on the Bun formula until TASK-009 accepts the full cutover after
-Swift validation, inspect, deterministic run, package, event, GraphQL, hook,
-adapter, SQLite persistence, macOS archive smoke, and adversarial review gates
-pass. The local readiness helper is:
+TASK-009 accepted the final Swift parity, security, archive-smoke, and
+adversarial-review handoff, but Homebrew stays on the Bun formula until a
+dedicated release cutover deliberately changes the production archive source.
+The local readiness helper is:
 
 ```bash
-RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64
-RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64
+RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64
+RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64
 ```
 
 If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
@@ -272,27 +276,30 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 209 tests across the current prompt rendering and prompt
-asset loading contracts, output-envelope normalization, local-agent command-builder,
-official OpenAI/Anthropic SDK scaffold, TASK-005 runtime publication coverage,
-TASK-006 package/add-on/event/hook/GraphQL/server contracts, TASK-007 Swift CLI
-validate/inspect/deterministic-run coverage, and TASK-008 packaging readiness
-coverage. The accepted TASK-002/TASK-003 closure passed focused Swift prompt,
-deterministic-runner, adapter-utility, and resolver tests, the JavaScript
-reference checks for `String(number)` and `JSON.stringify(number)` thresholds,
-`jq empty impl-plans/PROGRESS.json`, and `git diff --check`. The accepted
-TASK-008 run passed `git diff --check`,
+`swift test` passed 211 tests across the current prompt rendering and prompt
+asset loading contracts, output-envelope normalization, local-agent
+command-builder, official OpenAI/Anthropic SDK scaffold, TASK-005 runtime
+publication coverage, TASK-006 package/add-on/event/hook/GraphQL/server
+contracts, TASK-007 Swift CLI validate/inspect/deterministic-run coverage,
+TASK-008 packaging readiness coverage, and TASK-009 final parity gates. The
+accepted TASK-009 run passed `git diff --check`,
 `jq empty impl-plans/PROGRESS.json`,
 `jq empty packaging/homebrew/swift-cutover-gates.json`,
-`RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64`,
-`RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64`,
-archive listing, relocated `.sha256` verification from `dist/swift-homebrew`,
-and host-path rejection for the checksum sidecar. The TypeScript/Bun fallback
-validation from the implementation run remained
+`bun run typecheck:server`, `bun run lint:biome`,
+TypeScript/Bun workflow validation, full Xcode `swift test`, focused package,
+event, GraphQL manager-control, hook, adapter, runtime-store, and publication
+tests, `RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64`,
+archive listing, relocated `.sha256` verification from
+`dist/swift-homebrew`, host-path rejection for the checksum sidecar, and
+archived Swift `--help`, `workflow validate`, `workflow inspect`, and
+deterministic `workflow run` smokes. The accepted TASK-009 adversarial review
+found no high or mid findings in workflow session
+`riel-codex-design-and-implement-review-loop-1781261544-53db3135`. The
+TypeScript/Bun fallback validation from the implementation run remained
 `bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project`.
 Keep using the Bun commands in this README for the production runtime until
-Swift package, event, GraphQL, hook, adapter, SQLite, release packaging, and
-Homebrew parity gates pass.
+the production release packaging cutover deliberately switches the Homebrew
+formula source from Bun archives to Swift archives.
 
 ### Optional LLM Agent Setup
 

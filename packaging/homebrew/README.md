@@ -100,13 +100,17 @@ brew uninstall rielflow
 brew untap local/rielflow-test
 ```
 
-## Swift TASK-008 Readiness Archives
+## Swift TASK-008/TASK-009 Readiness Archives
 
 The production Homebrew path above remains the TypeScript/Bun release path until
-TASK-009 accepts the final Swift cutover. TASK-008 only prepares local Swift
-readiness artifacts and closed cutover gates. It does not publish release
-assets, commit tap changes, replace `dist/homebrew`, remove TypeScript/Bun
-packaging, or make Swift the default install source.
+a dedicated release cutover switches the formula source. TASK-008 prepares
+local Swift readiness artifacts and blocked cutover gates. TASK-009 records
+deterministic gate evidence for the current branch, and its adversarial
+implementation review was accepted with no high or mid findings in workflow
+session `riel-codex-design-and-implement-review-loop-1781261544-53db3135`.
+These tasks do not publish release assets, commit tap changes, replace
+`dist/homebrew`, remove TypeScript/Bun packaging, or make Swift the default
+install source.
 
 The Swift executable product is still named `rielflow`. Resolve the release
 binary path with Xcode SwiftPM:
@@ -135,14 +139,16 @@ artifacts.
 Build or inspect the local readiness archive plan:
 
 ```bash
-RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64
-RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64
-tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz
-(cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz.sha256)
+RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64
+RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64
+tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz
+(cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256)
 ```
 
 Cutover gates are recorded in `packaging/homebrew/swift-cutover-gates.json`.
-They remain blocked until the archived Swift executable passes validation,
-inspect, deterministic run, package validation, event dry-run, GraphQL
-manager-control, hook parsing, adapter normalization, SQLite persistence, macOS
-archive smoke, and TASK-009 adversarial review.
+For TASK-009, non-review gates may be marked passed only when that manifest
+records the exact local command, fixture or archive path, and result. The
+manifest keeps `productionRuntime` as `typescript-bun`,
+`homebrewFormulaSource` as `bun-archive`, and `allowsProductionCutover` as
+`false` until a release cutover intentionally enables Swift archives for
+production Homebrew.

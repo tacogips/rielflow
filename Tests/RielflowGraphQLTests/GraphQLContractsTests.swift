@@ -52,6 +52,10 @@ final class GraphQLContractsTests: XCTestCase {
 
     for field in [
       "type ControlPlaneResult",
+      "type ManagerIntentSummary",
+      "type SendManagerMessagePayload",
+      "type ReplayCommunicationPayload",
+      "type RetryCommunicationDeliveryPayload",
       "hookEvents: [HookEvent!]!",
       "eventReceipts: [EventReceipt!]!",
       "replyDispatches: [ReplyDispatch!]!",
@@ -60,10 +64,89 @@ final class GraphQLContractsTests: XCTestCase {
       "createdOrder: Int!",
       "failureReason: String",
       "input ContinueSessionInput { workflowId: String!, sessionId: String!, input: JSONObject! }",
-      "type Mutation { continueSession(input: ContinueSessionInput!): ControlPlaneResult! }"
+      "input SendManagerMessageInput { workflowId: String!, workflowExecutionId: String!, message: String, actions: JSON, attachments: JSON, idempotencyKey: String, managerSessionId: String, managerNodeExecId: String }",
+      "input ReplayCommunicationInput { workflowId: String!, workflowExecutionId: String!, communicationId: String!, reason: String, idempotencyKey: String, managerSessionId: String }",
+      "input RetryCommunicationDeliveryInput { workflowId: String!, workflowExecutionId: String!, communicationId: String!, reason: String, idempotencyKey: String, managerSessionId: String }",
+      "managerSession(managerSessionId: String): ManagerSessionView",
+      "continueSession(input: ContinueSessionInput!): ControlPlaneResult!",
+      "sendManagerMessage(input: SendManagerMessageInput!): SendManagerMessagePayload!",
+      "replayCommunication(input: ReplayCommunicationInput!): ReplayCommunicationPayload!",
+      "retryCommunicationDelivery(input: RetryCommunicationDeliveryInput!): RetryCommunicationDeliveryPayload!"
     ] {
       XCTAssertTrue(schema.contains(field), "missing schema field: \(field)")
     }
     XCTAssertFalse(schema.contains("continueSession(workflowId: String!, sessionId: String!)"))
+    XCTAssertFalse(schema.contains("managerRuntimeId"))
+  }
+
+  func testManagerControlRequestsPreserveInputShapeAndIdempotency() throws {
+    let send = GraphQLSendManagerMessageRequest(
+      workflowId: "workflow-a",
+      workflowExecutionId: "exec-a",
+      message: "resume",
+      actions: .object(["retryStepIds": .array([.string("worker-step")])]),
+      attachments: .array([.object(["path": .string("files/workflow-a/exec-a/a.png")])]),
+      idempotencyKey: "idem-send",
+      managerSessionId: "mgrsess-1",
+      managerNodeExecId: "node-exec-1"
+    )
+    let replay = GraphQLReplayCommunicationRequest(
+      workflowId: "workflow-a",
+      workflowExecutionId: "exec-a",
+      communicationId: "comm-1",
+      reason: "retry downstream",
+      idempotencyKey: "idem-replay",
+      managerSessionId: "mgrsess-1"
+    )
+    let sendObject = try encodedObject(send)
+    let replayObject = try encodedObject(replay)
+
+    XCTAssertEqual(sendObject["idempotencyKey"], .string("idem-send"))
+    XCTAssertEqual(sendObject["managerSessionId"], .string("mgrsess-1"))
+    XCTAssertEqual(sendObject["managerNodeExecId"], .string("node-exec-1"))
+    XCTAssertEqual(sendObject["workflowExecutionId"], .string("exec-a"))
+    XCTAssertEqual(sendObject["actions"], .object(["retryStepIds": .array([.string("worker-step")])]))
+    XCTAssertEqual(sendObject["attachments"], .array([.object(["path": .string("files/workflow-a/exec-a/a.png")])]))
+    XCTAssertEqual(replayObject["communicationId"], .string("comm-1"))
+    XCTAssertEqual(replayObject["idempotencyKey"], .string("idem-replay"))
+    XCTAssertNil(sendObject["communicationId"])
+  }
+
+  func testManagerControlPayloadsExposeResultFields() {
+    let sendPayload = GraphQLSendManagerMessagePayload(
+      accepted: true,
+      managerMessageId: "mgrmsg-1",
+      parsedIntent: [.init(kind: "retry-step", targetId: "worker-step", reason: "operator")],
+      createdCommunicationIds: ["comm-2"],
+      queuedNodeIds: ["worker-step"],
+      workflowId: "workflow-a",
+      workflowExecutionId: "exec-a",
+      managerSessionId: "mgrsess-1"
+    )
+    let replayPayload = GraphQLReplayCommunicationPayload(
+      sourceCommunicationId: "comm-1",
+      workflowExecutionId: "exec-a",
+      replayedCommunicationId: "comm-2",
+      status: "queued"
+    )
+    let retryPayload = GraphQLRetryCommunicationDeliveryPayload(
+      communicationId: "comm-2",
+      activeDeliveryAttemptId: "attempt-1",
+      status: "queued"
+    )
+
+    XCTAssertTrue(sendPayload.accepted)
+    XCTAssertEqual(sendPayload.createdCommunicationIds, ["comm-2"])
+    XCTAssertEqual(sendPayload.parsedIntent.first?.kind, "retry-step")
+    XCTAssertEqual(replayPayload.replayedCommunicationId, "comm-2")
+    XCTAssertEqual(retryPayload.activeDeliveryAttemptId, "attempt-1")
+  }
+
+  private func encodedObject<T: Encodable>(_ value: T) throws -> JSONObject {
+    let data = try JSONEncoder().encode(value)
+    guard case let .object(object) = try JSONDecoder().decode(JSONValue.self, from: data) else {
+      return [:]
+    }
+    return object
   }
 }

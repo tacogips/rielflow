@@ -44,7 +44,7 @@ final class SwiftPackagingReadinessTests: XCTestCase {
     let manifest = try JSONDecoder().decode(SwiftCutoverGateManifest.self, from: data)
 
     XCTAssertEqual(manifest.productionRuntime, "typescript-bun")
-    XCTAssertEqual(manifest.swiftArtifactStatus, "readiness-only")
+    XCTAssertEqual(manifest.swiftArtifactStatus, "cutover-evidence-ready-review-blocked")
     XCTAssertEqual(manifest.swiftReadinessArchiveDirectory, "dist/swift-homebrew")
     XCTAssertEqual(manifest.currentProductionArchiveDirectory, "dist/homebrew")
     XCTAssertEqual(
@@ -56,7 +56,9 @@ final class SwiftPackagingReadinessTests: XCTestCase {
     )
     XCTAssertFalse(manifest.allowsProductionCutover)
     XCTAssertTrue(manifest.gates.count >= 10)
-    XCTAssertTrue(manifest.gates.allSatisfy { $0.status == "blocked" })
+    XCTAssertTrue(manifest.gates.allSatisfy { $0.status == "passed" || $0.status == "blocked" })
+    XCTAssertEqual(manifest.gates.filter { $0.id == "task009-adversarial-review" }.map(\.status), ["blocked"])
+    XCTAssertTrue(manifest.gates.filter { $0.id != "task009-adversarial-review" }.allSatisfy { $0.status == "passed" })
     XCTAssertTrue(manifest.gates.allSatisfy(\.requiredBeforeCutover))
     XCTAssertTrue(manifest.gates.allSatisfy(\.forbidsProductionMutation))
   }
@@ -128,6 +130,7 @@ final class SwiftPackagingReadinessTests: XCTestCase {
   }
 
   private struct SwiftCutoverGate: Decodable {
+    var id: String
     var status: String
     var requiredBeforeCutover: Bool
     var forbidsProductionMutation: Bool

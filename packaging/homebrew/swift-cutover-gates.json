@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "task": "TASK-008",
+  "task": "TASK-009",
   "productionRuntime": "typescript-bun",
-  "swiftArtifactStatus": "readiness-only",
+  "swiftArtifactStatus": "cutover-evidence-ready-review-blocked",
   "homebrewFormulaSource": "bun-archive",
   "cutoverTask": "TASK-009",
   "currentProductionArchiveDirectory": "dist/homebrew",
@@ -38,82 +38,190 @@
   "checksumSidecar": "<archive>.sha256",
   "previewFormulaUrlBase": "file://$PWD/dist/swift-homebrew",
   "allowsProductionCutover": false,
-  "forbiddenTask008SideEffects": [
+  "forbiddenTask009SideEffects": [
     "publish GitHub release assets",
     "commit or push tap formula changes",
     "replace dist/homebrew Bun archives",
     "make Swift the default Homebrew source",
     "remove TypeScript/Bun runtime packaging"
   ],
+  "baselineEvidence": {
+    "result": "passed",
+    "commands": [
+      "git diff --check",
+      "jq empty impl-plans/PROGRESS.json && jq empty packaging/homebrew/swift-cutover-gates.json",
+      "bun run typecheck:server",
+      "bun run lint:biome",
+      "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
+      "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test"
+    ],
+    "swiftVersion": "swift-driver version: 1.148.6 Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101); Target: arm64-apple-macosx26.0",
+    "swiftTestSummary": "211 tests, 0 failures"
+  },
+  "archiveEvidence": {
+    "result": "passed",
+    "version": "0.0.0-task009",
+    "target": "darwin-arm64",
+    "archivePath": "dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz",
+    "checksumSidecar": "dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256",
+    "stagedBinary": "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow",
+    "checksum": "722e16dd5bbea27b1e4c6d06043fb7ad32c0023967da98f32cb577c4c32bf937",
+    "payload": [
+      "./",
+      "./bin/",
+      "./bin/rielflow",
+      "./README.md"
+    ],
+    "commands": [
+      "RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64",
+      "RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64",
+      "tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz",
+      "cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256",
+      "! rg -n \"/Users/|/home/|$(pwd)\" dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256",
+      "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow --help",
+      "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow validate codex-design-and-implement-review-loop --scope project --output json",
+      "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow inspect codex-design-and-implement-review-loop --scope project --output json",
+      "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --mock-scenario ./examples/worker-only-single-step/mock-scenario.json --output json"
+    ]
+  },
   "gates": [
     {
       "id": "swift-workflow-validate",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "archived bin/rielflow workflow validate codex-design-and-implement-review-loop --scope project --output json",
+      "verificationCommand": "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow validate codex-design-and-implement-review-loop --scope project --output json",
+      "artifactPaths": [
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow",
+        ".rielflow/workflows/codex-design-and-implement-review-loop"
+      ],
+      "result": "passed",
+      "evidenceSummary": "archived Swift binary returned valid=true with empty diagnostics",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-workflow-inspect",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "archived bin/rielflow workflow inspect codex-design-and-implement-review-loop --scope project --output json",
+      "verificationCommand": "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow inspect codex-design-and-implement-review-loop --scope project --output json",
+      "artifactPaths": [
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow",
+        ".rielflow/workflows/codex-design-and-implement-review-loop"
+      ],
+      "result": "passed",
+      "evidenceSummary": "archived Swift binary returned workflow counts, callable contract, runtime readiness descriptors, and addon source summaries",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-deterministic-run",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "archived bin/rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --mock-scenario ./examples/worker-only-single-step/mock-scenario.json --output json",
+      "verificationCommand": "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --mock-scenario ./examples/worker-only-single-step/mock-scenario.json --output json",
+      "artifactPaths": [
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow",
+        "examples/worker-only-single-step/workflow.json",
+        "examples/worker-only-single-step/mock-scenario.json"
+      ],
+      "result": "passed",
+      "evidenceSummary": "archived Swift binary completed worker-only-single-step with rootOutput.status=ready and one completed node execution",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-package-validation",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "Swift package manifest validation parity against local package fixtures",
+      "verificationCommand": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowPackageManifestTests",
+      "artifactPaths": [
+        "Sources/RielflowAddons/WorkflowPackageManifest.swift",
+        "Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift"
+      ],
+      "result": "passed",
+      "evidenceSummary": "14 focused package manifest tests passed for local-file loading, deterministic diagnostics, and unsafe path rejection",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-event-dry-run",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "Swift event source dry-run mapping parity against local fixtures",
+      "verificationCommand": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter EventDryRunTests",
+      "artifactPaths": [
+        "Sources/RielflowEvents/EventDryRun.swift",
+        "Sources/RielflowEvents/EventContracts.swift",
+        "Tests/RielflowEventsTests/EventDryRunTests.swift"
+      ],
+      "result": "passed",
+      "evidenceSummary": "22 focused event dry-run tests passed for trigger payload mapping, runtime variables, mailbox bridge policy, reply dispatches, and no-side-effect validation",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-graphql-manager-control",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "Swift GraphQL manager-control DTO and mutation contract parity fixtures",
+      "verificationCommand": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter GraphQLContractsTests",
+      "artifactPaths": [
+        "Sources/RielflowGraphQL/GraphQLContracts.swift",
+        "Tests/RielflowGraphQLTests/GraphQLContractsTests.swift"
+      ],
+      "result": "passed",
+      "evidenceSummary": "4 focused GraphQL tests passed, including managerSession, sendManagerMessage, replayCommunication, retryCommunicationDelivery, idempotencyKey, managerSessionId, and result DTO fields",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-hook-context",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "Swift hook context parsing and redaction fixture parity",
+      "verificationCommand": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter HookContractsTests",
+      "artifactPaths": [
+        "Sources/RielflowHook/HookContracts.swift",
+        "Sources/RielflowHook/RielflowHook.swift",
+        "Tests/RielflowHookTests/HookContractsTests.swift"
+      ],
+      "result": "passed",
+      "evidenceSummary": "11 focused hook tests passed for agent session metadata, raw capture controls, context resolution aliases, deterministic hashing, and redaction",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-adapter-output-normalization",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "Swift adapter output envelope normalization fixture parity",
+      "verificationCommand": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter AdapterUtilitiesTests",
+      "artifactPaths": [
+        "Sources/RielflowCore/AdapterContracts.swift",
+        "Sources/RielflowAdapters/AdapterUtilities.swift",
+        "Tests/RielflowAdaptersTests/AdapterUtilitiesTests.swift"
+      ],
+      "result": "passed",
+      "evidenceSummary": "6 focused adapter utility tests passed for envelope defaults, payload fallback, boolean completion validation, quoted-brace JSON extraction, backend resolution, and retry clamping",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-sqlite-persistence",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "Swift SQLite-backed session and workflow message persistence parity",
+      "verificationCommand": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RuntimeStoreTests && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RuntimePublicationTests",
+      "artifactPaths": [
+        "Sources/RielflowCore/RuntimeStore.swift",
+        "Sources/RielflowCore/RuntimePublication.swift",
+        "Tests/RielflowCoreTests/RuntimeStoreTests.swift",
+        "Tests/RielflowCoreTests/RuntimePublicationTests.swift"
+      ],
+      "result": "passed",
+      "evidenceSummary": "4 RuntimeStore and 14 RuntimePublication focused tests passed for runtime-generated communication ids, delivered/consumed ordering, append-failure blocking, candidate staging ownership, and no adapter-owned legacy inbox/outbox publication",
       "forbidsProductionMutation": true
     },
     {
       "id": "swift-macos-archive-smoke",
-      "status": "blocked",
+      "status": "passed",
       "requiredBeforeCutover": true,
-      "verificationCommand": "build readiness archive, verify sha256, extract, run --help, validate, inspect, and deterministic run",
+      "verificationCommand": "RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64; tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz; (cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256); archived bin/rielflow --help/validate/inspect/run",
+      "artifactPaths": [
+        "scripts/build-swift-homebrew-readiness.sh",
+        "dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz",
+        "dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow"
+      ],
+      "result": "passed",
+      "evidenceSummary": "archive contains only ./, ./bin/, ./bin/rielflow, ./README.md; checksum sidecar validates; sidecar has no /Users, /home, or repo path; archived help, validate, inspect, and deterministic run passed",
       "forbidsProductionMutation": true
     },
     {
@@ -121,6 +229,12 @@
       "status": "blocked",
       "requiredBeforeCutover": true,
       "verificationCommand": "TASK-009 adversarial implementation review accepts final cutover",
+      "artifactPaths": [
+        "packaging/homebrew/swift-cutover-gates.json",
+        "impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md"
+      ],
+      "result": "blocked",
+      "blockedReason": "Step 7 adversarial implementation review accepted TASK-009 with no high or mid findings in workflow session riel-codex-design-and-implement-review-loop-1781261544-53db3135; production cutover remains disabled until a dedicated release cutover updates the Homebrew formula source.",
       "forbidsProductionMutation": true
     }
   ]

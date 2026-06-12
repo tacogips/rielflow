@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-12T20:35:00+09:00",
+  "lastUpdated": "2026-06-12T21:20:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -7578,16 +7578,16 @@
         "Step 7 adversarial review accepted the migration fix before plan archival."
       ]
     },
-    "active/swift-native-migration": {
+    "completed/swift-native-migration": {
       "phase": 195,
-      "status": "In Progress",
-      "path": "impl-plans/active/swift-native-migration.md",
-      "designReference": "design-docs/specs/design-swift-native-migration.md#task-002task-003-prompt-json-and-envelope-prerequisite-closure; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
+      "status": "Completed",
+      "path": "impl-plans/completed/swift-native-migration.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md#task-009-final-parity-security-and-cutover-gate; design-docs/specs/design-swift-native-migration.md#security-and-boundary-checks; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
       "workflowMode": "issue-resolution",
-      "issueReference": "tacogips/rielflow; issue title: Complete Swift prompt JSON envelope contracts and close migration prerequisites; workflowInput.issueBody TASK-002/TASK-003 prerequisite closure; no matching GitHub issue URL or number supplied",
+      "issueReference": "tacogips/rielflow; issue title: Execute Swift TASK-009 final parity security and cutover gate; workflowInput.issueBody TASK-009 final parity/security/cutover handoff; no matching GitHub issue URL or number supplied",
       "workflowId": "codex-design-and-implement-review-loop",
-      "lastPlanningNode": "step6-implement",
-      "codexAgentReference": "Preferred ../../codex-agent root unavailable; use TypeScript/Bun fallback references for TASK-003 prompt and envelope contracts: packages/rielflow-core/src/render.ts, packages/rielflow-core/src/prompt-template-context.ts, packages/rielflow-core/src/prompt-template-file.ts, packages/rielflow-core/src/node-template-fields.ts, packages/rielflow/src/workflow/load.ts, packages/rielflow/src/workflow/prompt-composition.ts, packages/rielflow/src/workflow/adapter.ts, packages/rielflow/src/workflow/output-attempt-runner.ts, and packages/rielflow/src/workflow/engine/step-result-finalization.ts. TypeScript/Bun remains production fallback; Swift adapters normalize provider output only while runtime-owned publication remains outside backend adapters.",
+      "lastPlanningNode": "step4-impl-plan-create",
+      "codexAgentReference": "Preferred ../../codex-agent root unavailable; TASK-009 uses current Rielflow TypeScript/Bun runtime, adapters, package/event/GraphQL/hook contracts, and packaging scripts as the authoritative local reference. Adjacent ../codex-agent/package.json remains reference-only for package executable metadata and must not be copied.",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
@@ -7650,7 +7650,7 @@
           ]
         },
         "TASK-009": {
-          "status": "Not Started",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "TASK-003",
@@ -7665,7 +7665,7 @@
         "bun run typecheck:server",
         "bun run lint:biome",
         "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
-        "rg -n \"official/openai-sdk|official/anthropic-sdk|openai-sdk.ts|anthropic-sdk.ts|official/cursor-sdk\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"official/openai-sdk|official/anthropic-sdk|openai-sdk.ts|anthropic-sdk.ts|official/cursor-sdk\" impl-plans/completed/swift-native-migration.md",
         "swift --version",
         "swift test",
         "rg -n \"requiresOutputContract|redactSensitiveText|testNoOutputContractPreservesJSONLookingTextAsTextPayload|testProviderFailureRedactsSecretsFromStderr\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
@@ -7673,52 +7673,52 @@
         "rg -n \"normalizeCodexExecJSONStdout|codexAssistantContent|testCodexJSONStreamUsesFinalAssistantContent\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "rg -n \"isCodexJSONEvent|testOutputContractParsesEnvelope|testCodexJSONStreamUsesFinalAssistantContent\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "jq '.plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"], .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
-        "rg -n \"Backend-faithful agent.*IN_PROGRESS|### TASK-004|\\*\\*Status\\*\\*: In Progress|Tasks In Progress\\*\\*: TASK-002, TASK-004\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"Backend-faithful agent.*IN_PROGRESS|### TASK-004|\\*\\*Status\\*\\*: In Progress|Tasks In Progress\\*\\*: TASK-002, TASK-004\" impl-plans/completed/swift-native-migration.md",
         "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].tasks[\"TASK-003\"], .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"], .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
-        "rg -n \"Prompt and JSON boundary contracts.*IN_PROGRESS|Backend-faithful agent.*IN_PROGRESS|### TASK-003|### TASK-004|\\*\\*Status\\*\\*: In Progress|Tasks In Progress\\*\\*: TASK-002, TASK-003, TASK-004\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"Prompt and JSON boundary contracts.*IN_PROGRESS|Backend-faithful agent.*IN_PROGRESS|### TASK-003|### TASK-004|\\*\\*Status\\*\\*: In Progress|Tasks In Progress\\*\\*: TASK-002, TASK-003, TASK-004\" impl-plans/completed/swift-native-migration.md",
         "rg -n \"markExited|scheduleKillIfRunning|testLocalProcessHandleCancelsDelayedKillAfterProcessReap\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "rg -n \"LocalProcessHandle|markExited|scheduleKillIfRunning|testLocalProcessHandleCancelsDelayedKillAfterProcessReap\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"], .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
-        "rg -n \"2026-06-12 01:35|cancels delayed SIGKILL escalation|testLocalProcessHandleCancelsDelayedKillAfterProcessReap\" impl-plans/active/swift-native-migration.md Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"2026-06-12 01:35|cancels delayed SIGKILL escalation|testLocalProcessHandleCancelsDelayedKillAfterProcessReap\" impl-plans/completed/swift-native-migration.md Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "rg -n \"processGroupId|markExited(afterTimeout|killScheduledProcessGroup|testLocalProcessHandlePreservesDelayedKillAfterTimeoutReap|testFoundationRunnerTimeoutKillsTermResistantDescendantAfterParentReap\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
-        "rg -n \"preserves timeout SIGKILL escalation|TERM-resistant child|2026-06-12 01:35\" impl-plans/active/swift-native-migration.md Tests/AgentAdapterTests/AgentAdapterTests.swift",
+        "rg -n \"preserves timeout SIGKILL escalation|TERM-resistant child|2026-06-12 01:35\" impl-plans/completed/swift-native-migration.md Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "rg -n \"processGroupIsLive|testLocalProcessHandleCancelsDelayedKillAfterTimeoutReapWhenGroupIsGone|testLocalProcessHandlePreservesDelayedKillAfterTimeoutReap|testFoundationRunnerTimeoutKillsTermResistantDescendantAfterParentReap\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
-        "rg -n \"still-live process groups|timeout reaps with no live process group|2026-06-12 01:35\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"still-live process groups|timeout reaps with no live process group|2026-06-12 01:35\" impl-plans/completed/swift-native-migration.md",
         "rg -n \"clearScheduledProcessGroup|processGroupIsLive|testLocalProcessHandleCancelsDelayedKillWhenGroupDiesBeforeEscalation\" Sources/RielflowAdapters/LocalAgentProcess.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
-        "rg -n \"re-checks process-group liveness|immediately before SIGKILL|2026-06-12 01:35\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"re-checks process-group liveness|immediately before SIGKILL|2026-06-12 01:35\" impl-plans/completed/swift-native-migration.md",
         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
-        "rg -n \"Swift 6.3.2|swift test.*passed 28 tests|2026-06-12 02:15\" impl-plans/active/swift-native-migration.md",
-        "rg -n \"TASK-004A|OpenAiSDKAdapter|AnthropicSDKAdapter|official/cursor-sdk\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"Swift 6.3.2|swift test.*passed 28 tests|2026-06-12 02:15\" impl-plans/completed/swift-native-migration.md",
+        "rg -n \"TASK-004A|OpenAiSDKAdapter|AnthropicSDKAdapter|official/cursor-sdk\" impl-plans/completed/swift-native-migration.md",
         "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].lastPlanningNode, .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"]' impl-plans/PROGRESS.json",
-        "rg -n \"officialOpenAISDK|officialAnthropicSDK|officialCursorSDK|openAISDK|anthropicSDK|cursorSDK\" impl-plans/active/swift-native-migration.md Sources/RielflowCore/WorkflowModel.swift",
+        "rg -n \"officialOpenAISDK|officialAnthropicSDK|officialCursorSDK|openAISDK|anthropicSDK|cursorSDK\" impl-plans/completed/swift-native-migration.md Sources/RielflowCore/WorkflowModel.swift",
         "rg -n \"OfficialSDKAdapterConfiguration|OpenAiSDKAdapter|AnthropicSDKAdapter|OfficialSDKRequestExecuting\" Sources/RielflowAdapters Tests/RielflowAdaptersTests",
         "rg -n \"officialOpenAISDK|officialAnthropicSDK|officialCursorSDK|includeDefaultOfficialSDKAdapters\" Sources/RielflowAdapters/DispatchingNodeAdapter.swift Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
-        "rg -n \"2026-06-12 02:55|swift test.*passed 37 tests|official OpenAI/Anthropic SDK parity\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"2026-06-12 02:55|swift test.*passed 37 tests|official OpenAI/Anthropic SDK parity\" impl-plans/completed/swift-native-migration.md",
         "jq empty impl-plans/PROGRESS.json",
         "rg -n \"RetryPolicy\\(maxAttempts: 0|retryDelay < \\.zero|testRetryPolicyClampsAttemptsAndDelay\" Sources/RielflowAdapters/AdapterUtilities.swift Tests/RielflowAdaptersTests/AdapterUtilitiesTests.swift",
-        "rg -n \"2026-06-12 02:56|swift test.*passed 38 tests|retry delay clamping\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"2026-06-12 02:56|swift test.*passed 38 tests|retry delay clamping\" impl-plans/completed/swift-native-migration.md",
         "rg -n \"URLSessionOfficialSDKRequestExecutor|OfficialSDKHTTPTransporting|URLSessionOfficialSDKHTTPTransport|makeURLRequest\" Sources/RielflowAdapters/OfficialSDKAdapters.swift",
         "rg -n \"testDefaultOpenAIHTTPExecutorBuildsResponsesRequestWithoutInjectedRequestExecutor|testDefaultAnthropicHTTPExecutorBuildsMessagesRequestWithoutInjectedRequestExecutor|testDispatchingNodeAdapterDefaultOfficialFactoriesUseHTTPExecutors\" Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
-        "rg -n \"2026-06-12 03:06|swift test.*passed 42 tests|Step 7 adversarial\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"2026-06-12 03:06|swift test.*passed 42 tests|Step 7 adversarial\" impl-plans/completed/swift-native-migration.md",
         "rg -n \"existingPathComponents|missingPathComponents|https://anthropic.test/v1\" Sources/RielflowAdapters/OfficialSDKAdapters.swift Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
-        "rg -n \"2026-06-12 03:08|base URL edge case|swift test.*passed 42 tests\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"2026-06-12 03:08|base URL edge case|swift test.*passed 42 tests\" impl-plans/completed/swift-native-migration.md",
         "rg -n \"sensitiveValues|redactOfficialSDKSensitiveText|request.apiKey\" Sources/RielflowAdapters/OfficialSDKAdapters.swift",
         "rg -n \"testDefaultHTTPExecutorRedactsConfiguredAPIKeyValueFromProviderFailures|testInjectedExecutorFailureRedactsConfiguredAPIKeyValue|PROXY_TOKEN|ANTHROPIC_PROXY_TOKEN\" Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
-        "rg -n \"2026-06-12 03:16|swift test.*passed 44 tests|exec-000018\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"2026-06-12 03:16|swift test.*passed 44 tests|exec-000018\" impl-plans/completed/swift-native-migration.md",
         "rg -n \"request failed with HTTP.*redactOfficialSDKSensitiveText|testURLSessionOfficialSDKRequestExecutorRedactsDirectHTTPFailures\" Sources/RielflowAdapters/OfficialSDKAdapters.swift Tests/RielflowAdaptersTests/OfficialSDKAdapterTests.swift",
-        "rg -n \"2026-06-12 03:18|swift test.*passed 45 tests|URLSessionOfficialSDKRequestExecutor\" impl-plans/active/swift-native-migration.md",
-        "rg -n \"TASK-004E|TASK-004F|TASK-004G|TASK-004H|runtime-readiness-agent-probes|AgentCommandBuilding|LocalAgentCommand\" impl-plans/active/swift-native-migration.md",
+        "rg -n \"2026-06-12 03:18|swift test.*passed 45 tests|URLSessionOfficialSDKRequestExecutor\" impl-plans/completed/swift-native-migration.md",
+        "rg -n \"TASK-004E|TASK-004F|TASK-004G|TASK-004H|runtime-readiness-agent-probes|AgentCommandBuilding|LocalAgentCommand\" impl-plans/completed/swift-native-migration.md",
         "rg -n \"AgentCommandBuilding|Readiness|policy_blocked|codex exec|--output-format|cursor-cli-agent\" Sources Tests",
         "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].issueReference, .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"]' impl-plans/PROGRESS.json",
         "rg -n \"LocalAgentCommandBuilding|CodexAgentCommandBuilder|ClaudeCodeAgentCommandBuilder|CursorCLIAgentCommandBuilder\" Sources Tests",
         "rg -n \"AgentProbeStatus|CodexAgentReadiness|ClaudeCodeAgentReadiness|CursorCLIAgentReadiness|policyBlocked|policy_blocked\" Sources Tests",
-        "sed -n '450,525p' impl-plans/active/swift-native-migration.md",
+        "sed -n '450,525p' impl-plans/completed/swift-native-migration.md",
         "jq '.plans[\"active/swift-native-migration\"].tasks[\"TASK-002\"], .plans[\"active/swift-native-migration\"].tasks[\"TASK-003\"], .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"]' impl-plans/PROGRESS.json",
         "rg -n \"AgentBackendProbeOptions|CodexAgentReadinessOperations|ClaudeCodeAgentReadinessOperations|CursorCLIAgentReadinessOperations|testReadinessAPIsUseInjectedProbeOperations\" Sources Tests",
         "rg -n \"DefaultAuthPreflight|testCodexDefaultAuthPreflight|testClaudeDefaultPreflight|testCursorDefaultPreflight|policyBlocked\" Sources/CodexAgent Sources/ClaudeCodeAgent Sources/CursorCLIAgent Tests/AgentAdapterTests/AgentAdapterTests.swift",
-        "sed -n '438,525p' impl-plans/active/swift-native-migration.md",
+        "sed -n '438,525p' impl-plans/completed/swift-native-migration.md",
         "jq empty impl-plans/PROGRESS.json && jq '.lastUpdated, .plans[\"active/swift-native-migration\"].tasks[\"TASK-001\"], .plans[\"active/swift-native-migration\"].tasks[\"TASK-004\"], .plans[\"active/swift-native-migration\"].addressedReviewFindings[-1]' impl-plans/PROGRESS.json",
         "gitleaks git --pre-commit --redact --staged --verbose",
         "rg -n \"CodexAgentCommandBuilder|buildCombinedPromptText|imagePaths|runCodexDefaultAuthPreflight\" Sources/CodexAgent/CodexAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
@@ -7731,7 +7731,7 @@
         "rg -n \"defaultAgentPreflightDeadline|agentPreflightErrorDetail|testDefaultAuthPreflightsUseBoundedDeadline|testDefaultAuthPreflightTimeoutsMapToPolicyBlocked|defaultCodexAuthPreflightTimeout|defaultClaudeAuthPreflightTimeout|defaultCursorAuthPreflightTimeout\" Sources Tests",
         "rg -n \"testCodexCommandBuilderTerminatesOptionsBeforeFlagLikePrompt|arguments.append\\(\\\"--\\\"\\)|promptText: String = \\\"hello\\\"\" Sources/CodexAgent/CodexAgentAdapter.swift Tests/AgentAdapterTests/AgentAdapterTests.swift",
         "rg -n \"POSIX_SPAWN_CLOEXEC_DEFAULT|sensitiveAdapterEnvironmentValues|additionalSensitiveValues|testFoundationRunnerClosesUnrelatedInheritedFileDescriptors|testProviderFailureRedactsConfiguredEnvironmentSecretValue|testDefaultPreflightRedactsConfiguredEnvironmentSecretValue\" Sources Tests",
-        "rg -n \"2026-06-12 05:35|exec-000046|passed 65 tests|descriptor isolation|configured-secret redaction\" impl-plans/active/swift-native-migration.md impl-plans/PROGRESS.json",
+        "rg -n \"2026-06-12 05:35|exec-000046|passed 65 tests|descriptor isolation|configured-secret redaction\" impl-plans/completed/swift-native-migration.md impl-plans/PROGRESS.json",
         "rg -n \"WorkflowSession|WorkflowMessageRecord|CandidatePathReading|WorkflowOutputPublishing|completionPassed|RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json\" impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
         "rg -n \"WorkflowSession|WorkflowMessageRecord|CandidatePathReading|WorkflowOutputPublishing|completionPassed\" Sources/RielflowCore Tests/RielflowCoreTests",
         "rg -n \"RIEL_MAILBOX_DIR|inbox/input\\.json|outbox/output\\.json|execution-local inbox|execution-local outbox\" Sources Tests",
@@ -7764,14 +7764,14 @@
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RielflowCLITests",
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --variables \"{\"unterminated\": true\" --output json",
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow validate worker-only-single-step --workflow-definition-dir ./examples --endpoint http://localhost:4000/graphql",
-        "rg -n \"TASK-008|rielflow-swift-|dist/swift-homebrew|TypeScript/Bun remains\" impl-plans/active/swift-native-migration.md impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md README.md packaging/homebrew/README.md design-docs/user-qa/qa-swift-native-migration.md .codex/skills/riel-codex-impl-workflow/SKILL.md",
+        "rg -n \"TASK-008|rielflow-swift-|dist/swift-homebrew|TypeScript/Bun remains\" impl-plans/completed/swift-native-migration.md impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md README.md packaging/homebrew/README.md design-docs/user-qa/qa-swift-native-migration.md .codex/skills/riel-codex-impl-workflow/SKILL.md",
         "RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64",
         "RIEL_VERSION=0.0.0-task008 scripts/build-swift-homebrew-readiness.sh darwin-arm64",
         "tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz",
         "(cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz.sha256)",
         "rg -n \"gh release|git push|brew tap|render-homebrew-formula|Formula/rielflow.rb\" scripts/build-swift-homebrew-readiness.sh packaging/homebrew/swift-cutover-gates.json packaging/homebrew/README.md",
-        "rg -n \"TASK-002|197 tests|Swift 6.3.2\" impl-plans/active/swift-native-migration.md design-docs/specs/design-swift-native-migration.md",
-        "rg -n \"renderPromptTemplate|promptTemplateFile|systemPromptTemplateFile|sessionStartPromptTemplateFile|completionPassed|candidate-path|runtime-owned\" impl-plans/active/swift-native-migration.md design-docs/specs/design-swift-native-migration.md",
+        "rg -n \"TASK-002|197 tests|Swift 6.3.2\" impl-plans/completed/swift-native-migration.md design-docs/specs/design-swift-native-migration.md",
+        "rg -n \"renderPromptTemplate|promptTemplateFile|systemPromptTemplateFile|sessionStartPromptTemplateFile|completionPassed|candidate-path|runtime-owned\" impl-plans/completed/swift-native-migration.md design-docs/specs/design-swift-native-migration.md",
         "rg -n \"renderPromptTemplate|PromptTemplate|promptTemplateFile|systemPromptTemplateFile|sessionStartPromptTemplateFile\" Sources/RielflowCore Tests/RielflowCoreTests",
         "rg -n \"normalizeOutputContractEnvelope|parseJSONObjectCandidate|extractBalancedJSONObject|completionPassed|usedEnvelope\" Sources/RielflowCore Sources/RielflowAdapters Tests/RielflowAdaptersTests Tests/AgentAdapterTests",
         "rg -n \"candidatePath|WorkflowMessageRecord|communicationId|WorkflowOutputPublishing\" Sources/RielflowAdapters Tests/RielflowAdaptersTests Tests/AgentAdapterTests",
@@ -7780,30 +7780,34 @@
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter PromptTemplateTests/testPromptRenderingFormatsLargeIntegralNumbersWithoutTrapping",
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter DeterministicWorkflowRunnerTests/testRunRendersHydratedPromptTemplateAndPromptVariantBeforeAdapterExecution",
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter DeterministicWorkflowRunnerTests/testRunPreservesConfiguredPromptTemplateThatRendersEmpty",
-        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
         "node -e 'console.log(JSON.stringify({total:1e20})); console.log(JSON.stringify([1e20]));'",
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter PromptTemplateTests/testPromptRenderingFormatsNestedLargeNumbersLikeTypeScriptJSONStringify",
         "node -e 'console.log(JSON.stringify({total:1e20,url:\"https://example.test/a/b\"})); console.log(JSON.stringify([1e20,\"https://example.test/a/b\"]));'",
         "node -e 'console.log(String(1e-6)); console.log(JSON.stringify(1e-6)); console.log(String(1e-7)); console.log(JSON.stringify(1e-7)); console.log(JSON.stringify({threshold:1e-6,total:1e20,url:\"https://example.test/a/b\"})); console.log(JSON.stringify([1e20,1e-6,\"https://example.test/a/b\"]));'",
-        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'PromptTemplateTests/testPromptRenderingFormatsLargeIntegralNumbersWithoutTrapping|PromptTemplateTests/testPromptRenderingFormatsNestedLargeNumbersLikeTypeScriptJSONStringify'"
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'PromptTemplateTests/testPromptRenderingFormatsLargeIntegralNumbersWithoutTrapping|PromptTemplateTests/testPromptRenderingFormatsNestedLargeNumbersLikeTypeScriptJSONStringify'",
+        "rg -n \"TASK-009|swift-cutover-gates|allowsProductionCutover|task009-adversarial-review\" impl-plans/completed/swift-native-migration.md impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md packaging/homebrew/swift-cutover-gates.json",
+        "RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64",
+        "RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64",
+        "tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz",
+        "(cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256)",
+        "! rg -n \"/Users/|/home/|$(pwd)\" dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow --help",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow validate codex-design-and-implement-review-loop --scope project --output json",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow inspect codex-design-and-implement-review-loop --scope project --output json",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --mock-scenario ./examples/worker-only-single-step/mock-scenario.json --output json",
+        "jq empty packaging/homebrew/swift-cutover-gates.json",
+        "jq '(.allowsProductionCutover, .productionRuntime), (.gates[] | select(.requiredBeforeCutover == true) | {id,status,verificationCommand})' packaging/homebrew/swift-cutover-gates.json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter EventDryRunTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter HookContractsTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter AdapterUtilitiesTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RuntimeStoreTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RuntimePublicationTests"
       ],
       "residualRisks": [
-        "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select points at a Nix Apple SDK path.",
-        "High-risk runtime migration requires adversarial implementation review before release cutover.",
-        "Preferred local codex-agent reference root ../../codex-agent is unavailable.",
-        "Swift local-agent command/readiness parity maps current TypeScript adapter behavior because dedicated Swift references for codex-agent, claude-code-agent, and cursor-cli-agent are not supplied; preferred ../../codex-agent remains unavailable.",
-        "TASK-005 starts with deterministic in-memory runtime behavior; SQLite-backed Swift persistence is deferred.",
-        "TASK-005 currently provides deterministic in-memory Swift runtime behavior; SQLite-backed Swift persistence remains deferred.",
-        "TASK-002 and TASK-003 are now complete, but final TASK-009 parity/security/cutover review remains not started.",
-        "High-risk runtime publication boundary still requires adversarial implementation review before any Swift runtime cutover.",
-        "TASK-005 remains deterministic in-memory Swift runtime behavior; SQLite-backed Swift persistence remains deferred.",
-        "TASK-005 message input resolution and root-output publication are deterministic in-memory APIs; SQLite-backed Swift persistence remains deferred.",
-        "TASK-005 lifecycle filtering is deterministic in-memory behavior; SQLite-backed Swift message persistence and status transitions remain deferred.",
-        "TASK-007 is additive deterministic local CLI parity only; TypeScript/Bun remains the production fallback until later cutover gates pass.",
-        "Swift CLI deterministic run must use TASK-005 runtime-owned publication APIs and must not allocate communication ids in CLI code.",
-        "Preferred local codex-agent root ../../codex-agent remains unavailable; ../codex-agent is reference-only for deterministic mock-runner testing principles.",
-        "TASK-008 must not publish GitHub release assets, update tacogips/homebrew-tap, remove TypeScript/Bun archives, or make Swift production by default.",
-        "Swift readiness archives intentionally use rielflow-swift names under dist/swift-homebrew until TASK-009 accepts final cutover."
+        "Production Homebrew remains on TypeScript/Bun until a dedicated release cutover changes the formula source; allowsProductionCutover remains false in packaging/homebrew/swift-cutover-gates.json.",
+        "Default swift lookup may still require explicit DEVELOPER_DIR and SDKROOT override.",
+        "Preferred local codex-agent reference root ../../codex-agent is unavailable; TASK-009 used current Rielflow TypeScript/Bun behavior as the authoritative local reference.",
+        "official/cursor-sdk remains explicitly deferred unless separately scoped and reviewed."
       ],
       "addressedReviewFindings": [
         {
@@ -7881,7 +7885,7 @@
         {
           "nodeId": "step5-impl-plan-review",
           "severity": "mid",
-          "file": "impl-plans/active/swift-native-migration.md",
+          "file": "impl-plans/completed/swift-native-migration.md",
           "finding": "Plan preserved official SDK backend strings but did not explicitly plan or defer official SDK Swift adapter behavior.",
           "resolution": "Expanded TASK-004 and verification/completion criteria to require official/openai-sdk and official/anthropic-sdk dispatch, request construction, API-key handling, retry/error normalization, output normalization, and no-live-credential tests; official/cursor-sdk remains explicitly deferred unless separately scoped."
         },
@@ -7979,7 +7983,7 @@
         {
           "nodeId": "step7-review",
           "severity": "mid",
-          "file": "impl-plans/active/swift-native-migration.md",
+          "file": "impl-plans/completed/swift-native-migration.md",
           "finding": "TASK-004 and the backend adapter module remained Not Started even though current implementation changed LocalAgentProcess and AgentAdapterTests for local-agent/Codex JSONL hardening.",
           "resolution": "Marked prompt/output-contract and backend-faithful agent adapter modules IN_PROGRESS, set TASK-003 and TASK-004 to In Progress in the plan and PROGRESS.json, checked off completed local CLI hardening and codex-agent JSONL criteria under TASK-004, and added latest progress log with TASK-002, TASK-003, and TASK-004 in progress."
         },
@@ -8082,7 +8086,7 @@
           "nodeId": "step6-implement",
           "exec": "exec-000009",
           "severity": "info",
-          "file": "impl-plans/active/swift-native-migration.md",
+          "file": "impl-plans/completed/swift-native-migration.md",
           "finding": "Implemented the accepted remaining TASK-004 local-agent command-builder and readiness parity slice after Step 5 accepted the plan with no high or mid findings.",
           "resolution": "Added LocalAgentCommandBuilding and backend-owned Swift builders for codex-agent, claude-code-agent, and cursor-cli-agent; added deterministic Swift readiness/runtime-readiness APIs for available, unavailable, unknown, and not_checked states; added no-live XCTest coverage for exact argv/config/stdin/deadline behavior, policy_blocked preflight failures, readiness invalid/unknown results, and Xcode Swift 6.3.2 swift test passing 51 tests."
         },
@@ -8090,7 +8094,7 @@
           "nodeId": "step6-implement-self-review",
           "exec": "exec-000010",
           "severity": "mid-fixed",
-          "file": "impl-plans/active/swift-native-migration.md",
+          "file": "impl-plans/completed/swift-native-migration.md",
           "finding": "Self-review found the TASK-004 markdown status header still said In Progress while TASK-004 completion criteria, progress log, and impl-plans/PROGRESS.json recorded completion.",
           "resolution": "Corrected active plan status headers so TASK-002 and TASK-003 remain In Progress and TASK-004 is Completed, matching impl-plans/PROGRESS.json and Step 6 verification evidence."
         },
@@ -8114,9 +8118,9 @@
           "nodeId": "step7-review",
           "exec": "exec-000012",
           "severity": "low",
-          "file": "impl-plans/active/swift-native-migration.md",
+          "file": "impl-plans/completed/swift-native-migration.md",
           "finding": "Step 7 review found TASK-001 was marked In Progress in the active plan while impl-plans/PROGRESS.json recorded TASK-001 as Completed.",
-          "resolution": "Corrected TASK-001 status in impl-plans/active/swift-native-migration.md to Completed."
+          "resolution": "Corrected TASK-001 status in impl-plans/completed/swift-native-migration.md to Completed."
         },
         {
           "nodeId": "step7-review",
@@ -8237,7 +8241,7 @@
           "nodeId": "step4-impl-plan-self-review",
           "exec": "exec-000007",
           "severity": "plan-only-fixed",
-          "file": "impl-plans/active/swift-native-migration.md",
+          "file": "impl-plans/completed/swift-native-migration.md",
           "finding": "Parent plan issue-reference block still named the previous TASK-004 local-agent workflow session and issue title after the TASK-005 focused plan was created.",
           "resolution": "Updated the parent issue-reference block to name the current TASK-005 workflow session, issue title, and self-review node while preserving the prior TASK-004 session as historical context."
         },
@@ -8247,7 +8251,7 @@
           "severity": "mid",
           "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
           "line": 3,
-          "finding": "Focused TASK-005 plan was marked Ready while parent active/swift-native-migration:TASK-002 and TASK-003 were still recorded as blockers.",
+          "finding": "Focused TASK-005 plan was marked Ready while parent completed/swift-native-migration:TASK-002 and TASK-003 were still recorded as blockers.",
           "resolution": "Marked the focused TASK-005 plan Blocked, set phase 196 to BLOCKED, updated README status, and added an activation rule requiring parent TASK-002/TASK-003 completion or explicit stability acceptance before implementation starts."
         },
         {
@@ -8337,7 +8341,7 @@
           "resolution": "Created focused TASK-006 implementation plan and linked parent plan, README, PROGRESS.json, task breakdown, and verification commands.",
           "paths": [
             "impl-plans/completed/swift-native-migration-task-006-contracts.md",
-            "impl-plans/active/swift-native-migration.md",
+            "impl-plans/completed/swift-native-migration.md",
             "impl-plans/README.md",
             "impl-plans/PROGRESS.json"
           ]
@@ -8618,7 +8622,7 @@
           "node": "step4-impl-plan-create",
           "communication": "comm-000005",
           "severity": "plan-only",
-          "file": "impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/active/swift-native-migration.md; impl-plans/PROGRESS.json",
+          "file": "impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/completed/swift-native-migration.md; impl-plans/PROGRESS.json",
           "finding": "Step 3 accepted TASK-008 design with no high or mid findings in supplied workflow input; no Step 5 feedback exists for this run.",
           "resolution": "Created focused TASK-008 implementation plan, linked parent plan, marked parent TASK-008 Ready, and added verification commands for Swift artifact naming, local-only archive readiness, TypeScript/Bun fallback, and no publishing side effects."
         },
@@ -8633,26 +8637,197 @@
           "node": "step4-impl-plan-create",
           "communication": "comm-000005",
           "severity": "plan-only",
-          "file": "impl-plans/active/swift-native-migration.md; impl-plans/PROGRESS.json",
+          "file": "impl-plans/completed/swift-native-migration.md; impl-plans/PROGRESS.json",
           "finding": "Step 3 accepted TASK-002/TASK-003 design with no high or mid findings; issue requires TASK-002 Swift-capable verification evidence mirrored into the active plan and TASK-003 prompt/render/load/envelope gaps made actionable before TASK-009.",
           "resolution": "Marked TASK-002 completed with Xcode Swift 6.3.2 swift test evidence, expanded TASK-003 deliverables and completion criteria for prompt rendering fixtures, prompt asset loading contracts, escaped/missing variable behavior, output-envelope normalization, runtime-owned publication boundaries, and TypeScript/Bun fallback preservation."
+        },
+        {
+          "node": "step4-impl-plan-create",
+          "communication": "comm-000005",
+          "severity": "plan-only",
+          "file": "impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md; impl-plans/completed/swift-native-migration.md; impl-plans/README.md; impl-plans/PROGRESS.json",
+          "finding": "Step 3 accepted TASK-009 design with no high or mid findings in supplied workflow input; issue requires final deterministic parity, security, archive smoke, gate-manifest evidence, and adversarial review handoff before Swift release packaging cutover.",
+          "resolution": "Created focused TASK-009 implementation plan, linked parent plan, marked parent TASK-009 Ready, registered TASK-009 subtasks in PROGRESS.json, and kept all cutover gates blocked until concrete deterministic evidence exists."
+        },
+        {
+          "node": "step6-implement",
+          "communication": "comm-000008",
+          "severity": "accepted",
+          "file": "Sources/RielflowGraphQL/GraphQLContracts.swift; Tests/RielflowGraphQLTests/GraphQLContractsTests.swift; packaging/homebrew/swift-cutover-gates.json; packaging/homebrew/README.md; impl-plans/completed/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md; impl-plans/README.md; impl-plans/PROGRESS.json",
+          "finding": "Step 5 accepted the TASK-009 implementation plan with no high or mid findings in supplied workflow input.",
+          "resolution": "Implemented deterministic TASK-009 gate evidence, added Swift GraphQL manager-control DTO/mutation parity coverage, opened only passed non-review cutover gates, and left task009-adversarial-review blocked with allowsProductionCutover=false."
         }
       ],
       "dependencies": [
-        "TASK-003 depends on completed TASK-001 and TASK-002",
-        "design-docs/specs/design-swift-native-migration.md#task-002task-003-prompt-json-and-envelope-prerequisite-closure",
-        "TypeScript fallback prompt/envelope references because ../../codex-agent is unavailable"
+        "TASK-009 depends on completed TASK-003 prompt/envelope contracts, TASK-007 Swift CLI parity, and TASK-008 packaging readiness gates",
+        "design-docs/specs/design-swift-native-migration.md#task-009-final-parity-security-and-cutover-gate",
+        "packaging/homebrew/swift-cutover-gates.json remains blocked until deterministic evidence exists for each gate"
       ],
       "parallelizableTasks": [
-        "No top-level TASK-003 work is parallelizable; prompt rendering, template asset loading, and output-envelope parsing share RielflowCore JSON and adapter-contract behavior.",
-        "Focused test files may be grouped by concern only after the shared prompt/template loading API shape is accepted and write scopes are disjoint."
+        "TASK-009A baseline evidence and TASK-009E security audit may run in parallel only after completed prerequisites are confirmed and write scopes stay disjoint.",
+        "TASK-009B parity hardening, TASK-009C archive smoke, TASK-009D gate manifest update, and TASK-009F review handoff are sequential because they share evidence artifacts and cutover manifest state."
       ],
       "lastImplementationNode": "step6-implement",
-      "lastImplementationExec": "exec-000036",
+      "lastImplementationExec": "exec-000009",
       "lastSelfReviewNode": "step6-implement-self-review",
       "lastSelfReviewExec": "exec-000031",
       "lastReviewNode": "step7-review",
-      "lastReviewExec": "exec-000035"
+      "lastReviewExec": "exec-000035",
+      "completedAt": "2026-06-12"
+    },
+    "completed/swift-native-migration-task-009-final-cutover-gate": {
+      "phase": 195,
+      "status": "Completed",
+      "path": "impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md#task-009-final-parity-security-and-cutover-gate",
+      "workflowMode": "issue-resolution",
+      "issueReference": "tacogips/rielflow; issue title: Execute Swift TASK-009 final parity security and cutover gate; no issueUrl or issueNumber supplied",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastPlanningNode": "step4-impl-plan-create",
+      "codexAgentReference": "Preferred ../../codex-agent root unavailable; use current Rielflow TypeScript/Bun runtime, adapter, package, event, GraphQL, hook, SQLite, and packaging behavior as local reference. Adjacent ../codex-agent/package.json remains reference-only for executable metadata.",
+      "tasks": {
+        "TASK-009A": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "completed/swift-native-migration:TASK-003",
+            "completed/swift-native-migration:TASK-007",
+            "completed/swift-native-migration:TASK-008"
+          ]
+        },
+        "TASK-009B": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-009A"
+          ]
+        },
+        "TASK-009C": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-009A",
+            "TASK-009B"
+          ]
+        },
+        "TASK-009D": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-009B",
+            "TASK-009C"
+          ]
+        },
+        "TASK-009E": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-009A"
+          ]
+        },
+        "TASK-009F": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-009D",
+            "TASK-009E"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "git status --short --branch",
+        "git diff --check",
+        "jq empty impl-plans/PROGRESS.json && jq empty packaging/homebrew/swift-cutover-gates.json",
+        "bun run typecheck:server",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowPackageManifestTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter EventDryRunTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter GraphQLContractsTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter HookContractsTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter AdapterUtilitiesTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RuntimeStoreTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RuntimePublicationTests",
+        "RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64",
+        "RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64",
+        "tar -tzf dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz",
+        "(cd dist/swift-homebrew && shasum -a 256 -c rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256)",
+        "! rg -n \"/Users/|/home/|$(pwd)\" dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz.sha256",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow --help",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow validate codex-design-and-implement-review-loop --scope project --output json",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow inspect codex-design-and-implement-review-loop --scope project --output json",
+        "dist/swift-homebrew/work/rielflow-0.0.0-task009-darwin-arm64/bin/rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --mock-scenario ./examples/worker-only-single-step/mock-scenario.json --output json",
+        "jq empty packaging/homebrew/swift-cutover-gates.json",
+        "jq '(.allowsProductionCutover, .productionRuntime), (.gates[] | select(.requiredBeforeCutover == true) | {id,status,verificationCommand})' packaging/homebrew/swift-cutover-gates.json",
+        "jq empty impl-plans/PROGRESS.json"
+      ],
+      "dependencies": [
+        "completed/swift-native-migration:TASK-003",
+        "completed/swift-native-migration:TASK-007",
+        "completed/swift-native-migration:TASK-008",
+        "packaging/homebrew/swift-cutover-gates.json"
+      ],
+      "parallelizableTasks": [
+        "TASK-009A baseline evidence is parallelizable because it records command results and has no code writes.",
+        "TASK-009E security audit may run in parallel with TASK-009B only if write scopes remain disjoint; any code hardening must coordinate shared Swift targets."
+      ],
+      "residualRisks": [
+        "Production release upload, tap mutation, dist/homebrew replacement, TypeScript/Bun removal, and Homebrew formula cutover remain out of scope for this TASK-009 handoff.",
+        "ProductionRuntime remains typescript-bun, homebrewFormulaSource remains bun-archive, and allowsProductionCutover remains false until a dedicated release cutover.",
+        "Default swift lookup may still require explicit DEVELOPER_DIR and SDKROOT override.",
+        "Swift persistence evidence is deterministic runtime publication/store parity; TypeScript/Bun remains the production runtime until release cutover."
+      ],
+      "addressedFeedback": [
+        {
+          "nodeId": "step3-design-review",
+          "communication": "comm-000005",
+          "severity": "accepted",
+          "finding": "Design accepted with no high or mid findings in supplied workflow input.",
+          "resolution": "Focused TASK-009 plan follows accepted design and requires deterministic evidence before any cutover gate moves from blocked."
+        },
+        {
+          "nodeId": "step5-impl-plan-review",
+          "communication": "comm-000008",
+          "severity": "accepted",
+          "file": "Sources/RielflowGraphQL/GraphQLContracts.swift; Tests/RielflowGraphQLTests/GraphQLContractsTests.swift; packaging/homebrew/swift-cutover-gates.json; packaging/homebrew/README.md; impl-plans/completed/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md; impl-plans/README.md; impl-plans/PROGRESS.json",
+          "finding": "Implementation plan accepted with no high or mid findings in supplied workflow input.",
+          "resolution": "Executed baseline, parity, archive, security, manifest, and review handoff tasks. Added Swift GraphQL manager-control parity contracts and tests. Opened only non-review gates with exact passing evidence and left adversarial review blocked."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000013",
+          "severity": "accepted",
+          "file": "Sources/RielflowGraphQL/GraphQLContracts.swift; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; Tests/RielflowGraphQLTests/GraphQLContractsTests.swift; packaging/homebrew/swift-cutover-gates.json; packaging/homebrew/README.md; impl-plans/completed/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md; impl-plans/README.md; impl-plans/PROGRESS.json",
+          "finding": "Adversarial implementation review accepted TASK-009 with no high or mid findings.",
+          "resolution": "Step 8 documentation refresh recorded accepted TASK-009 evidence while keeping productionRuntime=typescript-bun, homebrewFormulaSource=bun-archive, and allowsProductionCutover=false until a dedicated release cutover changes the Homebrew formula source."
+        }
+      ],
+      "lastImplementationNode": "step6-implement",
+      "lastImplementationExec": "exec-000009",
+      "lastReviewNode": "step7-adversarial-review",
+      "lastReviewExec": "exec-000013",
+      "gateEvidence": {
+        "nonReviewGatesPassed": [
+          "swift-workflow-validate",
+          "swift-workflow-inspect",
+          "swift-deterministic-run",
+          "swift-package-validation",
+          "swift-event-dry-run",
+          "swift-graphql-manager-control",
+          "swift-hook-context",
+          "swift-adapter-output-normalization",
+          "swift-sqlite-persistence",
+          "swift-macos-archive-smoke"
+        ],
+        "blockedGates": [
+          "task009-adversarial-review"
+        ],
+        "archivePath": "dist/swift-homebrew/rielflow-swift-0.0.0-task009-darwin-arm64.tar.gz",
+        "checksum": "722e16dd5bbea27b1e4c6d06043fb7ad32c0023967da98f32cb577c4c32bf937"
+      },
+      "completedAt": "2026-06-12"
     },
     "completed/swift-native-migration-task-005-runtime-session": {
       "phase": 196,
@@ -8669,8 +8844,8 @@
           "status": "Completed",
           "parallelizable": false,
           "deps": [
-            "active/swift-native-migration:TASK-002",
-            "active/swift-native-migration:TASK-003"
+            "completed/swift-native-migration:TASK-002",
+            "completed/swift-native-migration:TASK-003"
           ]
         },
         "TASK-002": {
@@ -8767,7 +8942,7 @@
           "severity": "mid",
           "file": "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
           "line": 3,
-          "finding": "Focused TASK-005 plan was marked Ready while parent active/swift-native-migration:TASK-002 and TASK-003 were still recorded as blockers.",
+          "finding": "Focused TASK-005 plan was marked Ready while parent completed/swift-native-migration:TASK-002 and TASK-003 were still recorded as blockers.",
           "resolution": "Marked the focused TASK-005 plan Blocked, set phase 196 to BLOCKED, updated README status, and added an activation rule requiring parent TASK-002/TASK-003 completion or explicit stability acceptance before implementation starts."
         },
         {
@@ -8876,8 +9051,8 @@
           "status": "Completed",
           "parallelizable": true,
           "deps": [
-            "active/swift-native-migration:TASK-002",
-            "active/swift-native-migration:TASK-003"
+            "completed/swift-native-migration:TASK-002",
+            "completed/swift-native-migration:TASK-003"
           ]
         },
         "TASK-002": {
@@ -8885,23 +9060,23 @@
           "parallelizable": false,
           "deps": [
             "TASK-001",
-            "active/swift-native-migration:TASK-005"
+            "completed/swift-native-migration:TASK-005"
           ]
         },
         "TASK-003": {
           "status": "Completed",
           "parallelizable": true,
           "deps": [
-            "active/swift-native-migration:TASK-002",
-            "active/swift-native-migration:TASK-003"
+            "completed/swift-native-migration:TASK-002",
+            "completed/swift-native-migration:TASK-003"
           ]
         },
         "TASK-004": {
           "status": "Completed",
           "parallelizable": true,
           "deps": [
-            "active/swift-native-migration:TASK-002",
-            "active/swift-native-migration:TASK-003"
+            "completed/swift-native-migration:TASK-002",
+            "completed/swift-native-migration:TASK-003"
           ]
         },
         "TASK-005": {
@@ -8910,7 +9085,7 @@
           "deps": [
             "TASK-003",
             "TASK-004",
-            "active/swift-native-migration:TASK-005"
+            "completed/swift-native-migration:TASK-005"
           ]
         },
         "TASK-006": {
@@ -9180,9 +9355,9 @@
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow validate worker-only-single-step --workflow-definition-dir ./examples --endpoint http://localhost:4000/graphql"
       ],
       "dependencies": [
-        "active/swift-native-migration:TASK-004",
-        "active/swift-native-migration:TASK-005",
-        "active/swift-native-migration:TASK-006",
+        "completed/swift-native-migration:TASK-004",
+        "completed/swift-native-migration:TASK-005",
+        "completed/swift-native-migration:TASK-006",
         "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
         "impl-plans/completed/swift-native-migration-task-006-contracts.md"
       ],
@@ -9367,7 +9542,7 @@
         "git status --short --branch",
         "git diff --check",
         "jq empty impl-plans/PROGRESS.json",
-        "rg -n \"TASK-008|rielflow-swift-|dist/swift-homebrew|TypeScript/Bun remains\" impl-plans/active/swift-native-migration.md impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md README.md packaging/homebrew/README.md design-docs/user-qa/qa-swift-native-migration.md .codex/skills/riel-codex-impl-workflow/SKILL.md",
+        "rg -n \"TASK-008|rielflow-swift-|dist/swift-homebrew|TypeScript/Bun remains\" impl-plans/completed/swift-native-migration.md impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md README.md packaging/homebrew/README.md design-docs/user-qa/qa-swift-native-migration.md .codex/skills/riel-codex-impl-workflow/SKILL.md",
         "bun run typecheck:server",
         "bun run lint:biome",
         "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
@@ -9387,7 +9562,7 @@
         "! rg -n \"/Users/|/home/|$(pwd)\" dist/swift-homebrew/rielflow-swift-0.0.0-task008-darwin-arm64.tar.gz.sha256"
       ],
       "dependencies": [
-        "active/swift-native-migration:TASK-007",
+        "completed/swift-native-migration:TASK-007",
         "impl-plans/completed/swift-native-migration-task-007-cli-parity.md"
       ],
       "parallelizableTasks": [
@@ -9417,14 +9592,14 @@
           "nodeId": "step5-impl-plan-review",
           "communication": "comm-000008",
           "severity": "accepted",
-          "file": "Sources/RielflowCore/SwiftPackagingReadiness.swift; Sources/RielflowCLI/RielflowCommand.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; Tests/RielflowCLITests/CommandParsingTests.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift; scripts/build-swift-homebrew-readiness.sh; packaging/homebrew/swift-cutover-gates.json; README.md; packaging/homebrew/README.md; design-docs/user-qa/qa-swift-native-migration.md; design-docs/specs/design-swift-native-migration.md; .codex/skills/riel-codex-impl-workflow/SKILL.md; impl-plans/active/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/PROGRESS.json",
+          "file": "Sources/RielflowCore/SwiftPackagingReadiness.swift; Sources/RielflowCLI/RielflowCommand.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; Tests/RielflowCLITests/CommandParsingTests.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift; scripts/build-swift-homebrew-readiness.sh; packaging/homebrew/swift-cutover-gates.json; README.md; packaging/homebrew/README.md; design-docs/user-qa/qa-swift-native-migration.md; design-docs/specs/design-swift-native-migration.md; .codex/skills/riel-codex-impl-workflow/SKILL.md; impl-plans/completed/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/PROGRESS.json",
           "finding": "Implementation plan accepted with no high or mid findings in supplied workflow input.",
           "resolution": "Implemented TASK-008 readiness-only Swift packaging surfaces, blocked cutover gate manifest, deterministic Swift tests, documentation refreshes, and progress updates while keeping TypeScript/Bun as the production Homebrew fallback."
         },
         {
           "nodeId": "step6-implement-self-review",
           "severity": "self-review-fixed",
-          "file": "impl-plans/active/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/README.md; impl-plans/PROGRESS.json",
+          "file": "impl-plans/completed/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/README.md; impl-plans/PROGRESS.json",
           "finding": "Self-review found stale TASK-008 status rows in the parent module table and implementation-plan index after implementation moved the focused plan to In Review.",
           "resolution": "Updated parent plan TASK-008 module status, checked parent TASK-008 criteria, updated impl-plans/README.md to In Review, and logged the self-review status alignment."
         },
@@ -9432,7 +9607,7 @@
           "nodeId": "step7-review",
           "communication": "comm-000012",
           "severity": "mid-fixed",
-          "file": "scripts/build-swift-homebrew-readiness.sh; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; impl-plans/active/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/PROGRESS.json",
+          "file": "scripts/build-swift-homebrew-readiness.sh; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; impl-plans/completed/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/PROGRESS.json",
           "finding": "RIEL_VERSION was interpolated into Swift readiness work/archive paths before destructive rm -rf without validating path components or proving containment under RIEL_SWIFT_RELEASE_DIR.",
           "resolution": "Added semver-like version validation rejecting separators and parent traversal, absolute release-directory normalization, release-directory component validation, containment assertions for work/archive paths before dry-run output and writes, deterministic Swift coverage, and shell checks for unsafe RIEL_VERSION and release-directory traversal values."
         },
@@ -9440,7 +9615,7 @@
           "nodeId": "step7-adversarial-review",
           "communication": "comm-000017",
           "severity": "mid-fixed",
-          "file": "scripts/build-swift-homebrew-readiness.sh; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; impl-plans/active/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/PROGRESS.json",
+          "file": "scripts/build-swift-homebrew-readiness.sh; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; impl-plans/completed/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/PROGRESS.json",
           "finding": "Generated Swift readiness .sha256 sidecars recorded absolute host archive paths, leaking machine-local paths and making checksum verification nonportable after relocation.",
           "resolution": "Changed checksum generation to run from the archive directory with the archive basename for shasum and sha256sum, added deterministic Swift coverage, and added shell verification from dist/swift-homebrew plus host-path rejection checks."
         }
