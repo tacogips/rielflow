@@ -337,6 +337,109 @@ Rollout constraints:
 - Cursor CLI behavior remains isolated in `CursorCLIAgent`; TASK-006 introduces
   no Cursor-specific add-on, event, GraphQL, hook, or server behavior.
 
+## TASK-007 Swift CLI Validate, Inspect, And Deterministic Run Parity
+
+TASK-007 introduces additive Swift `RielflowCLI` command parsing and deterministic
+execution behavior for parity tests. The Swift CLI should prove that the native
+targets can load, validate, inspect, and run deterministic mock workflows without
+changing the production TypeScript/Bun command path or release fallback.
+
+Command scope:
+
+- `workflow validate <name>` loads workflows through the same direct/project/user
+  resolution concepts as the TypeScript CLI. It must support `--scope
+  auto|project|user`, `--workflow-definition-dir`, `--output text|json`, and
+  `--node-patch <json|@file|file>` for non-persistent node setting overrides.
+  Structural validation is passive by default. `--executable` may report
+  deterministic readiness/preflight results through injected Swift contracts,
+  but tests must not require live agent CLIs, credentials, network access, or
+  package installation side effects.
+- `workflow inspect <name>` loads the same resolved workflow and reports
+  step-addressed structure, source scope/path, entry and manager step ids,
+  reusable node ids, cross-workflow dispatch ids, counts, defaults, callable
+  input/output contracts, add-on source summaries, and runtime readiness
+  descriptors. `--structure` remains a text-only compact step/description view;
+  `--output json` must preserve the full inspection summary rather than the
+  compact structure projection.
+- `workflow run <name-or-workflow-json>` is limited to deterministic local
+  execution in this slice. It must accept `--variables <json|@file|file>`,
+  `--node-patch <json|@file|file>`, `--mock-scenario <path>`, `--output
+  text|json`, `--max-steps`, `--max-concurrency`, `--max-loop-iterations`,
+  `--default-timeout-ms`, `--timeout-ms`, `--artifact-root`, `--session-store`,
+  and `--working-dir` / `--working-directory` where the corresponding Swift
+  runtime contracts already exist. Temporary workflow JSON may be supported for
+  deterministic fixture runs, but registry-backed runs, remote `--endpoint`,
+  package checkout mutation, live gateways, live HTTP server loops, and final
+  release cutover remain outside TASK-007.
+
+Deterministic run behavior:
+
+1. CLI parsing normalizes options before workflow loading and fails malformed
+   input with deterministic exit codes: usage errors return `2`; load,
+   validation, and execution failures return `1`; successful validation,
+   inspection, or terminal mock execution returns `0`.
+2. Workflow loading must apply node patches in memory only and must not write
+   `workflow.json`, `nodes/node-*.json`, package manifests, event configs, hook
+   records, registry records, or scoped checkout metadata.
+3. Runtime execution uses TASK-005 session, step execution, candidate
+   normalization, output-contract validation, and workflow message publication
+   APIs. Adapters and add-ons still return candidate payloads only; the CLI must
+   not allocate communication ids or publish messages directly.
+4. Mock scenario responses map by step/node execution id consistently with the
+   TypeScript `ScenarioNodeAdapter`: an entry may be a single response or a
+   sequence, output-contract retry attempts advance deterministically, and
+   missing entries fall back to the deterministic local adapter.
+5. Scenario failure, provider failure, `completionPassed: false`, invalid
+   output contracts, unsupported transition semantics, and message append
+   failures must leave session state deterministic and must not fabricate
+   downstream workflow messages.
+6. JSON stdout must remain machine parseable. Human progress, verbose/debug
+   diagnostics, and validation issue text belong on stderr or text output only.
+
+TypeScript/Bun parity references:
+
+- `packages/rielflow/src/cli/argument-parser.ts` defines option spelling,
+  value requirements, and enum validation.
+- `packages/rielflow/src/cli/workflow-command-handler.ts` defines current
+  `workflow validate` and `workflow inspect` text/JSON output shape.
+- `packages/rielflow/src/cli/workflow-run-command.ts` defines local run,
+  temporary workflow, variables, node patch, registry-run, and endpoint
+  boundaries. TASK-007 implements only the deterministic local subset needed for
+  Swift parity.
+- `packages/rielflow/src/workflow/scenario-adapter.ts` defines mock-scenario
+  response sequencing and deterministic fallback behavior.
+- `packages/rielflow/src/workflow/engine/workflow-runner.ts` and
+  `packages/rielflow/src/workflow/engine/step-result-finalization.ts` define
+  the runtime-owned finalization behavior that Swift must preserve through
+  TASK-005 APIs.
+
+Codex-reference mapping:
+
+- The preferred `../../codex-agent` root remains unavailable for this checkout.
+  The observed adjacent `../codex-agent` repository is a reference only, not an
+  implementation source.
+- `../codex-agent/dist/sdk/mock-session-runner.d.ts` shows the reference
+  project's deterministic mock-runner pattern: synthetic sessions, recorded
+  calls, injected options, explicit completion, and no live Codex process.
+  Swift TASK-007 should use the same testing principle while keeping Rielflow's
+  workflow session/message semantics under `RielflowCore`.
+- Cursor-specific behavior stays isolated in `CursorCLIAgent`. `RielflowCLI`
+  may parse workflow options and dispatch through provider-neutral contracts,
+  but it must not expose Cursor mode, stream format, or auth-probe details as
+  core workflow or CLI concepts.
+
+Rollout constraints:
+
+- TypeScript/Bun remains the documented production fallback until Swift
+  validation, inspect, deterministic run, package, event, GraphQL, hook,
+  adapter, and macOS archive gates pass.
+- TASK-007 must not remove, rename, or shadow existing TypeScript CLI command
+  behavior in release packaging.
+- Tests must exercise Swift through injected stores, clocks, scenario adapters,
+  filesystems, and process/readiness probes. They must not require live local
+  agent binaries, LLM credentials, network access, repository-owned npm
+  installs, package checkout mutation, or long-running server loops.
+
 ## Data Flow
 
 The Swift runtime should keep the same high-level execution flow as the TypeScript runtime:

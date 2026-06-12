@@ -23,19 +23,25 @@ public struct AdapterExecutionInput: Codable, Equatable, Sendable {
   public var systemPromptText: String?
   public var arguments: JSONObject
   public var mergedVariables: JSONObject
+  public var executionIndex: Int
+  public var output: AdapterOutputAttemptContext?
 
   public init(
     node: AgentNodePayload,
     promptText: String,
     systemPromptText: String? = nil,
     arguments: JSONObject = [:],
-    mergedVariables: JSONObject = [:]
+    mergedVariables: JSONObject = [:],
+    executionIndex: Int = 1,
+    output: AdapterOutputAttemptContext? = nil
   ) {
     self.node = node
     self.promptText = promptText
     self.systemPromptText = systemPromptText
     self.arguments = arguments
     self.mergedVariables = mergedVariables
+    self.executionIndex = executionIndex
+    self.output = output
   }
 }
 
@@ -44,6 +50,16 @@ public struct AdapterExecutionContext: Sendable {
 
   public init(deadline: Date? = nil) {
     self.deadline = deadline
+  }
+}
+
+public struct AdapterOutputAttemptContext: Codable, Equatable, Sendable {
+  public var maxValidationAttempts: Int
+  public var attempt: Int
+
+  public init(maxValidationAttempts: Int, attempt: Int) {
+    self.maxValidationAttempts = maxValidationAttempts
+    self.attempt = attempt
   }
 }
 

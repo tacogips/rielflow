@@ -180,7 +180,7 @@ public struct InMemoryWorkflowOutputPublisher: WorkflowOutputPublishing {
       throw WorkflowPublicationError.validationRejected(failedExecution.failureReason ?? session?.status.rawValue ?? reason)
     }
 
-    let publishableTransitions = request.transitions.filter { shouldPublish(transition: $0, when: candidate.when) }
+    let publishableTransitions = request.transitions.filter { shouldPublish(transition: $0, candidate: candidate) }
     if let reason = unsupportedTransitionReason(in: publishableTransitions) {
       _ = try await store.updateStepExecution(
         WorkflowStepExecutionUpdateInput(
@@ -318,11 +318,8 @@ public struct InMemoryWorkflowOutputPublisher: WorkflowOutputPublishing {
     }
   }
 
-  private func shouldPublish(transition: WorkflowStepTransition, when: [String: Bool]) -> Bool {
-    guard let label = transition.label else {
-      return true
-    }
-    return when[label] ?? false
+  private func shouldPublish(transition: WorkflowStepTransition, candidate: RuntimeOutputCandidate) -> Bool {
+    WorkflowBranchEvaluator().evaluate(label: transition.label, when: candidate.when, payload: candidate.payload)
   }
 
   private func unsupportedTransitionReason(in transitions: [WorkflowStepTransition]) -> String? {

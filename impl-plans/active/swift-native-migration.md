@@ -16,6 +16,7 @@ Source of truth:
 - `design-docs/specs/design-swift-native-migration.md#official-sdk-adapter-parity-slice`
 - `design-docs/specs/design-swift-native-migration.md#cursor-cli-behavior-boundary`
 - `design-docs/specs/design-swift-native-migration.md#task-005-runtime-session-message-store-and-publication-boundary`
+- `design-docs/specs/design-swift-native-migration.md#task-007-swift-cli-validate-inspect-and-deterministic-run-parity`
 - `design-docs/specs/design-swift-native-migration.md#migration-strategy`
 - `design-docs/specs/design-swift-native-migration.md#verification-gates`
 - `design-docs/specs/architecture.md`
@@ -70,20 +71,21 @@ Out of scope for this plan:
 - Current planning node: `step4-impl-plan-create`
 - Repository: `tacogips/rielflow`
 - Issue title:
-  `Port Swift package add-on event hook GraphQL and server contracts`
+  `Implement Swift CLI parity commands for workflow validate inspect and deterministic mock run`
 - GitHub issue: none supplied by runtime input
 - Branch: `swift-migration`
 - Risk level: high; adversarial implementation review required before cutover
 
 Workflow execution note:
 
-- Current TASK-006 planning run
-  `riel-codex-design-and-implement-review-loop-1781219857-4913c906` scopes the
-  next implementation step to Swift package manifest, add-on execution, event
-  dry-run, hook recording, GraphQL DTO, and server request contracts.
-- Step 3 design review accepted the TASK-006 design update with no findings.
-- The previous TASK-004 adapter parity and TASK-005 runtime publication slices
-  remain completed and are not reopened by this plan revision.
+- Current TASK-007 planning run
+  `riel-codex-design-and-implement-review-loop-1781236891-1de96adf` scopes the
+  next implementation step to additive Swift `workflow validate`,
+  `workflow inspect`, and deterministic local `workflow run` parity.
+- Step 3 design review accepted the TASK-007 design update with no findings.
+- The previous TASK-004 adapter parity, TASK-005 runtime publication, and
+  TASK-006 contract slices remain completed and are not reopened by this plan
+  revision.
 
 ## Codex Agent References
 
@@ -642,20 +644,25 @@ design.
 
 ### TASK-007: Implement Swift CLI Parity Commands
 
-**Status**: Not Started
+**Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `Sources/RielflowCLI/main.swift`, `Tests/RielflowCLITests/*`
+**Deliverables**: `Sources/RielflowCLI/*`, `Tests/RielflowCLITests/*`, `impl-plans/completed/swift-native-migration-task-007-cli-parity.md`
 **Dependencies**: TASK-004, TASK-005, TASK-006
 
 **Description**:
 Implement Swift `workflow validate`, `workflow inspect`, and deterministic
-`workflow run` commands for parity testing.
+`workflow run` commands for parity testing. Implementation detail is split into
+the focused TASK-007 plan so the parent migration plan stays navigable while
+CLI parser, workflow resolution, validation, inspection, mock scenario, and
+deterministic run work remains traceable to the accepted design.
 
 **Completion Criteria**:
 
-- [ ] Swift CLI validates the `codex-design-and-implement-review-loop` workflow.
-- [ ] Swift CLI inspect output matches parity fixtures.
-- [ ] Swift deterministic run works without live agent credentials.
+- [x] Swift CLI validates the `codex-design-and-implement-review-loop` workflow.
+- [x] Swift CLI inspect output matches parity fixtures.
+- [x] Swift deterministic run works without live agent credentials.
+- [x] Focused plan exists at
+      `impl-plans/completed/swift-native-migration-task-007-cli-parity.md`.
 
 ### TASK-008: Wire Packaging And Documentation Cutover Gates
 
@@ -728,6 +735,11 @@ plan, package manifest (`RielflowAddons`), event (`RielflowEvents`), and hook
 confined to their target and test directories. Add-on execution depends on
 manifest contracts, GraphQL depends on event and hook projections, server
 depends on GraphQL, and final verification runs last.
+TASK-007 is split into the focused plan
+`impl-plans/completed/swift-native-migration-task-007-cli-parity.md`. Within that
+plan, CLI parser setup and deterministic mock runner work may run in parallel
+because their write scopes are disjoint. Validate and inspect command work may
+run in parallel only after shared workflow resolution is accepted.
 
 ## Verification Plan
 
@@ -2014,3 +2026,301 @@ metadata and an allowed built-in name, rejected Windows absolute paths in
 general package-relative path normalization, and added focused regressions for
 built-in spoofing plus `C:\...` and UNC path rejection. Xcode Swift 6.3.2
 `swift test` passed 149 tests.
+
+### Session: 2026-06-12 13:05
+
+**Tasks Completed**: TASK-007 implementation plan creation.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007 planning. The migration remains additive and
+TypeScript/Bun remains the production fallback.
+**Review Feedback Addressed**: Step 3 design review accepted the TASK-007
+design update with no findings; no Step 5 implementation-plan feedback exists
+for this first TASK-007 planning attempt.
+**Notes**: Added focused plan
+`impl-plans/completed/swift-native-migration-task-007-cli-parity.md` covering
+Swift CLI parser/test target, workflow resolution, in-memory node patching,
+validate, inspect, deterministic mock scenario, local run, verification, and
+progress closure. The plan preserves TASK-005 runtime publication ownership,
+TASK-006 contract surfaces, TypeScript/Bun fallback, and no-live-credential
+test constraints.
+
+### Session: 2026-06-12 13:24
+
+**Tasks Completed**: TASK-007 implementation. Added additive Swift
+`workflow validate`, `workflow inspect`, and deterministic local `workflow run`
+parity under `RielflowCLI`, with scenario-backed mock execution through the
+Swift in-memory runtime publication boundary.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 5 implementation-plan review accepted
+TASK-007 with no high or mid findings; no Step 7 rerun feedback was supplied
+for this implementation attempt.
+**Notes**: Swift CLI parser, resolver, node patch, validate, inspect, scenario step-id lookup,
+and deterministic run coverage was added in `Tests/RielflowCLITests`. Xcode
+Swift 6.3.2 `swift test` passed 155 tests. TypeScript/Bun fallback validation,
+`bun run typecheck:server`, `bun run lint:biome`, `git diff --check`, and
+`jq empty impl-plans/PROGRESS.json` passed.
+
+### Session: 2026-06-12 13:42
+
+**Tasks Completed**: TASK-007 Step 7 review revision for deterministic Swift
+CLI run publication and option handling.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 review `comm-000012` reported two mid
+findings: deterministic run failures bypassed TASK-005 failed-step publication,
+and Swift run options were silently ignored.
+**Notes**: TASK-007 now records adapter, scenario, completion, contract, and
+unsupported-transition failures via the runtime publication boundary, applies
+`maxLoopIterations`, propagates timeout deadlines, and rejects unsupported
+artifact/session-store/concurrency options with usage errors. Added focused
+Swift core and CLI regressions; `swift test --filter
+DeterministicWorkflowRunnerTests` and `swift test --filter RielflowCLITests`
+passed under Xcode Swift 6.3.2. Full `swift test` passed 163 tests, Swift
+validate/inspect/run smokes passed, unsupported run-option smoke returned
+usage exit code 2, and TypeScript/Bun fallback checks passed.
+
+### Session: 2026-06-12 13:55
+
+**Tasks Completed**: TASK-007 Step 7 review revision for Swift CLI remote flag
+rejection and JSON failure output.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 review `comm-000016` reported two mid
+findings: validate/inspect ignored unsupported remote resolution flags, and run
+JSON failures were not parseable from stdout.
+**Notes**: Added validate/inspect endpoint/registry rejection with usage exit
+coverage and a deterministic run failure JSON envelope for `--output json`.
+Focused Swift CLI and deterministic runner tests passed under Xcode Swift
+6.3.2. Full `swift test` passed 166 tests, Swift success/failure smokes
+passed, and TypeScript/Bun fallback checks passed.
+
+### Session: 2026-06-12 14:04
+
+**Tasks Completed**: TASK-007 Step 7 review revision for deterministic
+output-contract retry attempts.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 review `comm-000020` reported one mid
+finding: deterministic run did not honor `NodeOutputContract.maxValidationAttempts`
+or advance scenario sequence responses across output validation retries.
+**Notes**: `DeterministicWorkflowRunner` now retries output validation attempts
+deterministically, records real attempt numbers through TASK-005 publication,
+and preserves no-message behavior for rejected attempts. Added Swift coverage
+for invalid-then-valid scenario sequence output contract retry. Focused Swift
+CLI and deterministic runner tests passed; full `swift test` passed 167 tests;
+TypeScript/Bun fallback checks passed.
+
+### Session: 2026-06-12 14:15
+
+**Tasks Completed**: TASK-007 Step 7 adversarial review revision for multiple
+direct transition handling.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000025`
+reported one mid finding: deterministic run could append multiple downstream
+messages but execute only the first, creating misleading completion.
+**Notes**: The TASK-007 sequential runner now fails closed before publication
+when more than one direct transition is publishable from one adapter output,
+records the failure through TASK-005 publication, and appends no downstream
+messages. Added Swift regression coverage. Full `swift test` passed 168 tests;
+TypeScript/Bun fallback checks passed.
+
+### Session: 2026-06-12 14:23
+
+**Tasks Completed**: TASK-007 Step 7 review revision for normalized
+multi-transition fail-closed handling.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 review `comm-000029` reported one mid
+finding: the TASK-007 sequential runner counted publishable transitions before
+normalizing output-contract envelopes, leaving an envelope `when` path that
+could still publish multiple direct messages while only the first downstream
+step ran.
+**Notes**: `DeterministicWorkflowRunner` now normalizes adapter output before
+the multiple-direct-transition check and uses the same `when` map as runtime
+publication. Added Swift coverage for envelope-overridden labels causing a
+fail-closed failed execution with no accepted output and no messages. Focused
+`DeterministicWorkflowRunnerTests` passed 9 tests; full `swift test` passed
+169 tests; `git diff --check` and `jq empty impl-plans/PROGRESS.json` passed.
+
+### Session: 2026-06-12 14:32
+
+**Tasks Completed**: TASK-007 Step 7 review revision for parseable validate
+JSON failures.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 review `comm-000033` reported one mid
+finding: `workflow validate --output json` did not keep load, invalid workflow,
+node-patch, or preflight failures machine-readable on stdout.
+**Notes**: `WorkflowValidateCommand` now returns a
+`WorkflowValidationFailureResult` JSON envelope for validate failures when
+JSON output is requested, preserving text stderr behavior. Added Swift CLI
+coverage for missing workflows, invalid workflow diagnostics, and malformed
+node-patch JSON. Focused `RielflowCLITests` passed 14 tests; full `swift test`
+passed 172 tests; the missing-workflow JSON smoke parsed with `jq`;
+`git diff --check` and `jq empty impl-plans/PROGRESS.json` passed.
+
+### Session: 2026-06-12 14:42
+
+**Tasks Completed**: TASK-007 Step 7 adversarial review revision for parseable
+inspect JSON failures.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000038`
+reported one mid finding: `workflow inspect --output json` still returned no
+structured stdout on resolver or validation failures.
+**Notes**: `WorkflowInspectCommand` now mirrors validate/run failure behavior
+with a `WorkflowInspectionFailureResult` JSON envelope for inspect failures
+when JSON output is requested. Added Swift CLI coverage for missing workflow
+and invalid workflow diagnostics inspect failure paths. Focused
+`RielflowCLITests` passed 16 tests; full `swift test` passed 174 tests; the
+missing-workflow inspect JSON smoke parsed with `jq`; `git diff --check` and
+`jq empty impl-plans/PROGRESS.json` passed.
+
+### Session: 2026-06-12 14:54
+
+**Tasks Completed**: TASK-007 Step 7 adversarial review revision for
+parser-stage JSON failure envelopes.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000043`
+reported one mid finding: parser-stage workflow usage errors still bypassed
+JSON failure rendering even when raw arguments requested `--output json`.
+**Notes**: `RielflowCLIApplication` now renders parser-stage usage failures as
+command-specific JSON envelopes for workflow validate, inspect, and run when
+`--output json` is present, keeping exit code 2 and empty stderr. Added Swift
+CLI coverage for run `--endpoint`, validate unknown option, and inspect
+missing value parser failures with parseable JSON stdout.
+Focused `RielflowCLITests` passed 19 tests, full `swift test` passed 177
+tests, built-executable parser JSON smokes passed with empty stderr, and
+`git diff --check` plus `jq empty impl-plans/PROGRESS.json` passed.
+
+### Session: 2026-06-12 15:07
+
+**Tasks Completed**: TASK-007 Step 7 review revision for inspect callable
+contract parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 review `comm-000047` reported one mid
+finding: Swift inspect did not preserve callable step id, role, input, and
+output contracts from node payloads.
+**Notes**: Swift node payloads now decode `input` contracts alongside
+`output`, and `WorkflowInspectCommand` derives the callable contract from the
+workflow manager or entry step instead of requiring an output jsonSchema. Added
+Swift CLI regression coverage for the project workflow manager callable
+input/output descriptions and verified Swift inspect JSON with `jq`.
+Focused `RielflowCLITests` passed 20 tests, full `swift test` passed 178
+tests, `git diff --check` and `jq empty impl-plans/PROGRESS.json` passed, and
+the Swift inspect callable smoke parsed with `jq`.
+
+### Session: 2026-06-12 15:22
+
+**Tasks Completed**: TASK-007 Step 7 adversarial review revision for scoped
+workflow name safety and addon-only executable preflight parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000052`
+reported two mid findings: scoped resolution could escape project/user
+workflow roots, and executable validation marked addon-only workflows runnable
+even though deterministic run failed immediately.
+**Notes**: Scoped project/user workflow names now use the TypeScript/Bun safe
+token rule and candidate directories are standardized and containment-checked.
+Swift executable preflight now reports addon-only nodes unsupported unless a
+payload is available. Added Swift CLI regression coverage for traversal/slash
+scoped targets and addon-only validate/run consistency.
+Focused `RielflowCLITests` passed 22 tests, full `swift test` passed 180
+tests, built-executable traversal/addon smokes passed with parseable JSON and
+empty stderr, and `git diff --check` plus `jq empty impl-plans/PROGRESS.json`
+passed.
+
+### Session: 2026-06-12 15:34
+
+**Tasks Completed**: TASK-007 Step 7 review revision for symlink-safe scoped
+workflow containment.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 review `comm-000056` reported one mid
+finding: scoped project/user workflow containment did not resolve symlinks
+before accepting candidate directories.
+**Notes**: Swift scoped workflow resolution now resolves symlink targets for
+candidate directories and scope roots before containment checks, then loads
+workflow and node files only from the accepted resolved directory. Added Swift
+CLI regression coverage for validate, inspect, and run rejecting a safe-name
+symlink that points outside `.rielflow/workflows`.
+Focused `RielflowCLITests` passed 23 tests, full `swift test` passed 181
+tests, built-executable symlink smokes passed with parseable JSON and empty
+stderr, and `git diff --check` plus `jq empty impl-plans/PROGRESS.json`
+passed.
+
+### Session: 2026-06-12 15:43
+
+**Tasks Completed**: TASK-007 Step 7 review revision for symlink-safe workflow
+and node payload file reads.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 review `comm-000060` reported two mid
+findings: scoped resolution still followed symlinked `workflow.json` and node
+payload files outside the project/user workflow root.
+**Notes**: Swift scoped workflow resolution now resolves `workflow.json` and
+node payload file targets before reading and containment-checks the resolved
+file paths for project/user scopes. Added Swift CLI regression coverage for
+validate, inspect, and run rejecting symlinked `workflow.json` and symlinked
+node payload file escapes under `.rielflow/workflows/<safe-name>`.
+Focused `RielflowCLITests` passed 25 tests, full `swift test` passed 183
+tests, built-executable symlink file smokes passed with parseable JSON and
+empty stderr, and `git diff --check` plus `jq empty impl-plans/PROGRESS.json`
+passed.
+
+### Session: 2026-06-12 16:01
+
+**Tasks Completed**: TASK-007 Step 7 adversarial review revision for
+transition branch expression parity.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000065`
+reported one mid finding: Swift deterministic run did not evaluate existing
+transition branch expressions such as `!(needs_revision)`.
+**Notes**: Added shared Swift branch expression evaluation and wired it into
+runtime publication plus the deterministic runner's multiple-transition safety
+check. Added Swift core coverage for negated labels, compound expressions,
+payload fallback, successful negated-transition runs, and expression-based
+multiple transition fail-closed behavior.
+Focused core tests passed 13 tests, full `swift test` passed 187 tests, a
+built-executable negated-transition smoke passed with parseable JSON and empty
+stderr, and `git diff --check` plus `jq empty impl-plans/PROGRESS.json`
+passed.
+
+### Session: 2026-06-12 16:21
+
+**Tasks Completed**: TASK-007 Step 7 adversarial review revision for mock
+scenario sequence parity across repeated step executions.
+**Tasks In Progress**: TASK-002, TASK-003.
+**Blockers**: None for TASK-007. TypeScript/Bun remains the production
+fallback, and release/Homebrew cutover remains deferred to TASK-008.
+**Review Feedback Addressed**: Step 7 adversarial review `comm-000070`
+reported one mid finding: Swift mock scenario sequence selection used per-step
+call counts instead of the TypeScript execution index and validation attempt
+formula.
+**Notes**: Swift adapter inputs now carry `executionIndex` and output attempt
+context; the deterministic runner fills them per step execution and output
+attempt; and the scenario adapter selects mock responses with the
+TypeScript/Bun formula. Added regression coverage for repeated step execution
+with `maxValidationAttempts > 1` and an unused retry-slot scenario response.
+Focused Swift tests passed 39 tests, full `swift test` passed 188 tests, the
+built-executable retry-slot smoke passed with parseable JSON and empty stderr,
+and `git diff --check` plus `jq empty impl-plans/PROGRESS.json` passed.

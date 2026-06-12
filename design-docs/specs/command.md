@@ -6,6 +6,34 @@ This document defines CLI interfaces for workflow and session management.
 
 Commands are designed around JSON workflow lifecycle operations and writing session execution.
 
+### Swift Native Migration CLI Parity
+
+During the Swift native migration, `RielflowCLI` may add additive parity
+implementations for `workflow validate`, `workflow inspect`, and deterministic
+local `workflow run` while TypeScript/Bun remains the production fallback.
+
+The Swift command surface should preserve the public option names, exit-code
+classes, and text/JSON output intent of the existing TypeScript CLI for the
+supported subset:
+
+- `workflow validate <name>`: structural validation by default; optional
+  `--executable` readiness/preflight through injected deterministic probes;
+  `--scope`, `--workflow-definition-dir`, `--node-patch`, and `--output
+  text|json` follow the existing semantics.
+- `workflow inspect <name>`: step-addressed inspection, source scope/path,
+  callable contracts, runtime readiness descriptors, `--structure` as a
+  text-only compact view, and full JSON summary under `--output json`.
+- `workflow run <name-or-temp-workflow>`: deterministic local mock execution
+  with `--variables`, `--node-patch`, `--mock-scenario`, bounded step/loop/
+  concurrency/timeout options, optional artifact/session-store paths, and JSON
+  output that remains parseable.
+
+The Swift parity slice must not implement release cutover, registry-backed
+fetch/install mutation, remote `--endpoint` execution, live gateway/server
+loops, or live agent credential requirements. Cursor-specific CLI behavior
+remains isolated behind `CursorCLIAgent`; the shared command parser and
+`RielflowCore` must not learn Cursor mode or stream-format details.
+
 ### Product Rename Command Surface
 
 The primary command after the product rename is `rielflow`. Human-facing help,

@@ -56,6 +56,7 @@ let package = Package(
     .testTarget(name: "RielflowHookTests", dependencies: ["RielflowCore", "RielflowHook"]),
     .testTarget(name: "RielflowGraphQLTests", dependencies: ["RielflowCore", "RielflowGraphQL"]),
     .testTarget(name: "RielflowServerTests", dependencies: ["RielflowCore", "RielflowGraphQL", "RielflowServer"]),
+    .testTarget(name: "RielflowCLITests", dependencies: ["RielflowCore", "RielflowAdapters", "RielflowCLI"]),
     .testTarget(
       name: "AgentAdapterTests",
       dependencies: ["RielflowCore", "RielflowAdapters", "CodexAgent", "ClaudeCodeAgent", "CursorCLIAgent"]

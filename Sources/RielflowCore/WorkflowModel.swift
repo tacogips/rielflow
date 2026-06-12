@@ -407,6 +407,7 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
   public var effort: NodeReasoningEffort?
   public var workingDirectory: String?
   public var variables: JSONObject
+  public var input: NodeInputContract?
   public var output: NodeOutputContract?
 
   public init(
@@ -418,6 +419,7 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
     effort: NodeReasoningEffort? = nil,
     workingDirectory: String? = nil,
     variables: JSONObject = [:],
+    input: NodeInputContract? = nil,
     output: NodeOutputContract? = nil
   ) {
     self.id = id
@@ -428,7 +430,18 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
     self.effort = effort
     self.workingDirectory = workingDirectory
     self.variables = variables
+    self.input = input
     self.output = output
+  }
+}
+
+public struct NodeInputContract: Codable, Equatable, Sendable {
+  public var description: String?
+  public var jsonSchema: JSONObject?
+
+  public init(description: String? = nil, jsonSchema: JSONObject? = nil) {
+    self.description = description
+    self.jsonSchema = jsonSchema
   }
 }
 

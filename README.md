@@ -21,7 +21,10 @@ proven. The branch currently includes Swift targets for `RielflowCore`,
 `RielflowServer`, `RielflowHook`, `CodexAgent`, `ClaudeCodeAgent`,
 `CursorCLIAgent`, and the `rielflow` executable; see
 `design-docs/specs/design-swift-native-migration.md` and
-`impl-plans/active/swift-native-migration.md`.
+`impl-plans/active/swift-native-migration.md`. Completed focused migration
+slices are archived under `impl-plans/completed/`, including
+`impl-plans/completed/swift-native-migration-task-007-cli-parity.md` for the
+Swift CLI validate, inspect, and deterministic mock-run parity slice.
 
 ## What You Can Do
 
@@ -180,6 +183,23 @@ preferred local reference root `../../codex-agent` was unavailable for this
 slice, so the accepted parity reference remained the repository TypeScript/Bun
 adapter and contract sources.
 
+The TASK-007 Swift CLI parity slice adds additive `RielflowCLI` parsing and
+deterministic local behavior for `workflow validate`, `workflow inspect`, and
+`workflow run` mock execution. The Swift executable can validate and inspect
+workflow bundles through direct, project, and user resolution, apply
+`--node-patch` in memory, render parseable JSON failure envelopes when
+`--output json` is requested, and run local mock scenarios through the
+TASK-005 session/message publication boundary. Deterministic runs preserve
+output-contract retry attempts, branch-expression transitions such as
+`!(needs_revision)`, fail-closed handling for unsupported or multiple direct
+transitions, scoped workflow containment with symlink checks, and the
+TypeScript/Bun mock-scenario sequence formula based on execution index and
+validation attempt. The accepted focused implementation plan is archived at
+`impl-plans/completed/swift-native-migration-task-007-cli-parity.md`. The Swift
+CLI still does not replace release packaging, registry-backed run mutation,
+remote `--endpoint` execution, live gateways, live server loops, or live agent
+credential requirements.
+
 If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
 toolchain explicitly:
 
@@ -191,15 +211,19 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ```
 
 The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 149 tests for the current local-agent command-builder,
+`swift test` passed 188 tests for the current local-agent command-builder,
 bounded preflight, readiness, redaction, descriptor-isolation, official
 OpenAI/Anthropic SDK scaffold, TASK-005 in-memory runtime publication coverage,
-and TASK-006 package/add-on/event/hook/GraphQL/server contract coverage. The
-same accepted run also passed `bun run typecheck:server`, `bun run lint:biome`,
-and `bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project`.
+TASK-006 package/add-on/event/hook/GraphQL/server contract coverage, and
+TASK-007 Swift CLI validate/inspect/deterministic-run coverage. The same
+accepted run also passed focused Swift CLI and deterministic runner tests,
+Swift built-executable smoke checks for parseable JSON output, `git diff
+--check`, and `jq empty impl-plans/PROGRESS.json`; the TypeScript/Bun fallback
+validation from the implementation run remained
+`bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project`.
 Keep using the Bun commands in this README for the production runtime until
-Swift validation, inspect, deterministic run, package, event, GraphQL, hook,
-adapter, SQLite, and Homebrew parity gates pass.
+Swift package, event, GraphQL, hook, adapter, SQLite, release packaging, and
+Homebrew parity gates pass.
 
 ### Optional LLM Agent Setup
 

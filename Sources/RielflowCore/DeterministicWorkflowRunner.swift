@@ -1,0 +1,320 @@
+import Foundation
+
+public struct DeterministicWorkflowRunRequest: Sendable {
+  public var workflow: WorkflowDefinition
+  public var nodePayloads: [String: AgentNodePayload]
+  public var variables: JSONObject
+  public var maxSteps: Int?
+  public var maxConcurrency: Int?
+  public var maxLoopIterations: Int?
+  public var defaultTimeoutMs: Int?
+  public var timeoutMs: Int?
+
+  public init(
+    workflow: WorkflowDefinition,
+    nodePayloads: [String: AgentNodePayload] = [:],
+    variables: JSONObject = [:],
+    maxSteps: Int? = nil,
+    maxConcurrency: Int? = nil,
+    maxLoopIterations: Int? = nil,
+    defaultTimeoutMs: Int? = nil,
+    timeoutMs: Int? = nil
+  ) {
+    self.workflow = workflow
+    self.nodePayloads = nodePayloads
+    self.variables = variables
+    self.maxSteps = maxSteps
+    self.maxConcurrency = maxConcurrency
+    self.maxLoopIterations = maxLoopIterations
+    self.defaultTimeoutMs = defaultTimeoutMs
+    self.timeoutMs = timeoutMs
+  }
+}
+
+public struct WorkflowRunResult: Codable, Equatable, Sendable {
+  public var workflowId: String
+  public var session: WorkflowSession
+  public var rootOutput: JSONObject?
+  public var exitCode: Int32
+  public var status: WorkflowSessionStatus
+  public var nodeExecutions: Int
+  public var transitions: Int
+
+  public init(
+    workflowId: String,
+    session: WorkflowSession,
+    rootOutput: JSONObject?,
+    exitCode: Int32,
+    transitions: Int
+  ) {
+    self.workflowId = workflowId
+    self.session = session
+    self.rootOutput = rootOutput
+    self.exitCode = exitCode
+    self.status = session.status
+    self.nodeExecutions = session.executions.count
+    self.transitions = transitions
+  }
+}
+
+public protocol DeterministicWorkflowRunning: Sendable {
+  func run(_ request: DeterministicWorkflowRunRequest) async throws -> WorkflowRunResult
+}
+
+public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
+  public var store: any WorkflowRuntimeStore
+  public var adapter: any NodeAdapter
+  public var publisher: any WorkflowOutputPublishing
+  public var inputResolver: any WorkflowMessageInputResolving
+
+  public init(
+    store: (any WorkflowRuntimeStore)? = nil,
+    adapter: any NodeAdapter = DeterministicLocalNodeAdapter(),
+    publisher: (any WorkflowOutputPublishing)? = nil,
+    inputResolver: any WorkflowMessageInputResolving = DefaultWorkflowMessageInputResolver()
+  ) {
+    let resolvedStore = store ?? InMemoryWorkflowRuntimeStore()
+    self.store = resolvedStore
+    self.adapter = adapter
+    self.publisher = publisher ?? InMemoryWorkflowOutputPublisher(store: resolvedStore)
+    self.inputResolver = inputResolver
+  }
+
+  public func run(_ request: DeterministicWorkflowRunRequest) async throws -> WorkflowRunResult {
+    let diagnostics = DefaultWorkflowValidator().validate(request.workflow)
+    if let diagnostic = diagnostics.first(where: { $0.severity == .error }) {
+      throw DeterministicWorkflowRunnerError.invalidWorkflow("\(diagnostic.path): \(diagnostic.message)")
+    }
+
+    var session = try await store.createSession(
+      WorkflowSessionCreateInput(workflowId: request.workflow.workflowId, entryStepId: request.workflow.entryStepId)
+    )
+    var currentStepId: String? = request.workflow.entryStepId
+    var visitedSteps = 0
+    var publishedTransitions = 0
+    var rootOutput: JSONObject?
+    var executionCounts: [String: Int] = [:]
+    let maxLoopIterations = request.maxLoopIterations ?? request.workflow.defaults.maxLoopIterations
+    let maxSteps = request.maxSteps ?? max(1, request.workflow.steps.count + maxLoopIterations)
+
+    while let stepId = currentStepId {
+      visitedSteps += 1
+      if visitedSteps > maxSteps {
+        throw DeterministicWorkflowRunnerError.maxStepsExceeded(maxSteps)
+      }
+      guard let step = request.workflow.steps.first(where: { $0.id == stepId }) else {
+        throw DeterministicWorkflowRunnerError.missingStep(stepId)
+      }
+      guard let basePayload = request.nodePayloads[step.nodeId] else {
+        throw DeterministicWorkflowRunnerError.missingNodePayload(step.nodeId)
+      }
+      let executionIndex = (executionCounts[step.id] ?? 0) + 1
+      executionCounts[step.id] = executionIndex
+      var executionPayload = basePayload
+      executionPayload.id = step.id
+      let resolvedInput = try await inputResolver.resolveInput(for: session.sessionId, stepId: step.id, store: store)
+      let adapterInput = resolvedInput.applying(
+        to: AdapterExecutionInput(
+          node: executionPayload,
+          promptText: step.description ?? request.workflow.description,
+          systemPromptText: request.workflow.prompts?.workerSystemPromptTemplate,
+          arguments: request.variables,
+          mergedVariables: request.variables
+        )
+      )
+      let transitions = step.transitions ?? []
+      let publishResult = try await executeAndPublish(
+        adapterInput: adapterInput,
+        sessionId: session.sessionId,
+        step: step,
+        basePayload: basePayload,
+        transitions: transitions,
+        request: request,
+        executionIndex: executionIndex
+      )
+      session = publishResult.session
+      publishedTransitions += publishResult.publishedMessages.count
+      rootOutput = publishResult.rootOutput ?? rootOutput
+      currentStepId = publishResult.publishedMessages.first?.toStepId
+    }
+
+    guard let loadedSession = try await store.loadSession(id: session.sessionId) else {
+      throw WorkflowRuntimeStoreError.sessionNotFound(session.sessionId)
+    }
+    return WorkflowRunResult(
+      workflowId: request.workflow.workflowId,
+      session: loadedSession,
+      rootOutput: rootOutput,
+      exitCode: loadedSession.status == .completed ? 0 : 1,
+      transitions: publishedTransitions
+    )
+  }
+
+  private func workflowOutputContract(from output: NodeOutputContract?) -> WorkflowOutputContract? {
+    guard let output else {
+      return nil
+    }
+    return WorkflowOutputContract(schema: output.jsonSchema, requiredObject: true)
+  }
+
+  private func executeAndPublish(
+    adapterInput: AdapterExecutionInput,
+    sessionId: String,
+    step: WorkflowStepRef,
+    basePayload: AgentNodePayload,
+    transitions: [WorkflowStepTransition],
+    request: DeterministicWorkflowRunRequest,
+    executionIndex: Int
+  ) async throws -> WorkflowPublicationResult {
+    let maxAttempts = maxValidationAttempts(from: basePayload.output)
+    var lastValidationError: Error?
+    for attempt in 1...maxAttempts {
+      var attemptInput = adapterInput
+      attemptInput.executionIndex = executionIndex
+      attemptInput.output = basePayload.output == nil
+        ? nil
+        : AdapterOutputAttemptContext(maxValidationAttempts: maxAttempts, attempt: attempt)
+      let adapterOutput: AdapterExecutionOutput
+      do {
+        adapterOutput = try await adapter.execute(attemptInput, context: AdapterExecutionContext(deadline: deadline(for: step, request: request)))
+      } catch let adapterFailure as AdapterExecutionError {
+        _ = try? await publisher.publishAcceptedOutput(
+          WorkflowPublicationRequest(
+            sessionId: sessionId,
+            stepId: step.id,
+            nodeId: step.nodeId,
+            attempt: attempt,
+            backend: basePayload.executionBackend,
+            adapterFailure: adapterFailure,
+            transitions: transitions,
+            publishesRootOutput: transitions.isEmpty
+          )
+        )
+        throw adapterFailure
+      } catch {
+        let adapterFailure = AdapterExecutionError(.providerError, String(describing: error))
+        _ = try? await publisher.publishAcceptedOutput(
+          WorkflowPublicationRequest(
+            sessionId: sessionId,
+            stepId: step.id,
+            nodeId: step.nodeId,
+            attempt: attempt,
+            backend: basePayload.executionBackend,
+            adapterFailure: adapterFailure,
+            transitions: transitions,
+            publishesRootOutput: transitions.isEmpty
+          )
+        )
+        throw error
+      }
+      let candidate: RuntimeOutputCandidate
+      do {
+        candidate = try normalizeRuntimeAdapterOutput(adapterOutput)
+      } catch let adapterFailure as AdapterExecutionError {
+        _ = try? await publisher.publishAcceptedOutput(
+          WorkflowPublicationRequest(
+            sessionId: sessionId,
+            stepId: step.id,
+            nodeId: step.nodeId,
+            attempt: attempt,
+            backend: basePayload.executionBackend,
+            adapterFailure: adapterFailure,
+            transitions: transitions,
+            publishesRootOutput: transitions.isEmpty
+          )
+        )
+        throw adapterFailure
+      }
+      if let adapterFailure = multiplePublishableTransitionFailure(transitions: transitions, candidate: candidate) {
+        _ = try? await publisher.publishAcceptedOutput(
+          WorkflowPublicationRequest(
+            sessionId: sessionId,
+            stepId: step.id,
+            nodeId: step.nodeId,
+            attempt: attempt,
+            backend: basePayload.executionBackend,
+            adapterFailure: adapterFailure,
+            transitions: transitions,
+            publishesRootOutput: transitions.isEmpty
+          )
+        )
+        throw adapterFailure
+      }
+      do {
+        return try await publisher.publishAcceptedOutput(
+          WorkflowPublicationRequest(
+            sessionId: sessionId,
+            stepId: step.id,
+            nodeId: step.nodeId,
+            attempt: attempt,
+            backend: basePayload.executionBackend,
+            adapterOutput: adapterOutput,
+            outputContract: workflowOutputContract(from: basePayload.output),
+            transitions: transitions,
+            publishesRootOutput: transitions.isEmpty
+          )
+        )
+      } catch let error as WorkflowPublicationError {
+        guard case .validationRejected = error, attempt < maxAttempts else {
+          throw error
+        }
+        lastValidationError = error
+      }
+    }
+    throw lastValidationError ?? WorkflowPublicationError.validationRejected("output validation rejected candidate")
+  }
+
+  private func maxValidationAttempts(from output: NodeOutputContract?) -> Int {
+    max(1, output?.maxValidationAttempts ?? 1)
+  }
+
+  private func multiplePublishableTransitionFailure(
+    transitions: [WorkflowStepTransition],
+    candidate: RuntimeOutputCandidate
+  ) -> AdapterExecutionError? {
+    let evaluator = WorkflowBranchEvaluator()
+    let publishableCount = transitions.filter { transition in
+      evaluator.evaluate(label: transition.label, when: candidate.when, payload: candidate.payload)
+    }.count
+    guard publishableCount > 1 else {
+      return nil
+    }
+    return AdapterExecutionError(
+      .invalidOutput,
+      "multiple direct transitions are not supported by the Swift TASK-007 sequential runner"
+    )
+  }
+
+  private func deadline(for step: WorkflowStepRef, request: DeterministicWorkflowRunRequest) -> Date? {
+    let timeoutMs = request.timeoutMs ?? step.timeoutMs ?? request.defaultTimeoutMs ?? request.workflow.defaults.nodeTimeoutMs
+    guard timeoutMs > 0 else {
+      return nil
+    }
+    return Date(timeIntervalSinceNow: Double(timeoutMs) / 1000)
+  }
+}
+
+public enum DeterministicWorkflowRunnerError: Error, Equatable, Sendable {
+  case invalidWorkflow(String)
+  case missingStep(String)
+  case missingNodePayload(String)
+  case maxStepsExceeded(Int)
+}
+
+public struct DeterministicLocalNodeAdapter: NodeAdapter {
+  public init() {}
+
+  public func execute(_ input: AdapterExecutionInput, context: AdapterExecutionContext) async throws -> AdapterExecutionOutput {
+    AdapterExecutionOutput(
+      provider: "deterministic-local",
+      model: input.node.model,
+      promptText: input.promptText,
+      completionPassed: true,
+      payload: [
+        "nodeId": .string(input.node.id),
+        "provider": .string("deterministic-local"),
+        "status": .string("completed"),
+      ]
+    )
+  }
+}

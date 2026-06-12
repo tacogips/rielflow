@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-12T12:50:51+09:00",
+  "lastUpdated": "2026-06-12T16:40:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -581,6 +581,9 @@
       "status": "COMPLETED"
     },
     "197": {
+      "status": "COMPLETED"
+    },
+    "198": {
       "status": "COMPLETED"
     }
   },
@@ -7581,10 +7584,10 @@
       "path": "impl-plans/active/swift-native-migration.md",
       "designReference": "design-docs/specs/design-swift-native-migration.md; design-docs/specs/architecture.md; design-docs/user-qa/qa-swift-native-migration.md",
       "workflowMode": "issue-resolution",
-      "issueReference": "Port Swift package add-on event hook GraphQL and server contracts; workflowInput.requestedBehavior TASK-006; no matching GitHub issue URL or number supplied",
+      "issueReference": "Implement Swift CLI parity commands for workflow validate inspect and deterministic mock run; workflowInput.requestedBehavior TASK-007; no matching GitHub issue URL or number supplied",
       "workflowId": "codex-design-and-implement-review-loop",
       "lastPlanningNode": "step4-impl-plan-create",
-      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; use TypeScript adapter/runtime references and pinned package metadata until Swift references are supplied. TASK-004 local-agent and official OpenAI/Anthropic SDK parity are complete; TASK-005 runtime publication is complete; TASK-006 is split to impl-plans/completed/swift-native-migration-task-006-contracts.md for package manifest, add-on execution, event dry-run, hook, GraphQL, and server contract surfaces; official/cursor-sdk remains explicitly deferred unless separately scoped.",
+      "codexAgentReference": "codex-agent preferred local root ../../codex-agent unavailable; observed adjacent ../codex-agent reference is deterministic mock-session pattern only. Use TypeScript CLI/runtime references for Rielflow parity. TASK-004 adapter/readiness parity, TASK-005 runtime publication, and TASK-006 package/event/hook/GraphQL/server contracts are complete; TASK-007 is split to impl-plans/completed/swift-native-migration-task-007-cli-parity.md for additive Swift validate, inspect, and deterministic local run parity; official/cursor-sdk remains explicitly deferred unless separately scoped.",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
@@ -7631,7 +7634,7 @@
           ]
         },
         "TASK-007": {
-          "status": "Not Started",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "TASK-004",
@@ -7755,7 +7758,11 @@
         "rg -n \"ContinueSessionInput|continueSession\\(input: ContinueSessionInput!\\)|continueSession\\(workflowId: String!, sessionId: String!\\)\" Sources/RielflowGraphQL/GraphQLContracts.swift Tests/RielflowGraphQLTests/GraphQLContractsTests.swift",
         "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter GraphQLContractsTests",
         "rg -n \"testAllowedBuiltinNamesDoNotAuthorizePackageAddons|testManifestValidationRejectsWindowsAbsoluteDirectories|isWindowsAbsolutePath|source.builtin && request.allowedBuiltins\" Sources/RielflowAddons Tests/RielflowAddonsTests",
-        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter AddonExecutionContractsTests"
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter AddonExecutionContractsTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter DeterministicWorkflowRunnerTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RielflowCLITests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --variables \"{\"unterminated\": true\" --output json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow validate worker-only-single-step --workflow-definition-dir ./examples --endpoint http://localhost:4000/graphql"
       ],
       "residualRisks": [
         "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select points at a Nix Apple SDK path.",
@@ -7768,7 +7775,10 @@
         "High-risk runtime publication boundary still requires adversarial implementation review before any Swift runtime cutover.",
         "TASK-005 remains deterministic in-memory Swift runtime behavior; SQLite-backed Swift persistence remains deferred.",
         "TASK-005 message input resolution and root-output publication are deterministic in-memory APIs; SQLite-backed Swift persistence remains deferred.",
-        "TASK-005 lifecycle filtering is deterministic in-memory behavior; SQLite-backed Swift message persistence and status transitions remain deferred."
+        "TASK-005 lifecycle filtering is deterministic in-memory behavior; SQLite-backed Swift message persistence and status transitions remain deferred.",
+        "TASK-007 is additive deterministic local CLI parity only; TypeScript/Bun remains the production fallback until later cutover gates pass.",
+        "Swift CLI deterministic run must use TASK-005 runtime-owned publication APIs and must not allocate communication ids in CLI code.",
+        "Preferred local codex-agent root ../../codex-agent remains unavailable; ../codex-agent is reference-only for deterministic mock-runner testing principles."
       ],
       "addressedReviewFindings": [
         {
@@ -8402,6 +8412,118 @@
           "file": "Sources/RielflowAddons/AddonExecutionContracts.swift; Sources/RielflowAddons/WorkflowPackageManifest.swift; Tests/RielflowAddonsTests/AddonExecutionContractsTests.swift; Tests/RielflowAddonsTests/WorkflowPackageManifestTests.swift",
           "finding": "Step 7 adversarial review found allowedBuiltins could authorize untrusted package add-ons with built-in names and normalizePackageRelativePath did not reject Windows absolute paths.",
           "resolution": "Required trusted source.builtin metadata together with allowedBuiltins for built-in resolution, rejected Windows absolute paths in general package-relative path normalization, and added focused regressions. Xcode Swift 6.3.2 swift test passed 149 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000012",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found deterministic run adapter/scenario failures bypassed TASK-005 failed-step publication and accepted run options were not implemented or rejected.",
+          "resolution": "Published deterministic failures via TASK-005 runtime publication, wired loop/timeout bounds, rejected unsupported persistence/concurrency options with usage exit behavior, and added core plus CLI regression tests. Full Xcode Swift 6.3.2 swift test passed 163 tests; Swift validate/inspect/run smokes, unsupported run-option usage smoke, Bun typecheck/lint, and TypeScript fallback validation passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000016",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/RielflowCommand.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/CommandParsingTests.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found TASK-007 CLI parity gaps for validate/inspect remote flag rejection and parseable JSON run failure output.",
+          "resolution": "Rejected unsupported remote flags for validate/inspect, added structured JSON run failure envelopes, and covered both with focused Swift CLI regressions. Xcode Swift 6.3.2 focused RielflowCLITests passed 10 tests; full swift test passed 166 tests; Swift success/failure smokes, Bun typecheck/lint, and TypeScript fallback validation passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000020",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found TASK-007 deterministic output-contract retry parity missing for maxValidationAttempts and scenario response sequences.",
+          "resolution": "Added deterministic retry attempts through TASK-005 publication with real attempt numbers and no rejected-attempt messages, plus Swift regression coverage. Full swift test passed 167 tests and TypeScript/Bun fallback checks passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000025",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift",
+          "finding": "Step 7 adversarial review found TASK-007 sequential run truncated multiple publishable direct transitions to the first downstream step.",
+          "resolution": "Added fail-closed multiple-direct-transition handling with failed TASK-005 execution recording and no downstream messages, plus Swift regression coverage. Full swift test passed 168 tests and TypeScript/Bun fallback checks passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000029",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift",
+          "finding": "Step 7 review found multiple-transition fail-closed logic checked AdapterExecutionOutput.when before output-contract envelope normalization, allowing envelope when labels to publish multiple direct messages while executing only the first.",
+          "resolution": "The TASK-007 sequential runner now normalizes adapter output to RuntimeOutputCandidate before counting publishable transitions and fails closed on normalized multi-transition candidates. Added envelope-override regression coverage. Focused DeterministicWorkflowRunnerTests passed 9 tests; full swift test passed 169 tests; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000033",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found workflow validate --output json returned resolver and validation failures only on stderr, leaving stdout non-JSON for machine clients.",
+          "resolution": "WorkflowValidateCommand now emits WorkflowValidationFailureResult JSON envelopes for load, invalid workflow, malformed node-patch, and preflight failures when JSON output is requested. Added Swift CLI regressions for missing workflow, invalid workflow diagnostics, and malformed node-patch failures. Focused RielflowCLITests passed 14 tests; full swift test passed 172 tests; missing-workflow JSON smoke parsed with jq; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000038",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 adversarial review found workflow inspect --output json still returned empty stdout with plain stderr on resolver or validation failure.",
+          "resolution": "WorkflowInspectCommand now emits WorkflowInspectionFailureResult JSON envelopes for inspect failures when JSON output is requested, including diagnostics for invalidWorkflow. Added Swift CLI regressions for missing workflow and invalid workflow diagnostics. Focused RielflowCLITests passed 16 tests; full swift test passed 174 tests; missing-workflow inspect JSON smoke parsed with jq; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000043",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 adversarial review found parser-stage workflow usage failures bypassed JSON failure rendering even when raw arguments requested --output json.",
+          "resolution": "RielflowCLIApplication now detects workflow --output json in raw arguments and emits command-specific JSON failure envelopes for validate, inspect, and run parser CLIUsageError cases while preserving usage exit code 2 and empty stderr. Added Swift CLI regressions for unsupported run endpoint, validate unknown option, and inspect missing option value parser failures. Focused RielflowCLITests passed 19 tests; full swift test passed 177 tests; built-executable parser JSON smokes passed with empty stderr; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000047",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/WorkflowModel.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found Swift workflow inspect returned null callable data for codex-design-and-implement-review-loop because node input contracts and description-only output contracts were not preserved.",
+          "resolution": "Swift AgentNodePayload now decodes node input contracts, and WorkflowInspectCommand now always derives callable stepId, role, input, and output from the manager or entry step payload. Added Swift CLI regression coverage and verified project inspect callable JSON with jq. Focused RielflowCLITests passed 20 tests; full swift test passed 178 tests; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000052",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/RielflowCommand.swift; Sources/RielflowCLI/WorkflowResolution.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 adversarial review found scoped workflow resolution allowed path traversal outside project/user workflow roots and executable validation marked addon-only nodes runnable although deterministic run fails without a payload.",
+          "resolution": "Scoped workflow parsing and resolver containment now reject unsafe scoped names using the TypeScript/Bun safe workflow token rule before catalog reads. Deterministic executable preflight now reports addon-only nodes unsupported unless a payload exists. Added Swift CLI regressions for validate/inspect/run unsafe scoped names and addon-only validate/run consistency. Focused RielflowCLITests passed 22 tests; full swift test passed 180 tests; built-executable traversal/addon smokes passed with parseable JSON and empty stderr; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000056",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowResolution.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found scoped project/user workflow containment used standardized paths without resolving symlinks, allowing safe-name symlinks to escape .rielflow/workflows.",
+          "resolution": "FileSystemWorkflowBundleResolver now resolves symlinks for candidate and root directories before containment checks and reads workflow/node files only from contained resolved directories. Added Swift CLI regressions for validate/inspect/run symlink escapes. Focused RielflowCLITests passed 23 tests; full swift test passed 181 tests; built-executable symlink smokes passed; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000060",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowResolution.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found scoped workflow resolution still followed symlinked workflow.json and node payload files outside the project/user workflow root before validation or execution.",
+          "resolution": "FileSystemWorkflowBundleResolver now resolves workflow.json and every nodeFile payload target before Data(contentsOf:) and rejects resolved file targets outside the resolved scoped workflow directory for project/user scopes. Added Swift CLI regressions for symlinked workflow.json and node payload files across validate, inspect, and run. Focused RielflowCLITests passed 25 tests; full swift test passed 183 tests; built-executable symlink file smokes passed; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000065",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/WorkflowBranchEvaluation.swift; Sources/RielflowCore/RuntimePublication.swift; Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift; Tests/RielflowCoreTests/WorkflowBranchEvaluationTests.swift",
+          "finding": "Step 7 adversarial review found Swift deterministic run did not evaluate existing transition label expressions such as !(needs_revision), causing mock runs to strand after successful branch steps.",
+          "resolution": "Added a shared Swift WorkflowBranchEvaluator for bare labels, negation, parentheses, &&, ||, always/never, and payload fallback. RuntimePublication and DeterministicWorkflowRunner multiple-transition safety now use the same evaluator. Added deterministic runner and evaluator regressions plus a built-executable negated-transition smoke. Focused core tests passed 13 tests; full swift test passed 187 tests; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000070",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/AdapterContracts.swift; Sources/RielflowCore/DeterministicWorkflowRunner.swift; Sources/RielflowAdapters/ScenarioNodeAdapter.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 adversarial review found Swift ScenarioNodeAdapter advanced mock scenario sequences by simple per-step call count instead of the TypeScript executionIndex, maxValidationAttempts, and attempt formula, so repeated steps with validation retry budgets could consume unused retry slots.",
+          "resolution": "AdapterExecutionInput now carries executionIndex and output attempt context. DeterministicWorkflowRunner populates executionIndex per step execution and maxValidationAttempts/attempt per adapter call. ScenarioNodeAdapter computes sequence index with the TypeScript formula, and Swift regression coverage proves a repeated step skips an unused retry slot. Focused RielflowCLITests plus deterministic runner and branch tests passed 39 tests; full swift test passed 188 tests; built-executable retry-slot smoke passed; git diff --check and jq empty impl-plans/PROGRESS.json passed."
         }
       ]
     },
@@ -8845,6 +8967,220 @@
           "communication": "comm-000081",
           "finding": "Step 7 adversarial review found allowedBuiltins could authorize untrusted package add-ons with built-in names and normalizePackageRelativePath did not reject Windows absolute paths.",
           "resolution": "Required trusted source.builtin metadata together with allowedBuiltins for built-in resolution, rejected Windows absolute paths in general package-relative path normalization, and added focused regressions."
+        }
+      ],
+      "completedAt": "2026-06-12"
+    },
+    "completed/swift-native-migration-task-007-cli-parity": {
+      "phase": 198,
+      "status": "Completed",
+      "path": "impl-plans/completed/swift-native-migration-task-007-cli-parity.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md#task-007-swift-cli-validate-inspect-and-deterministic-run-parity; design-docs/specs/command.md#swift-native-migration-cli-parity",
+      "workflowMode": "issue-resolution",
+      "issueReference": "Implement Swift CLI parity commands for workflow validate inspect and deterministic mock run; workflowInput.requestedBehavior TASK-007; no matching GitHub issue URL or number supplied",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastPlanningNode": "step4-impl-plan-create",
+      "codexAgentReference": "Preferred ../../codex-agent root unavailable; adjacent ../codex-agent/dist/sdk/mock-session-runner.d.ts is reference-only for deterministic synthetic sessions, recorded calls, injected options, explicit completion, and no live Codex process. Rielflow TypeScript references remain packages/rielflow/src/cli/argument-parser.ts, workflow-command-handler.ts, workflow-run-command.ts, workflow/scenario-adapter.ts, workflow/engine/workflow-runner.ts, and workflow/engine/step-result-finalization.ts.",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-005"
+          ]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-003",
+            "TASK-004",
+            "TASK-006"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "git status --short --branch",
+        "git diff --check",
+        "jq empty impl-plans/PROGRESS.json",
+        "bun run typecheck:server",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RielflowCLITests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow validate codex-design-and-implement-review-loop --scope project --output json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow inspect codex-design-and-implement-review-loop --scope project --output json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --mock-scenario ./examples/worker-only-single-step/mock-scenario.json --output json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow run ./examples/temporary-workflow/temp-workflow.json --mock-scenario ./examples/worker-only-single-step/mock-scenario.json --output json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter DeterministicWorkflowRunnerTests",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow run worker-only-single-step --workflow-definition-dir ./examples --variables \"{\"unterminated\": true\" --output json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow validate worker-only-single-step --workflow-definition-dir ./examples --endpoint http://localhost:4000/graphql"
+      ],
+      "dependencies": [
+        "active/swift-native-migration:TASK-004",
+        "active/swift-native-migration:TASK-005",
+        "active/swift-native-migration:TASK-006",
+        "impl-plans/completed/swift-native-migration-task-005-runtime-session.md",
+        "impl-plans/completed/swift-native-migration-task-006-contracts.md"
+      ],
+      "parallelizableTasks": [
+        "TASK-001 and TASK-005 may run in parallel because CLI parser/test-target files and Core/Adapter deterministic runner files are disjoint.",
+        "TASK-003 and TASK-004 may run in parallel only after TASK-002 is accepted and write scopes remain validate-command versus inspect-command/rendering files."
+      ],
+      "residualRisks": [
+        "Default swift lookup still requires DEVELOPER_DIR and SDKROOT override because xcode-select can point at a Nix Apple SDK path.",
+        "Swift TASK-007 is deterministic local CLI parity only; release cutover, remote endpoint execution, registry-backed run mutation, live gateways, and live agent credentials remain out of scope.",
+        "Preferred ../../codex-agent root remains unavailable; adjacent ../codex-agent is reference-only and not an implementation source.",
+        "CLI implementation must preserve runtime-owned communication id allocation and output publication from TASK-005."
+      ],
+      "addressedFeedback": [
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000012",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found deterministic run adapter/scenario failures bypassed TASK-005 failed-step publication and Swift run options were silently ignored.",
+          "resolution": "Adapter and non-adapter execution failures now publish failed executions through WorkflowPublicationRequest(adapterFailure:) before throwing. maxLoopIterations now bounds deterministic runs, timeoutMs/defaultTimeoutMs propagate to adapter deadlines, and unsupported artifactRoot/sessionStore/maxConcurrency options return CLI usage errors with focused Swift regressions. Full Xcode Swift 6.3.2 swift test passed 163 tests; Swift validate/inspect/run smokes, unsupported run-option usage smoke, Bun typecheck/lint, and TypeScript fallback validation passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000016",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/RielflowCommand.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/CommandParsingTests.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found validate/inspect accepted endpoint/from-registry without rejecting unsupported remote resolution, and workflow run --output json failures returned empty stdout.",
+          "resolution": "Validate and inspect now reject endpoint/from-registry with CLIUsageError usage behavior. workflow run --output json now returns a parseable WorkflowRunFailureResult envelope for usage, load, validation, and execution failures. Added parser, usage-exit, and invalid-variables JSON failure regressions. Xcode Swift 6.3.2 focused RielflowCLITests passed 10 tests; full swift test passed 166 tests; Swift success/failure smokes, Bun typecheck/lint, and TypeScript fallback validation passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000020",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found deterministic run ignored NodeOutputContract.maxValidationAttempts, so scenario response sequences could not advance after output-contract rejection.",
+          "resolution": "DeterministicWorkflowRunner now retries adapter execution and TASK-005 publication for output validation rejection up to maxValidationAttempts, passes the real attempt number into WorkflowPublicationRequest, and preserves no downstream messages for rejected attempts. Added invalid-then-valid scenario sequence regression. Focused RielflowCLITests passed 11 tests; full swift test passed 167 tests; Swift validate/inspect/run smokes, Bun typecheck/lint, and TypeScript fallback validation passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000025",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift",
+          "finding": "Step 7 adversarial review found deterministic run published multiple direct transition messages but executed only the first, allowing misleading completion with unexecuted downstream work.",
+          "resolution": "The TASK-007 sequential deterministic runner now fails closed before accepted publication when more than one direct transition is publishable from one adapter output, records the failed execution through TASK-005 publication, and appends no downstream messages. Added a two-transition regression. Focused DeterministicWorkflowRunnerTests passed 8 tests; RielflowCLITests passed 11 tests; full swift test passed 168 tests; Swift validate/inspect/run smokes, Bun typecheck/lint, and TypeScript fallback validation passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000029",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift",
+          "finding": "Step 7 review found multiple-transition fail-closed logic checked AdapterExecutionOutput.when before output-contract envelope normalization, so envelope when labels could still append multiple direct messages while the sequential runner advanced only to the first.",
+          "resolution": "DeterministicWorkflowRunner now normalizes adapter output to RuntimeOutputCandidate before counting publishable transitions and fails closed using the same when map used by runtime publication. Added a regression where adapterOutput.when disables labeled transitions but the output-contract envelope enables two labels. Focused DeterministicWorkflowRunnerTests passed 9 tests; full swift test passed 169 tests; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000033",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found workflow validate --output json did not preserve machine-readable JSON stdout for resolver load errors, invalid workflow diagnostics, malformed node-patch JSON, or preflight errors.",
+          "resolution": "WorkflowValidateCommand now emits WorkflowValidationFailureResult JSON envelopes for validate failures when JSON output is selected, including invalid workflow diagnostics. Added regressions for missing workflow, invalid workflow diagnostics, and malformed node-patch JSON. Focused RielflowCLITests passed 14 tests; full swift test passed 172 tests; missing-workflow JSON smoke parsed with jq; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000038",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 adversarial review found workflow inspect --output json still returned empty stdout with plain stderr on resolver or validation failure, unlike validate/run JSON failure envelopes.",
+          "resolution": "WorkflowInspectCommand now emits WorkflowInspectionFailureResult JSON envelopes for inspect failures when JSON output is selected, including invalid workflow diagnostics. Added regressions for missing workflow and invalid workflow diagnostics. Focused RielflowCLITests passed 16 tests; full swift test passed 174 tests; missing-workflow inspect JSON smoke parsed with jq; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000043",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 adversarial review found RielflowCLIApplication caught parser CLIUsageError before command renderers could honor --output json, leaving parser-stage failures as stderr-only diagnostics.",
+          "resolution": "RielflowCLIApplication now renders parser-stage usage failures as WorkflowValidationFailureResult, WorkflowInspectionFailureResult, or WorkflowRunFailureResult JSON envelopes when workflow raw arguments include --output json. Added focused Swift CLI regressions for run endpoint rejection, validate unknown option, and inspect missing option value parser failures. Focused RielflowCLITests passed 19 tests; full swift test passed 177 tests; built-executable parser JSON smokes passed with empty stderr; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000047",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/WorkflowModel.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 review found Swift inspect did not preserve callable stepId, role, input, and output contracts from node payloads.",
+          "resolution": "Added NodeInputContract decoding, included input on AgentNodePayload, and changed WorkflowInspectionSummary.callable to derive manager/entry stepId, role, input, and output contracts without requiring jsonSchema. Added project workflow callable contract regression and jq smoke. Focused RielflowCLITests passed 20 tests; full swift test passed 178 tests; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000052",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/RielflowCommand.swift; Sources/RielflowCLI/WorkflowResolution.swift; Sources/RielflowCLI/WorkflowCommands.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Step 7 adversarial review found scoped project/user workflow names could traverse outside .rielflow/workflows and addon-only executable preflight falsely reported valid=true.",
+          "resolution": "Added scoped workflow name validation, standardized resolver candidate containment checks, addon-only executable preflight invalidation, and focused Swift CLI regressions for traversal/slash names plus addon-only validate/run parity. Focused RielflowCLITests passed 22 tests; full swift test passed 180 tests; built-executable traversal/addon smokes passed with parseable JSON and empty stderr; git diff --check and jq empty impl-plans/PROGRESS.json passed."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000056",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowResolution.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Scoped project/user workflow containment used standardized paths without resolving symlinks, so a safe-name symlink under .rielflow/workflows could resolve outside the scoped workflow root.",
+          "resolution": "Resolved root and candidate directories with resolvingSymlinksInPath before containment and before reading workflow.json/node files, rejected escaped resolved candidates, and added validate/inspect/run symlink escape regressions."
+        },
+        {
+          "nodeId": "step7-review",
+          "communication": "comm-000060",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCLI/WorkflowResolution.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Symlinked workflow.json and symlinked node payload files under a safe scoped workflow directory could resolve outside the scoped project/user workflow root and still be loaded.",
+          "resolution": "Resolved workflow.json and nodeFile payload URLs through symlinks before reading, containment-checked resolved file targets for project/user scopes, and added validate/inspect/run JSON failure regressions for both symlinked file escape cases."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000065",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/WorkflowBranchEvaluation.swift; Sources/RielflowCore/RuntimePublication.swift; Sources/RielflowCore/DeterministicWorkflowRunner.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift; Tests/RielflowCoreTests/WorkflowBranchEvaluationTests.swift",
+          "finding": "Swift transition publication and deterministic run safety used exact when[label] lookup instead of TypeScript branch expression semantics for labels like !(flag) and compound boolean expressions.",
+          "resolution": "Implemented shared branch expression evaluation and wired it into publication and deterministic runner fail-closed checks. Added tests for negated branch publication, expression precedence, payload fallback, and multiple expression transitions failing closed."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "communication": "comm-000070",
+          "severity": "mid-fixed",
+          "file": "Sources/RielflowCore/AdapterContracts.swift; Sources/RielflowCore/DeterministicWorkflowRunner.swift; Sources/RielflowAdapters/ScenarioNodeAdapter.swift; Tests/RielflowCLITests/WorkflowCommandTests.swift",
+          "finding": "Scenario response sequencing used per-step call count instead of TypeScript executionIndex/maxValidationAttempts/attempt sequence math, causing repeated steps with unused validation retry slots to select the wrong mock response.",
+          "resolution": "Added adapter executionIndex and output attempt context, populated them from DeterministicWorkflowRunner, updated ScenarioNodeAdapter to use the TypeScript sequence formula, and added a repeated-step regression that skips the unused retry slot."
         }
       ],
       "completedAt": "2026-06-12"

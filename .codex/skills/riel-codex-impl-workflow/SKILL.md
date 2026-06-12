@@ -233,6 +233,33 @@ SQLite/CLI/package/event/GraphQL/server/Homebrew cutover remains deferred, and
 the default `swift` lookup may still require the Xcode `DEVELOPER_DIR`/
 `SDKROOT` override.
 
+For the 2026-06-12 TASK-007 `swift-migration` run, Step 7 adversarial review
+accepted the Swift CLI validate, inspect, and deterministic mock-run parity
+slice after Xcode Swift 6.3.2 `swift test` passed 188 tests, focused Swift CLI
+and deterministic-runner tests passed, Swift built-executable JSON smoke tests
+passed, `git diff --check` passed, and `jq empty impl-plans/PROGRESS.json`
+passed. The accepted slice adds additive `RielflowCLI` parsing and behavior for
+`workflow validate`, `workflow inspect`, and deterministic local
+`workflow run` with direct/project/user workflow resolution, in-memory
+`--node-patch`, parseable JSON failure envelopes, TASK-005 runtime-owned
+publication, output-contract retry attempts, branch-expression transition
+evaluation, multiple-direct-transition fail-closed handling, scoped workflow
+containment with symlink checks, and TypeScript/Bun mock-scenario sequence
+parity based on execution index and validation attempt. The focused TASK-007
+implementation plan is archived at
+`impl-plans/completed/swift-native-migration-task-007-cli-parity.md`; the
+parent Swift migration plan remains active for TASK-002, TASK-003, TASK-008,
+and TASK-009. Keep the slice deterministic and local until later cutover gates:
+do not replace the
+TypeScript/Bun production CLI, mutate package checkout or registry state, run
+remote `--endpoint` workflows, start live gateways or servers, require live
+agent credentials, allocate communication ids in CLI code, or move
+Cursor-specific behavior into shared CLI or `RielflowCore` concepts. Residual
+low risks remain: TASK-002 and TASK-003 remain in progress, release/Homebrew
+cutover remains deferred to TASK-008, direct `--workflow-definition-dir` runs
+remain caller-trusted local input, and default `swift` lookup may still require
+the Xcode `DEVELOPER_DIR`/`SDKROOT` override.
+
 Telemetry-related issue-resolution runs should keep user-facing documentation
 aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via
 an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; workflow message payloads
