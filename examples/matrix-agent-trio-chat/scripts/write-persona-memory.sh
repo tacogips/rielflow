@@ -1,24 +1,17 @@
 #!/usr/bin/env sh
 set -eu
 
-node <<'NODE'
+resolved_input_json=$(cat)
+node - "$resolved_input_json" <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 
-function readJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
-}
-
 function readResolvedInput() {
-  const filePath = process.env.RIEL_RESOLVED_INPUT_PATH;
-  if (typeof filePath === "string" && filePath.length > 0) {
-    return readJson(filePath);
-  }
-  const stdin = fs.readFileSync(0, "utf8").trim();
+  const stdin = process.argv[2] || "";
   if (stdin.length > 0) {
     return JSON.parse(stdin);
   }
-  throw new Error("RIEL_RESOLVED_INPUT_PATH or stdin resolved input JSON is required");
+  throw new Error("stdin resolved input JSON is required");
 }
 
 function isObject(value) {
@@ -143,5 +136,5 @@ const output = {
   },
 };
 
-process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+process.stdout.write(`${JSON.stringify(output)}\n`);
 NODE

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-12T21:20:00+09:00",
+  "lastUpdated": "2026-06-13T00:00:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -585,6 +585,9 @@
     },
     "198": {
       "status": "COMPLETED"
+    },
+    "199": {
+      "status": "IN_PROGRESS"
     }
   },
   "plans": {
@@ -1330,7 +1333,29 @@
             "TASK-005"
           ]
         }
-      }
+      },
+      "verificationCommands": [
+        "bun test packages/rielflow/src/workflow/engine.test.ts --test-name-pattern \"external mailbox|plain-text human input|sqlite upstream payload\"",
+        "bun test",
+        "bun run typecheck",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "rg -n \"RIEL_RESOLVED_INPUT_PATH|RIEL_MAILBOX_DIR|RIELFLOW_WORKFLOW_INPUT|RIELFLOW_WORKFLOW_OUTPUT|inbox/input\\.json|outbox/output\\.json|external-mailbox/input/output\\.json|communication-artifact-persistence\\.ts\" packages/rielflow/src packages/rielflow-addons/src README.md design-docs impl-plans -S",
+        "jq empty impl-plans/PROGRESS.json",
+        "git diff --check",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowStdioNodeExecutorTests",
+        "bun run packages/rielflow/src/bin.ts workflow run sqlite-input-smoke --workflow-definition-dir /tmp/rielflow-sqlite-input-smoke.* --variables '{\"humanInput\":{\"request\":\"sqlite only\"}}' --output json",
+        "find /tmp/rielflow-artifact-dev/workflow/sqlite-input-smoke/executions/<session> -path \"*external-mailbox/input/output.json\" -type f"
+      ],
+      "addressedFeedback": [
+        {
+          "nodeId": "manual-review",
+          "severity": "self-review-fixed",
+          "file": "packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts; packages/rielflow/src/workflow/communication-artifact-persistence.ts; packages/rielflow/src/workflow/engine.test.ts",
+          "finding": "External workflow input still materialized an execution-scoped external-mailbox/input/output.json mirror and an unused legacy communication artifact writer remained in source.",
+          "resolution": "Removed the external input output.json mirror, deleted the unused communication-artifact-persistence.ts writer, and updated regressions to assert SQLite workflow_messages.payload_json is authoritative."
+        }
+      ]
     },
     "active/schedule-registration-policy-surface-cleanup": {
       "phase": 176,
@@ -4865,6 +4890,60 @@
           "deps": [
             "TASK-001",
             "TASK-002"
+          ]
+        }
+      }
+    },
+    "swift-native-bundle-addons": {
+      "phase": 199,
+      "status": "In Progress",
+      "path": "impl-plans/swift-native-bundle-addons.md",
+      "designReference": "https://github.com/tacogips/rielflow/issues/55",
+      "tasks": {
+        "TASK-001": {
+          "status": "IN_PROGRESS",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "IN_PROGRESS",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "IN_PROGRESS",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "IN_PROGRESS",
+          "parallelizable": false,
+          "deps": [
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "IN_PROGRESS",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-003"
+          ]
+        },
+        "TASK-006": {
+          "status": "NOT_STARTED",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005"
           ]
         }
       }
@@ -9831,6 +9910,139 @@
           "file": "scripts/build-swift-homebrew-readiness.sh; Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift; impl-plans/completed/swift-native-migration.md; impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md; impl-plans/PROGRESS.json",
           "finding": "Generated Swift readiness .sha256 sidecars recorded absolute host archive paths, leaking machine-local paths and making checksum verification nonportable after relocation.",
           "resolution": "Changed checksum generation to run from the archive directory with the archive basename for shasum and sha256sum, added deterministic Swift coverage, and added shell verification from dist/swift-homebrew plus host-path rejection checks."
+        }
+      ]
+    },
+    "swift-stdio-node-io": {
+      "phase": 200,
+      "status": "Completed",
+      "path": "impl-plans/swift-stdio-node-io.md",
+      "designReference": "design-docs/specs/design-swift-stdio-node-io.md",
+      "workflowMode": "manual-continuation",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastPlanningNode": "manual design-plan-impl-review continuation after prior workflow stall",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'WorkflowStdioNodeExecutorTests|DeterministicWorkflowRunnerTests|AgentAdapterTests/testFoundationRunnerUnsetsAmbientEnvironmentKeys'",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow run stdio-smoke --workflow-definition-dir /tmp/rielflow-stdio-node-smoke.* --variables '{\"name\":\"rielflow\"}' --output json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift run rielflow workflow run stdio-invalid --workflow-definition-dir /tmp/rielflow-stdio-node-invalid.* --output json; test $? -ne 0",
+        "jq empty impl-plans/PROGRESS.json",
+        "git diff --check"
+      ],
+      "dependencies": [
+        "design-docs/specs/design-container-runtime-contract.md",
+        "impl-plans/completed/sqlite-only-node-io-mailbox-removal.md"
+      ],
+      "residualRisks": [
+        "Container execution is verified with deterministic fake runner argument coverage; live docker/podman availability remains environment-dependent.",
+        "Container stdin delivery is verified through deterministic runner argument coverage and a command-node CLI smoke; live docker/podman execution remains environment-dependent.",
+        "Default swift lookup may still require explicit DEVELOPER_DIR and SDKROOT override."
+      ],
+      "addressedFeedback": [
+        {
+          "nodeId": "manual-review",
+          "severity": "self-review-fixed",
+          "file": "Sources/RielflowCore/RuntimeStore.swift; Sources/RielflowCore/RuntimePublication.swift; Tests/RielflowCoreTests/DeterministicWorkflowRunnerTests.swift",
+          "finding": "Initial no-output completion recorded the step as completed but left a root workflow session running.",
+          "resolution": "Added explicit root no-output completion handling and regression coverage for command nodes with empty output."
+        }
+      ]
+    },
+    "native-stdio-node-io": {
+      "phase": 201,
+      "status": "Completed",
+      "path": "impl-plans/native-stdio-node-io.md",
+      "designReference": "design-docs/specs/design-native-stdio-node-io.md",
+      "workflowMode": "manual-continuation",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastPlanningNode": "manual design-plan-impl-review continuation after prior workflow stall",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "bun test packages/rielflow/src/events/chat-agent-trio-parity-example.test.ts packages/rielflow/src/workflow/examples-script-contract.test.ts packages/rielflow/src/workflow/native-node-executor-addons-commands.test.ts",
+        "bun test",
+        "bun run typecheck",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "bun run packages/rielflow/src/bin.ts workflow run native-stdio-smoke --workflow-definition-dir /tmp/rielflow-native-stdio-smoke.* --variables '{\"name\":\"rielflow\"}' --output json",
+        "rg -n \"RIEL_RESOLVED_INPUT_PATH|/rielflow-input|resolved-input/native-request\\.json|native-request\" packages/rielflow-addons/src/native-node-executor packages/rielflow/src/workflow examples README.md design-docs impl-plans -S",
+        "jq empty impl-plans/PROGRESS.json",
+        "git diff --check"
+      ],
+      "dependencies": [
+        "design-docs/specs/design-native-stdio-node-io.md",
+        "design-docs/specs/design-node-execution-inbox-contract.md",
+        "design-docs/specs/design-container-runtime-contract.md",
+        "impl-plans/swift-stdio-node-io.md"
+      ],
+      "residualRisks": [
+        "Container execution is verified with deterministic fake runner argument coverage; live docker/podman availability remains environment-dependent.",
+        "The executor uses internal runtime-owned temporary files to connect stdin/stdout/stderr safely, but those paths are not exposed to workers as environment variables, arguments, or container mounts."
+      ],
+      "addressedFeedback": [
+        {
+          "nodeId": "manual-review",
+          "severity": "self-review-fixed",
+          "file": "packages/rielflow-addons/src/native-node-executor/template-env-and-containers.ts; packages/rielflow/src/workflow/native-node-executor-addons-commands.test.ts",
+          "finding": "The TypeScript native executor still exposed resolved input through RIEL_RESOLVED_INPUT_PATH and a /rielflow-input container request-file mount.",
+          "resolution": "Removed worker-visible env/file handoff, stripped reserved legacy env names, delivered resolved input through stdin JSONL, and added command/container regression coverage."
+        },
+        {
+          "nodeId": "manual-review",
+          "severity": "self-review-fixed",
+          "file": "examples/telegram-agent-trio-time-signal/scripts/prepare-time-signal.ts; examples/*/scripts/*.sh",
+          "finding": "Strict stdout JSONL validation exposed example command scripts that still wrote pretty-printed multi-line JSON.",
+          "resolution": "Updated affected example command scripts to emit exactly one stdout JSONL object and verified chat-agent trio parity plus full Bun tests."
         }
       ]
     }

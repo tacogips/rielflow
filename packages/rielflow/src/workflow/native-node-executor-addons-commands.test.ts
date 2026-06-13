@@ -157,11 +157,14 @@ function makeExecutionMailbox() {
 }
 
 describe("executeNativeNode", () => {
-  test("preserves explicitly rendered container env names", () => {
+  test("strips reserved worker file env names from explicit container env", () => {
     const env = buildContainerEnv({
       renderedEnv: {
         EXPLICIT_ENV: "mapped",
         RIEL_MAILBOX_DIR: "/mailbox",
+        RIEL_RESOLVED_INPUT_PATH: "/input.json",
+        RIELFLOW_WORKFLOW_INPUT: "/legacy-input.json",
+        RIELFLOW_WORKFLOW_OUTPUT: "/legacy-output.json",
       },
       workflowId: "wf",
       workflowExecutionId: "sess-1",
@@ -175,8 +178,11 @@ describe("executeNativeNode", () => {
       RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
       RIEL_NODE_ID: "node-1",
       RIEL_NODE_EXEC_ID: "exec-1",
-      RIEL_MAILBOX_DIR: "/mailbox",
     });
+    expect(env).not.toHaveProperty("RIEL_MAILBOX_DIR");
+    expect(env).not.toHaveProperty("RIEL_RESOLVED_INPUT_PATH");
+    expect(env).not.toHaveProperty("RIELFLOW_WORKFLOW_INPUT");
+    expect(env).not.toHaveProperty("RIELFLOW_WORKFLOW_OUTPUT");
   });
 
   test("runs built-in git commit add-on against explicit committed files", async () => {
@@ -1106,7 +1112,7 @@ describe("executeNativeNode", () => {
     await expectPayloadCwd(output.payload, workflowWorkingDirectory);
   });
 
-  test("passes resolved input JSON to command stdin", async () => {
+  test("passes resolved input JSONL to command stdin without reserved file env", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
     const scriptDirectory = path.join(workflowDirectory, "scripts");
@@ -1120,8 +1126,7 @@ describe("executeNativeNode", () => {
       path.join(scriptDirectory, "read-stdin.sh"),
       [
         "#!/bin/sh",
-        'cat "$RIEL_RESOLVED_INPUT_PATH" > "$CAPTURED_STDIN_PATH"',
-        `printf '{"summary":"done","resolvedInputPath":"%s"}\n' "$RIEL_RESOLVED_INPUT_PATH"`,
+        'node -e \'const fs = require("node:fs"); const input = fs.readFileSync(0, "utf8"); fs.writeFileSync(process.env.CAPTURED_STDIN_PATH, input); const reserved = ["RIEL_RESOLVED_INPUT_PATH", "RIEL_MAILBOX_DIR", "RIELFLOW_WORKFLOW_INPUT", "RIELFLOW_WORKFLOW_OUTPUT"].filter((key) => process.env[key]); if (reserved.length > 0) { console.error(reserved.join(",")); process.exit(3); } console.log(JSON.stringify({ summary: "done", stdinBytes: Buffer.byteLength(input) }));\'',
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -1180,6 +1185,10 @@ describe("executeNativeNode", () => {
         executionMailbox,
         env: {
           CAPTURED_STDIN_PATH: capturedStdinPath,
+          RIEL_RESOLVED_INPUT_PATH: "/tmp/legacy-input",
+          RIEL_MAILBOX_DIR: "/tmp/legacy-mailbox",
+          RIELFLOW_WORKFLOW_INPUT: "/tmp/legacy-workflow-input",
+          RIELFLOW_WORKFLOW_OUTPUT: "/tmp/legacy-workflow-output",
         },
       },
       {
@@ -1191,12 +1200,7 @@ describe("executeNativeNode", () => {
     expect(output.payload).toMatchObject({
       summary: "done",
     });
-    expect(output.payload["resolvedInputPath"]).toEqual(
-      expect.stringContaining("resolved-input/native-request.json"),
-    );
-    expect(output.payload["resolvedInputPath"]).not.toEqual(
-      expect.stringContaining("inbox/input.json"),
-    );
+    expect(output.payload["stdinBytes"]).not.toBe(0);
     const capturedInput = JSON.parse(
       await readFile(capturedStdinPath, "utf8"),
     ) as {
@@ -1429,7 +1433,7 @@ describe("executeNativeNode", () => {
     expect(output.payload).toEqual({ decision: "delegate" });
   });
 
-  test("accepts pretty-printed JSON stdout from command nodes", async () => {
+  test("rejects multi-line JSON stdout from command nodes", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
     await mkdir(workflowWorkingDirectory, { recursive: true });
@@ -1452,44 +1456,101 @@ describe("executeNativeNode", () => {
       { encoding: "utf8", mode: 0o755 },
     );
 
-    const output = await executeNativeNode(
-      {
-        workflowDirectory,
-        workflowWorkingDirectory,
-        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
-        workflowId: "wf",
-        workflowDescription: "demo workflow",
-        workflowExecutionId: "sess-1",
-        nodeId: "node-1",
-        nodeExecId: "exec-1",
-        node: {
-          id: "node-1",
-          nodeType: "command",
-          variables: {},
-          command: {
-            scriptPath: "scripts/write-pretty-json.sh",
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "node-1",
+          nodeExecId: "exec-1",
+          node: {
+            id: "node-1",
+            nodeType: "command",
+            variables: {},
+            command: {
+              scriptPath: "scripts/write-pretty-json.sh",
+            },
           },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+          executionMailbox: makeExecutionMailbox(),
         },
-        workflowDefaults: {
-          maxLoopIterations: 3,
-          nodeTimeoutMs: 120000,
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
         },
-        runtimeVariables: {},
-        mergedVariables: {},
-        arguments: {},
-        artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
-        executionMailbox: makeExecutionMailbox(),
-      },
-      {
-        timeoutMs: 5_000,
-        signal: new AbortController().signal,
-      },
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_output",
+      message: expect.stringContaining("exactly one JSONL object"),
+    } satisfies Partial<AdapterExecutionError>);
+  });
+
+  test("rejects multiple command stdout JSONL records", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    const scriptDirectory = path.join(workflowDirectory, "scripts");
+    await mkdir(scriptDirectory, { recursive: true });
+    await writeFile(
+      path.join(scriptDirectory, "write-multiple-records.sh"),
+      [
+        "#!/bin/sh",
+        `printf '{"summary":"first"}\n'`,
+        `printf '{"summary":"second"}\n'`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
     );
 
-    expect(output.payload).toEqual({
-      summary: "done",
-      nested: { ok: true },
-    });
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "node-1",
+          nodeExecId: "exec-1",
+          node: {
+            id: "node-1",
+            nodeType: "command",
+            variables: {},
+            command: {
+              scriptPath: "scripts/write-multiple-records.sh",
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+          executionMailbox: makeExecutionMailbox(),
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_output",
+      message: expect.stringContaining("received 2 non-empty lines"),
+    } satisfies Partial<AdapterExecutionError>);
   });
 
   test("rejects command stdout diagnostic preamble before JSON output", async () => {
@@ -1744,6 +1805,7 @@ describe("executeNativeNode", () => {
             envTemplate: {
               EXPLICIT_ENV: "{{explicitValue}}",
               RIEL_MAILBOX_DIR: "{{explicitValue}}",
+              RIEL_RESOLVED_INPUT_PATH: "{{explicitValue}}",
             },
           },
         },
@@ -1770,13 +1832,14 @@ describe("executeNativeNode", () => {
     expect(output.payload).toEqual({ summary: "done" });
     const capturedArgs = await readFile(capturedArgsPath, "utf8");
     expect(capturedArgs).toContain("EXPLICIT_ENV=mapped");
-    expect(capturedArgs).toContain("RIEL_MAILBOX_DIR=mapped");
+    expect(capturedArgs).not.toContain("RIEL_MAILBOX_DIR=mapped");
+    expect(capturedArgs).not.toContain("RIEL_RESOLVED_INPUT_PATH=mapped");
     expect(capturedArgs).not.toContain("/mailbox");
     expect(capturedArgs).not.toContain("SHOULD_NOT_ENTER_CONTAINER");
     expect(capturedArgs).not.toContain("host-secret");
   });
 
-  test("passes resolved input JSON to container private request file", async () => {
+  test("passes resolved input JSONL to container runner stdin without request file ABI", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
     const artifactDir = path.join(workflowDirectory, "artifacts", "node-1");
@@ -1790,10 +1853,7 @@ describe("executeNativeNode", () => {
         "#!/bin/sh",
         "set -eu",
         'printf "%s\\n" "$@" > "$CAPTURED_ARGS_PATH"',
-        "resolved_input_path=",
-        `for arg in "$@"; do case "$arg" in *:/rielflow-input/resolved-input.json:ro) resolved_input_path="\${arg%%:/rielflow-input/resolved-input.json:ro}" ;; esac; done`,
-        'if [ -n "$resolved_input_path" ] && [ -f "$resolved_input_path" ]; then cat "$resolved_input_path" > "$CAPTURED_STDIN_PATH"; else printf "{}\\n" > "$CAPTURED_STDIN_PATH"; fi',
-        `printf '{"summary":"done","resolvedInputPath":"%s","resolvedInputPathExists":%s}\n' "$resolved_input_path" "$([ -f "$resolved_input_path" ] && printf true || printf false)"`,
+        'node -e \'const fs = require("node:fs"); const input = fs.readFileSync(0, "utf8"); fs.writeFileSync(process.env.CAPTURED_STDIN_PATH, input); console.log(JSON.stringify({ summary: "done", stdinBytes: Buffer.byteLength(input) }));\'',
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -1855,6 +1915,10 @@ describe("executeNativeNode", () => {
         env: {
           CAPTURED_ARGS_PATH: capturedArgsPath,
           CAPTURED_STDIN_PATH: capturedStdinPath,
+          RIEL_RESOLVED_INPUT_PATH: "/tmp/legacy-input",
+          RIEL_MAILBOX_DIR: "/tmp/legacy-mailbox",
+          RIELFLOW_WORKFLOW_INPUT: "/tmp/legacy-workflow-input",
+          RIELFLOW_WORKFLOW_OUTPUT: "/tmp/legacy-workflow-output",
         },
       },
       {
@@ -1865,17 +1929,15 @@ describe("executeNativeNode", () => {
 
     expect(output.payload).toMatchObject({
       summary: "done",
-      resolvedInputPathExists: true,
     });
-    expect(output.payload["resolvedInputPath"]).toEqual(
-      expect.stringContaining("resolved-input/native-request.json"),
-    );
+    expect(output.payload["stdinBytes"]).not.toBe(0);
     const capturedArgs = await readFile(capturedArgsPath, "utf8");
     expect(capturedArgs.split("\n")).toContain("-i");
-    expect(capturedArgs).toContain(":/rielflow-input/resolved-input.json:ro");
-    expect(capturedArgs).toContain(
-      "RIEL_RESOLVED_INPUT_PATH=/rielflow-input/resolved-input.json",
-    );
+    expect(capturedArgs).not.toContain("/rielflow-input");
+    expect(capturedArgs).not.toContain("RIEL_RESOLVED_INPUT_PATH");
+    expect(capturedArgs).not.toContain("RIEL_MAILBOX_DIR");
+    expect(capturedArgs).not.toContain("RIELFLOW_WORKFLOW_INPUT");
+    expect(capturedArgs).not.toContain("RIELFLOW_WORKFLOW_OUTPUT");
     const capturedInput = JSON.parse(
       await readFile(capturedStdinPath, "utf8"),
     ) as {

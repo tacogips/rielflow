@@ -6,17 +6,20 @@ public struct LocalAgentProcessConfiguration: Equatable, Sendable {
   public var executableURL: URL
   public var arguments: [String]
   public var environment: [String: String]
+  public var unsetEnvironmentKeys: Set<String>
   public var workingDirectoryURL: URL?
 
   public init(
     executableURL: URL,
     arguments: [String] = [],
     environment: [String: String] = [:],
+    unsetEnvironmentKeys: Set<String> = [],
     workingDirectoryURL: URL? = nil
   ) {
     self.executableURL = executableURL
     self.arguments = arguments
     self.environment = environment
+    self.unsetEnvironmentKeys = unsetEnvironmentKeys
     self.workingDirectoryURL = workingDirectoryURL
   }
 }
@@ -363,6 +366,7 @@ private func spawnProcess(
 
   let arguments = [configuration.executableURL.path] + configuration.arguments
   let environment = ProcessInfo.processInfo.environment
+    .filter { !configuration.unsetEnvironmentKeys.contains($0.key) }
     .merging(configuration.environment) { _, new in new }
     .map { "\($0.key)=\($0.value)" }
   let argv = CStringArray(arguments)

@@ -49,6 +49,7 @@ public struct AddonExecutionInput: Codable, Equatable, Sendable {
   public var version: String?
   public var nodePayload: JSONObject
   public var variables: JSONObject
+  public var attachments: [String: WorkflowAddonAttachmentValue]
   public var source: AddonSourceMetadata
   public var options: AddonExecutionOptions
 
@@ -57,6 +58,7 @@ public struct AddonExecutionInput: Codable, Equatable, Sendable {
     version: String? = nil,
     nodePayload: JSONObject,
     variables: JSONObject = [:],
+    attachments: [String: WorkflowAddonAttachmentValue] = [:],
     source: AddonSourceMetadata,
     options: AddonExecutionOptions = .init()
   ) {
@@ -64,8 +66,30 @@ public struct AddonExecutionInput: Codable, Equatable, Sendable {
     self.version = version
     self.nodePayload = nodePayload
     self.variables = variables
+    self.attachments = attachments
     self.source = source
     self.options = options
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case addonName
+    case version
+    case nodePayload
+    case variables
+    case attachments
+    case source
+    case options
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.addonName = try container.decode(String.self, forKey: .addonName)
+    self.version = try container.decodeIfPresent(String.self, forKey: .version)
+    self.nodePayload = try container.decode(JSONObject.self, forKey: .nodePayload)
+    self.variables = try container.decodeIfPresent(JSONObject.self, forKey: .variables) ?? [:]
+    self.attachments = try container.decodeIfPresent([String: WorkflowAddonAttachmentValue].self, forKey: .attachments) ?? [:]
+    self.source = try container.decode(AddonSourceMetadata.self, forKey: .source)
+    self.options = try container.decodeIfPresent(AddonExecutionOptions.self, forKey: .options) ?? .init()
   }
 }
 

@@ -14,6 +14,7 @@ public struct WorkflowPublicationRequest: Sendable {
   public var outputContract: WorkflowOutputContract?
   public var transitions: [WorkflowStepTransition]
   public var publishesRootOutput: Bool
+  public var allowsNoOutput: Bool
 
   public init(
     sessionId: String,
@@ -28,7 +29,8 @@ public struct WorkflowPublicationRequest: Sendable {
     candidatePathReservation: RuntimeCandidatePathReservation? = nil,
     outputContract: WorkflowOutputContract? = nil,
     transitions: [WorkflowStepTransition] = [],
-    publishesRootOutput: Bool = false
+    publishesRootOutput: Bool = false,
+    allowsNoOutput: Bool = false
   ) {
     self.sessionId = sessionId
     self.stepId = stepId
@@ -43,6 +45,7 @@ public struct WorkflowPublicationRequest: Sendable {
     self.outputContract = outputContract
     self.transitions = transitions
     self.publishesRootOutput = publishesRootOutput
+    self.allowsNoOutput = allowsNoOutput
   }
 }
 
@@ -131,6 +134,41 @@ public struct InMemoryWorkflowOutputPublisher: WorkflowOutputPublishing {
       )
       try? await finalizeCandidatePathIfNeeded(for: request)
       throw adapterFailure
+    }
+
+    if request.allowsNoOutput && candidateSources(from: request).isEmpty {
+      do {
+        try await finalizeCandidatePathIfNeeded(for: request)
+      } catch {
+        _ = try await store.updateStepExecution(
+          WorkflowStepExecutionUpdateInput(
+            sessionId: request.sessionId,
+            executionId: recordedExecution.executionId,
+            status: .failed,
+            adapterOutput: adapterOutputMetadata,
+            failureReason: String(describing: error)
+          )
+        )
+        throw error
+      }
+      let completedExecution = try await store.updateStepExecution(
+        WorkflowStepExecutionUpdateInput(
+          sessionId: request.sessionId,
+          executionId: recordedExecution.executionId,
+          status: .completed,
+          adapterOutput: adapterOutputMetadata,
+          completesRootWithoutOutput: request.publishesRootOutput
+        )
+      )
+      guard let session = try await store.loadSession(id: request.sessionId) else {
+        throw WorkflowRuntimeStoreError.sessionNotFound(request.sessionId)
+      }
+      return WorkflowPublicationResult(
+        session: session,
+        stepExecution: completedExecution,
+        publishedMessages: [],
+        rootOutput: nil
+      )
     }
 
     let candidate: RuntimeOutputCandidate

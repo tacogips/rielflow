@@ -3,7 +3,7 @@
 **Status**: Completed
 **Design Reference**: `design-docs/specs/design-node-execution-inbox-contract.md#contract-shape`; `design-docs/specs/design-node-execution-inbox-contract.md#backend-application`; `design-docs/specs/design-node-execution-inbox-contract.md#output-ownership`; `design-docs/specs/design-sqlite-message-store.md#node-execution-io-boundary`; `design-docs/specs/design-sqlite-message-store.md#file-mailbox-removal-boundary`; `design-docs/specs/architecture.md#current-execution-flow`; `design-docs/specs/architecture.md#message-architecture`; `design-docs/specs/design-node-output-contract.md#runtime-artifact-model`; `design-docs/specs/design-graphql-manager-control-plane.md#communication-query-model`
 **Created**: 2026-06-08
-**Last Updated**: 2026-06-08
+**Last Updated**: 2026-06-13
 
 ## Design Document Reference
 
@@ -49,6 +49,9 @@ audit records after validation; they are not worker outbox files.
 
 - Remove `RIEL_MAILBOX_DIR`, `inbox/input.json`, and `outbox/output.json` from
   node execution input/output contracts.
+- Remove external input/output communication mirror files such as
+  `external-mailbox/input/output.json`; `workflow_messages.payload_json` is the
+  authoritative external boundary payload.
 - Preserve SQLite `workflow_messages` reads/writes as the only communication
   source for node handoff, replay, resume, manager control, and GraphQL
   inspection.
@@ -153,7 +156,6 @@ interface NodeExecutionInputArtifacts {
 #### `packages/rielflow/src/workflow/engine/result-finalization.ts`
 #### `packages/rielflow/src/workflow/engine/step-result-finalization.ts`
 #### `packages/rielflow/src/workflow/engine/node-output-attempts.ts`
-#### `packages/rielflow/src/workflow/communication-artifact-persistence.ts`
 
 **Status**: COMPLETED
 
@@ -318,7 +320,7 @@ interface MailboxRemovalRegressionCase {
 | Module | File Path | Status | Tests |
 | --- | --- | --- | --- |
 | Resolved node input contract | `packages/rielflow/src/workflow/node-execution-mailbox.ts`; engine/direct-step input files | COMPLETED | `engine.test.ts`, `adapter.test.ts` |
-| SQLite handoff/finalization | `packages/rielflow/src/workflow/engine/*finalization*`; `communication-artifact-persistence.ts` | COMPLETED | `communication-service.test.ts`, `runtime-db.test.ts`, `engine.test.ts` |
+| SQLite handoff/finalization | `packages/rielflow/src/workflow/engine/*finalization*`; `packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts` | COMPLETED | `communication-service.test.ts`, `runtime-db.test.ts`, `engine.test.ts` |
 | Native command/container I/O | `packages/rielflow-addons/src/native-node-executor/template-env-and-containers.ts` | COMPLETED | `native-node-executor-*.test.ts` |
 | Agent/SDK/add-on boundary | `adapter.ts`; `adapter-execution.ts`; `runtime-execution-contracts.ts`; prompt guidance files | COMPLETED | `adapter.test.ts`, adapter dispatch tests |
 | Docs/skills/prompts/examples | `README.md`; `.codex/skills/**`; `examples/**`; prompt markdown | COMPLETED | `rg` search gates, digest verification |
@@ -539,21 +541,18 @@ attachment-only reference, or this implementation plan.
   found no package manifest to refresh.
 - 2026-06-08: Step 6 follow-up verification removed the remaining
   runtime-persisted communication `inbox`/`outbox` mirror files from
-  `packages/rielflow/src/workflow/communication-artifact-persistence.ts`.
+  `packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts`.
   GraphQL/service inspection continues to synthesize snapshots from SQLite
   `workflow_messages`, while tests assert no communication mirror files are
   materialized. Verification passed: `bun test
   packages/rielflow/src/workflow/communication-service.test.ts`; production
   search gate for legacy node/mailbox paths returned no active-code hits.
 - 2026-06-08: Step 7 rerun feedback from `step7-review` exec `exec-000020`
-  addressed. Native command and container execution now strip ambient
-  `RIEL_MAILBOX_DIR`, command workers receive resolved input through
-  `RIEL_RESOLVED_INPUT_PATH` plus stdin where supported, and containers mount an
-  executor-private resolved-input request file at
-  `/rielflow-input/resolved-input.json`. Local Codex, Claude, and Cursor agent
-  execution now strip legacy mailbox env during worker/session startup while
-  preserving approved manager and workflow env. Regression coverage added for
-  ambient mailbox env leakage and native resolved-input request channels.
+  addressed. Native command and container execution started stripping ambient
+  legacy mailbox env while local Codex, Claude, and Cursor agent execution
+  stripped legacy mailbox env during worker/session startup. The temporary
+  request-file input channel accepted during that review was superseded by the
+  2026-06-13 stdin-only JSONL contract recorded below.
 - 2026-06-08: Step 7 review exec `exec-000020` required revision. Addressed
   native command/container resolved input by passing `executionMailbox.input`
   JSON on stdin, restored supported `cursor-cli-agent` and
@@ -561,13 +560,11 @@ attachment-only reference, or this implementation plan.
   workflow source contract in the workflow format reference, and refreshed this
   plan lineage to latest outputs.
 - 2026-06-08: Step 6 rerun exec `exec-000021` completed the Step 7
-  `needs_revision` feedback. Native command workers now receive
-  `RIEL_RESOLVED_INPUT_PATH` pointing at the artifact-local
-  `resolved-input/native-request.json`; container workers receive the same
-  request file through a read-only `/rielflow-input/resolved-input.json` mount,
-  `RIEL_RESOLVED_INPUT_PATH`, and `-i` stdin. Added command and container
-  regressions proving arguments, upstream records, and `latestOutputs` are
-  available without `RIEL_MAILBOX_DIR`. Restored `cursor-cli-agent`,
+  `needs_revision` feedback. That interim native command/container change
+  proved arguments, upstream records, and `latestOutputs` were available
+  without the legacy mailbox env, and it was later tightened to the current
+  stdin-only JSONL contract with no worker-visible request file or legacy env.
+  Restored `cursor-cli-agent`,
   `official/cursor-sdk`, and `extends`-only workflow docs. Verification passed:
   `bun test packages/rielflow/src/workflow/native-node-executor-addons-commands.test.ts`;
   `bun test packages/rielflow/src/workflow/adapter.test.ts
@@ -587,10 +584,10 @@ attachment-only reference, or this implementation plan.
   and container stdout parsing then accepted a valid JSON object across
   multiple lines; Step 7 review exec `exec-000028` later tightened stdout
   handling as recorded below. X follower digest scripts and
-  Discord/Matrix/Telegram persona memory scripts
-  now read resolved runtime input from `RIEL_RESOLVED_INPUT_PATH` or stdin
-  instead of replacing input with empty stubs, while continuing to write JSON
-  candidates to stdout. `packages/rielflow/src/workflow/examples-script-contract.test.ts`
+  Discord/Matrix/Telegram persona memory scripts were moved away from empty
+  input stubs and later tightened to stdin-only resolved runtime input, while
+  continuing to write JSON candidates to stdout.
+  `packages/rielflow/src/workflow/examples-script-contract.test.ts`
   proves digest upstream payloads, summary validation, persisted state, persona
   `workflowInput.memoryRoot`, and memory entries work without
   `RIEL_MAILBOX_DIR`; `native-node-executor-addons-commands.test.ts` now covers
@@ -680,7 +677,7 @@ attachment-only reference, or this implementation plan.
   implementation guidance for the removed worker-facing file contract. The
   historical plan now points to this active SQLite-only plan and documents
   resolved input, SQLite `workflow_messages`, runtime-owned publication,
-  native `RIEL_RESOLVED_INPUT_PATH`/stdin, and attachment-only
+  native stdin JSONL, and attachment-only
   `RIEL_ATTACHMENT_ROOT` behavior. Verification passed: `rg` scoped to
   `impl-plans/node-execution-inbox-contract.md` found no stale legacy node I/O
   terms; `bun test packages/rielflow/src/workflow/native-node-executor-addons-commands.test.ts
@@ -715,3 +712,13 @@ attachment-only reference, or this implementation plan.
   lint:biome`; `git diff --check --
   packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts
   packages/rielflow/src/workflow/engine.test.ts impl-plans`.
+- 2026-06-13: Manual Rielflow workflow continuation follow-up removed the
+  final external-input file mirror at `external-mailbox/input/output.json` and
+  deleted the now-unused legacy `communication-artifact-persistence.ts`
+  communication mirror writer. External workflow input remains persisted in
+  SQLite `workflow_messages.payload_json`, and focused regressions now assert
+  that the payload is available from SQLite while no external input
+  `output.json` mirror is created. Verification passed: focused engine tests
+  for external mailbox input/plain-text human input/external output, Biome,
+  typecheck, full Bun tests, workflow validation, and stale file-ABI `rg`
+  gates.

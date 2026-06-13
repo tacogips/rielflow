@@ -283,6 +283,116 @@ final class WorkflowPackageManifestTests: XCTestCase {
     XCTAssertTrue(issues.contains { $0.path == "addons[1].execution" && $0.message.contains("must not declare executable artifacts") })
   }
 
+  func testNativeBundleManifestDecodesAndValidatesRequiredMetadata() throws {
+    let data = Data("""
+    {
+      "name": "native-addon-package",
+      "version": "1.0.0",
+      "kind": "node-addon",
+      "description": "Native add-on package",
+      "tags": [],
+      "registry": "default",
+      "checksum": "abc123",
+      "checksumAlgorithm": "md5",
+      "addons": [{
+        "name": "native-runner",
+        "version": "1.0.0",
+        "sourcePath": "addons/native-runner",
+        "contentDigest": "sha256:\(String(repeating: "e", count: 64))",
+        "capabilities": [{"name": "attachment.read", "scope": "attachments/input"}],
+        "execution": {
+          "kind": "native-bundle",
+          "entrypoint": "NativeRunner.bundle",
+          "abiVersion": 1,
+          "bundleIdentifier": "com.example.rielflow.NativeRunner",
+          "codeSignatureRequirement": "anchor apple generic"
+        }
+      }]
+    }
+    """.utf8)
+
+    let manifest = try JSONDecoder().decode(WorkflowPackageManifest.self, from: data)
+
+    XCTAssertEqual(manifest.nodeAddons.first?.execution?.kind, .nativeBundle)
+    XCTAssertEqual(manifest.nodeAddons.first?.execution?.abiVersion, 1)
+    XCTAssertEqual(manifest.nodeAddons.first?.execution?.bundleIdentifier, "com.example.rielflow.NativeRunner")
+    XCTAssertEqual(WorkflowPackageManifestValidator.validate(manifest), [])
+  }
+
+  func testNativeBundleManifestRejectsUnsafeMetadataAndGenericFilesystemCapabilities() {
+    let manifest = WorkflowPackageManifest(
+      name: "workflow-package",
+      version: "1.0.0",
+      kind: .workflow,
+      description: "Workflow package",
+      tags: [],
+      registry: "default",
+      checksum: "abc123",
+      checksumAlgorithm: "md5",
+      nodeAddons: [
+        .init(
+          name: "native-runner",
+          version: "1.0.0",
+          sourcePath: "addons/native-runner",
+          execution: .init(
+            kind: .nativeBundle,
+            entrypoint: "NativeRunner.dylib",
+            containerfilePath: "Containerfile",
+            abiVersion: 2,
+            bundleIdentifier: "not-reverse-dns",
+            codeSignatureRequirement: " "
+          ),
+          capabilities: [.init(name: "filesystem.read", scope: "repo", reason: "reads repository files")],
+          contentDigest: "sha256:\(String(repeating: "f", count: 64))"
+        )
+      ]
+    )
+
+    let issues = WorkflowPackageManifestValidator.validate(manifest)
+
+    XCTAssertTrue(issues.contains { $0.path == "addons[0].execution.kind" })
+    XCTAssertTrue(issues.contains { $0.path == "addons[0].execution.entrypoint" && $0.message.contains(".bundle") })
+    XCTAssertTrue(issues.contains { $0.path == "addons[0].execution.containerfilePath" })
+    XCTAssertTrue(issues.contains { $0.path == "addons[0].execution.abiVersion" })
+    XCTAssertTrue(issues.contains { $0.path == "addons[0].execution.bundleIdentifier" })
+    XCTAssertTrue(issues.contains { $0.path == "addons[0].execution.codeSignatureRequirement" })
+    XCTAssertTrue(issues.contains { $0.path == "addons[0].capabilities[0].name" && $0.message.contains("attachment.read") })
+  }
+
+  func testNativeBundleDependencyLocksRejectFilesystemGrantsAndRequireDigest() {
+    let dependency = WorkflowPackageDependency(
+      packageId: "native-addon-package",
+      kind: .nodeAddon,
+      addons: [
+        .init(
+          name: "native-runner",
+          version: "1.0.0",
+          executionKind: .nativeBundle,
+          capabilityGrant: [
+            "filesystem.read": .init(allowed: true, scope: "repo"),
+            "attachment.read": .init(allowed: true, scope: "attachments/input")
+          ]
+        )
+      ]
+    )
+    let manifest = WorkflowPackageManifest(
+      name: "workflow-package",
+      version: "1.0.0",
+      description: "Workflow package",
+      tags: [],
+      registry: "default",
+      checksum: "abc123",
+      checksumAlgorithm: "md5",
+      dependencies: [dependency]
+    )
+
+    let issues = WorkflowPackageManifestValidator.validate(manifest)
+
+    XCTAssertTrue(issues.contains { $0.path == "dependencies[0].addons[0].contentDigest" })
+    XCTAssertTrue(issues.contains { $0.path == "dependencies[0].addons[0].capabilityGrant.filesystem.read" && $0.message.contains("attachment.read") })
+    XCTAssertFalse(issues.contains { $0.path == "dependencies[0].addons[0].capabilityGrant.attachment.read" })
+  }
+
   func testLoaderValidationRequiresWorkflowJsonAtWorkflowDirectory() async throws {
     let packageRoot = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: packageRoot) }

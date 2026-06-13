@@ -1,5 +1,6 @@
 import Foundation
 import RielflowAdapters
+import RielflowAddons
 import RielflowCore
 
 public struct CLICommandResult: Equatable, Sendable {
@@ -29,22 +30,40 @@ public struct NodeValidationResult: Codable, Equatable, Sendable {
 }
 
 public protocol WorkflowExecutablePreflighting: Sendable {
-  func preflight(_ workflow: WorkflowDefinition, nodePayloads: [String: AgentNodePayload]) async throws -> [NodeValidationResult]
+  func preflight(
+    _ workflow: WorkflowDefinition,
+    nodePayloads: [String: AgentNodePayload],
+    packageManifest: WorkflowPackageManifest?,
+    sourceScope: WorkflowScope
+  ) async throws -> [NodeValidationResult]
 }
 
 public struct DeterministicWorkflowExecutablePreflight: WorkflowExecutablePreflighting {
   public init() {}
 
-  public func preflight(_ workflow: WorkflowDefinition, nodePayloads: [String: AgentNodePayload]) async throws -> [NodeValidationResult] {
-    workflow.nodeRegistry.map { node in
+  public func preflight(
+    _ workflow: WorkflowDefinition,
+    nodePayloads: [String: AgentNodePayload],
+    packageManifest: WorkflowPackageManifest?,
+    sourceScope: WorkflowScope
+  ) async throws -> [NodeValidationResult] {
+    let nativeInspections = nativeBundleAddonInspections(
+      workflow: workflow,
+      packageManifest: packageManifest,
+      sourceScope: sourceScope
+    )
+    return workflow.nodeRegistry.map { node in
       let payload = nodePayloads[node.id]
       let backend = payload?.executionBackend?.rawValue
+      let nativeInspection = nativeInspections.first { $0.nodeId == node.id }
       let valid = payload != nil
       let message: String
       if valid {
         message = "deterministic Swift preflight passed"
+      } else if let nativeInspection {
+        message = "native-bundle executable preflight helper unavailable for \(nativeInspection.addon); signing=\(nativeInspection.signingRequired ? "required" : "not_required") cache=\(nativeInspection.cacheStatus)"
       } else if node.addon != nil {
-        message = "addon-only nodes are not executable by the Swift TASK-007 deterministic runner"
+        message = "addon-only nodes require an add-on resolver for Swift deterministic execution"
       } else {
         message = "node payload is not loadable"
       }
@@ -164,7 +183,12 @@ public struct WorkflowValidateCommand: Sendable {
       }
       let diagnostics = bundle.diagnostics + DefaultWorkflowValidator().validate(bundle.workflow)
       let nodeResults = options.executable
-        ? try await preflight.preflight(bundle.workflow, nodePayloads: bundle.nodePayloads)
+        ? try await preflight.preflight(
+          bundle.workflow,
+          nodePayloads: bundle.nodePayloads,
+          packageManifest: bundle.packageManifest,
+          sourceScope: bundle.sourceScope
+        )
         : []
       let valid = !diagnostics.contains { $0.severity == .error } && !nodeResults.contains { !$0.valid }
       let result = WorkflowValidationCommandResult(
@@ -263,7 +287,72 @@ public struct WorkflowInspectionSummary: Codable, Equatable, Sendable {
   public var defaults: WorkflowDefaults
   public var callable: WorkflowCallableInspection
   public var addonSourceSummaries: [String]
+  public var nativeBundleAddons: [NativeBundleAddonInspection]
   public var runtimeReadinessDescriptors: [String]
+}
+
+public struct NativeBundleAddonInspection: Codable, Equatable, Sendable {
+  public var nodeId: String
+  public var addon: String
+  public var sourceKind: String
+  public var sourceScope: String
+  public var packageName: String?
+  public var bundleIdentifier: String
+  public var abiVersion: Int
+  public var contentDigest: String
+  public var dependencyClosureDigest: String
+  public var signingRequired: Bool
+  public var signingVerified: Bool?
+  public var cacheStatus: String
+  public var preflightHelperStatus: String?
+}
+
+private func nativeBundleAddonInspections(
+  workflow: WorkflowDefinition,
+  packageManifest: WorkflowPackageManifest?,
+  sourceScope: WorkflowScope
+) -> [NativeBundleAddonInspection] {
+  guard let packageManifest else {
+    return []
+  }
+  let nativeLocks = packageManifest.dependencies.flatMap { dependency in
+    dependency.addons.compactMap { lock -> (WorkflowPackageDependency, WorkflowPackageManifestAddonDependencyLock)? in
+      lock.executionKind == .nativeBundle ? (dependency, lock) : nil
+    }
+  }
+  guard !nativeLocks.isEmpty else {
+    return []
+  }
+
+  return workflow.nodeRegistry.compactMap { node in
+    guard let addon = node.addon else {
+      return nil
+    }
+    guard let match = nativeLocks.first(where: { dependency, lock in
+      let versionMatches = addon.version == nil || lock.version == addon.version
+      let nameMatches = lock.name == addon.name || "\(dependency.packageId)/\(lock.name)" == addon.name
+      return nameMatches && versionMatches
+    }) else {
+      return nil
+    }
+    let dependency = match.0
+    let lock = match.1
+    return NativeBundleAddonInspection(
+      nodeId: node.id,
+      addon: addon.name,
+      sourceKind: WorkflowPackageAddonExecutionKind.nativeBundle.rawValue,
+      sourceScope: lock.sourceScope ?? sourceScope.rawValue,
+      packageName: dependency.packageId,
+      bundleIdentifier: lock.bundleIdentifier ?? "",
+      abiVersion: lock.abiVersion ?? 0,
+      contentDigest: lock.contentDigest ?? "",
+      dependencyClosureDigest: lock.dependencyClosureDigest ?? "",
+      signingRequired: lock.codeSignatureRequirementDigest != nil,
+      signingVerified: nil,
+      cacheStatus: "not_loaded",
+      preflightHelperStatus: nil
+    )
+  }
 }
 
 public struct WorkflowInspectionFailureResult: Codable, Equatable, Sendable {
@@ -332,6 +421,11 @@ public struct WorkflowInspectCommand: Sendable {
     let addonSummaries = workflow.nodeRegistry.compactMap { node in
       node.addon.map { "\(node.id):\($0.name)" }
     }
+    let nativeBundleAddons = nativeBundleAddonInspections(
+      workflow: workflow,
+      packageManifest: bundle.packageManifest,
+      sourceScope: bundle.sourceScope
+    )
     let readiness = workflow.nodeRegistry.map { node -> String in
       guard let payload = bundle.nodePayloads[node.id] else {
         return "\(node.id):not_checked"
@@ -357,6 +451,7 @@ public struct WorkflowInspectCommand: Sendable {
       defaults: workflow.defaults,
       callable: callable,
       addonSourceSummaries: addonSummaries,
+      nativeBundleAddons: nativeBundleAddons,
       runtimeReadinessDescriptors: readiness
     )
   }
@@ -419,6 +514,14 @@ public struct WorkflowInspectCommand: Sendable {
     }
     if summary.callable.input != nil {
       lines.append("variables: --variables '{...}'")
+    }
+    if !summary.addonSourceSummaries.isEmpty {
+      lines.append("addons: \(summary.addonSourceSummaries.joined(separator: ", "))")
+    }
+    if !summary.nativeBundleAddons.isEmpty {
+      lines.append(contentsOf: summary.nativeBundleAddons.map {
+        "nativeBundle: \($0.nodeId): \($0.addon) \($0.bundleIdentifier) abi=\($0.abiVersion) cache=\($0.cacheStatus)"
+      })
     }
     return lines.joined(separator: "\n") + "\n"
   }
@@ -495,7 +598,10 @@ public struct WorkflowRunCommand: Sendable {
       } else {
         adapter = fallback
       }
-      let runner = DeterministicWorkflowRunner(adapter: adapter)
+      let runner = DeterministicWorkflowRunner(
+        adapter: adapter,
+        stdioNodeExecutor: LocalWorkflowStdioNodeExecutor()
+      )
       let result = try await runner.run(
         DeterministicWorkflowRunRequest(
           workflow: bundle.workflow,

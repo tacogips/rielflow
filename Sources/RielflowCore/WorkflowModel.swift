@@ -398,6 +398,84 @@ public struct WorkflowDefinition: Codable, Equatable, Sendable {
   }
 }
 
+public struct WorkflowCommandExecution: Codable, Equatable, Sendable {
+  public var executable: String
+  public var arguments: [String]
+  public var environment: [String: String]
+  public var workingDirectory: String?
+
+  public init(
+    executable: String,
+    arguments: [String] = [],
+    environment: [String: String] = [:],
+    workingDirectory: String? = nil
+  ) {
+    self.executable = executable
+    self.arguments = arguments
+    self.environment = environment
+    self.workingDirectory = workingDirectory
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case executable
+    case arguments
+    case environment
+    case workingDirectory
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.executable = try container.decode(String.self, forKey: .executable)
+    self.arguments = try container.decodeIfPresent([String].self, forKey: .arguments) ?? []
+    self.environment = try container.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
+    self.workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory)
+  }
+}
+
+public struct WorkflowContainerExecution: Codable, Equatable, Sendable {
+  public var image: String
+  public var runnerKind: String?
+  public var runnerPath: String?
+  public var command: [String]
+  public var environment: [String: String]
+  public var workingDirectory: String?
+
+  public init(
+    image: String,
+    runnerKind: String? = nil,
+    runnerPath: String? = nil,
+    command: [String] = [],
+    environment: [String: String] = [:],
+    workingDirectory: String? = nil
+  ) {
+    self.image = image
+    self.runnerKind = runnerKind
+    self.runnerPath = runnerPath
+    self.command = command
+    self.environment = environment
+    self.workingDirectory = workingDirectory
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case image
+    case runnerKind
+    case runnerPath
+    case command
+    case environment
+    case workingDirectory
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.image = try container.decode(String.self, forKey: .image)
+    self.runnerKind = try container.decodeIfPresent(String.self, forKey: .runnerKind)
+    self.runnerPath = try container.decodeIfPresent(String.self, forKey: .runnerPath)
+    self.command = try container.decodeIfPresent([String].self, forKey: .command) ?? []
+    self.environment = try container.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
+    self.workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory)
+  }
+}
+
 public struct AgentNodePayload: Codable, Equatable, Sendable {
   public var id: String
   public var description: String?
@@ -406,6 +484,8 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
   public var model: String
   public var effort: NodeReasoningEffort?
   public var workingDirectory: String?
+  public var command: WorkflowCommandExecution?
+  public var container: WorkflowContainerExecution?
   public var systemPromptTemplate: String?
   public var systemPromptTemplateFile: String?
   public var promptTemplate: String?
@@ -425,6 +505,8 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
     model: String,
     effort: NodeReasoningEffort? = nil,
     workingDirectory: String? = nil,
+    command: WorkflowCommandExecution? = nil,
+    container: WorkflowContainerExecution? = nil,
     systemPromptTemplate: String? = nil,
     systemPromptTemplateFile: String? = nil,
     promptTemplate: String? = nil,
@@ -443,6 +525,8 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
     self.model = model
     self.effort = effort
     self.workingDirectory = workingDirectory
+    self.command = command
+    self.container = container
     self.systemPromptTemplate = systemPromptTemplate
     self.systemPromptTemplateFile = systemPromptTemplateFile
     self.promptTemplate = promptTemplate
@@ -453,6 +537,51 @@ public struct AgentNodePayload: Codable, Equatable, Sendable {
     self.variables = variables
     self.input = input
     self.output = output
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case description
+    case nodeType
+    case executionBackend
+    case model
+    case effort
+    case workingDirectory
+    case command
+    case container
+    case systemPromptTemplate
+    case systemPromptTemplateFile
+    case promptTemplate
+    case promptTemplateFile
+    case sessionStartPromptTemplate
+    case sessionStartPromptTemplateFile
+    case promptVariants
+    case variables
+    case input
+    case output
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.id = try container.decode(String.self, forKey: .id)
+    self.description = try container.decodeIfPresent(String.self, forKey: .description)
+    self.nodeType = try container.decodeIfPresent(NodeType.self, forKey: .nodeType)
+    self.executionBackend = try container.decodeIfPresent(NodeExecutionBackend.self, forKey: .executionBackend)
+    self.model = try container.decodeIfPresent(String.self, forKey: .model) ?? ""
+    self.effort = try container.decodeIfPresent(NodeReasoningEffort.self, forKey: .effort)
+    self.workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory)
+    self.command = try container.decodeIfPresent(WorkflowCommandExecution.self, forKey: .command)
+    self.container = try container.decodeIfPresent(WorkflowContainerExecution.self, forKey: .container)
+    self.systemPromptTemplate = try container.decodeIfPresent(String.self, forKey: .systemPromptTemplate)
+    self.systemPromptTemplateFile = try container.decodeIfPresent(String.self, forKey: .systemPromptTemplateFile)
+    self.promptTemplate = try container.decodeIfPresent(String.self, forKey: .promptTemplate)
+    self.promptTemplateFile = try container.decodeIfPresent(String.self, forKey: .promptTemplateFile)
+    self.sessionStartPromptTemplate = try container.decodeIfPresent(String.self, forKey: .sessionStartPromptTemplate)
+    self.sessionStartPromptTemplateFile = try container.decodeIfPresent(String.self, forKey: .sessionStartPromptTemplateFile)
+    self.promptVariants = try container.decodeIfPresent([String: NodePromptVariant].self, forKey: .promptVariants)
+    self.variables = try container.decodeIfPresent(JSONObject.self, forKey: .variables) ?? [:]
+    self.input = try container.decodeIfPresent(NodeInputContract.self, forKey: .input)
+    self.output = try container.decodeIfPresent(NodeOutputContract.self, forKey: .output)
   }
 }
 

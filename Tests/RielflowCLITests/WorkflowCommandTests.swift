@@ -446,7 +446,7 @@ final class WorkflowCommandTests: XCTestCase {
     XCTAssertEqual(validation.nodeValidationResults.count, 1)
     XCTAssertEqual(validation.nodeValidationResults.first?.nodeId, "addon-node")
     XCTAssertEqual(validation.nodeValidationResults.first?.valid, false)
-    XCTAssertTrue(validation.nodeValidationResults.first?.message.contains("addon-only nodes are not executable") == true)
+    XCTAssertTrue(validation.nodeValidationResults.first?.message.contains("require an add-on resolver") == true)
 
     let run = await RielflowCLIApplication().run([
       "workflow", "run", "addon-demo",
@@ -457,7 +457,105 @@ final class WorkflowCommandTests: XCTestCase {
     XCTAssertTrue(run.stderr.isEmpty)
     let failure = try decodeJSON(WorkflowRunFailureResult.self, from: run.stdout)
     XCTAssertEqual(failure.target, "addon-demo")
-    XCTAssertTrue(failure.error.contains("missingNodePayload"))
+    XCTAssertTrue(failure.error.contains("missing add-on resolver"))
+  }
+
+  func testInspectReportsNativeBundleAddonMetadataWithoutPassiveLoading() async throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("rielflow-cli-native-bundle-\(UUID().uuidString)", isDirectory: true)
+    let workflowDir = tempDir.appendingPathComponent("native-demo", isDirectory: true)
+    try FileManager.default.createDirectory(at: workflowDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+    let contentDigest = "sha256:\(String(repeating: "a", count: 64))"
+    let dependencyDigest = "sha256:\(String(repeating: "b", count: 64))"
+    let signingDigest = "sha256:\(String(repeating: "c", count: 64))"
+    try """
+    {
+      "workflowId": "native-demo",
+      "defaults": { "maxLoopIterations": 3, "nodeTimeoutMs": 120000 },
+      "entryStepId": "native-step",
+      "nodes": [
+        { "id": "native-node", "addon": { "name": "native-runner", "version": "1.0.0" } }
+      ],
+      "steps": [
+        { "id": "native-step", "nodeId": "native-node", "role": "worker" }
+      ]
+    }
+    """.write(to: workflowDir.appendingPathComponent("workflow.json"), atomically: true, encoding: .utf8)
+    try """
+    {
+      "name": "native-workflow",
+      "version": "1.0.0",
+      "kind": "workflow",
+      "description": "Native bundle workflow",
+      "tags": [],
+      "registry": "default",
+      "checksum": "abc123",
+      "checksumAlgorithm": "md5",
+      "dependencies": [{
+        "packageId": "native-addon-package",
+        "kind": "node-addon",
+        "addons": [{
+          "name": "native-runner",
+          "version": "1.0.0",
+          "executionKind": "native-bundle",
+          "abiVersion": 1,
+          "bundleIdentifier": "com.example.rielflow.NativeRunner",
+          "contentDigest": "\(contentDigest)",
+          "dependencyClosureDigest": "\(dependencyDigest)",
+          "codeSignatureRequirementDigest": "\(signingDigest)",
+          "sourceScope": "project",
+          "capabilityGrant": {
+            "attachment.read": { "allowed": true, "scope": "attachments/input" }
+          }
+        }]
+      }]
+    }
+    """.write(to: workflowDir.appendingPathComponent("rielflow-package.json"), atomically: true, encoding: .utf8)
+
+    let app = RielflowCLIApplication()
+    let validate = await app.run([
+      "workflow", "validate", "native-demo",
+      "--workflow-definition-dir", tempDir.path,
+      "--output", "json",
+    ])
+    XCTAssertEqual(validate.exitCode, .success)
+    let validation = try decodeJSON(WorkflowValidationCommandResult.self, from: validate.stdout)
+    XCTAssertTrue(validation.valid)
+    XCTAssertEqual(validation.nodeValidationResults, [])
+
+    let inspect = await app.run([
+      "workflow", "inspect", "native-demo",
+      "--workflow-definition-dir", tempDir.path,
+      "--output", "json",
+    ])
+    XCTAssertEqual(inspect.exitCode, .success)
+    let summary = try decodeJSON(WorkflowInspectionSummary.self, from: inspect.stdout)
+    let native = try XCTUnwrap(summary.nativeBundleAddons.first)
+    XCTAssertEqual(native.nodeId, "native-node")
+    XCTAssertEqual(native.addon, "native-runner")
+    XCTAssertEqual(native.sourceKind, "native-bundle")
+    XCTAssertEqual(native.sourceScope, "project")
+    XCTAssertEqual(native.packageName, "native-addon-package")
+    XCTAssertEqual(native.bundleIdentifier, "com.example.rielflow.NativeRunner")
+    XCTAssertEqual(native.abiVersion, 1)
+    XCTAssertEqual(native.contentDigest, contentDigest)
+    XCTAssertEqual(native.dependencyClosureDigest, dependencyDigest)
+    XCTAssertTrue(native.signingRequired)
+    XCTAssertNil(native.signingVerified)
+    XCTAssertEqual(native.cacheStatus, "not_loaded")
+    XCTAssertNil(native.preflightHelperStatus)
+
+    let executable = await app.run([
+      "workflow", "validate", "native-demo",
+      "--workflow-definition-dir", tempDir.path,
+      "--executable",
+      "--output", "json",
+    ])
+    XCTAssertEqual(executable.exitCode, .failure)
+    let executableValidation = try decodeJSON(WorkflowValidationCommandResult.self, from: executable.stdout)
+    XCTAssertFalse(executableValidation.valid)
+    XCTAssertTrue(executableValidation.nodeValidationResults.first?.message.contains("preflight helper unavailable") == true)
   }
 
   func testValidateJSONFailureReturnsParseableEnvelopeForMissingWorkflow() async throws {

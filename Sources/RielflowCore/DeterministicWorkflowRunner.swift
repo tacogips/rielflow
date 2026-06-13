@@ -9,6 +9,8 @@ public struct DeterministicWorkflowRunRequest: Sendable {
   public var maxLoopIterations: Int?
   public var defaultTimeoutMs: Int?
   public var timeoutMs: Int?
+  public var addonAttachments: [String: WorkflowAddonAttachmentValue]
+  public var addonAttachmentDescriptors: [String: WorkflowAddonAttachmentDescriptor]
 
   public init(
     workflow: WorkflowDefinition,
@@ -18,7 +20,9 @@ public struct DeterministicWorkflowRunRequest: Sendable {
     maxConcurrency: Int? = nil,
     maxLoopIterations: Int? = nil,
     defaultTimeoutMs: Int? = nil,
-    timeoutMs: Int? = nil
+    timeoutMs: Int? = nil,
+    addonAttachments: [String: WorkflowAddonAttachmentValue] = [:],
+    addonAttachmentDescriptors: [String: WorkflowAddonAttachmentDescriptor] = [:]
   ) {
     self.workflow = workflow
     self.nodePayloads = nodePayloads
@@ -28,6 +32,8 @@ public struct DeterministicWorkflowRunRequest: Sendable {
     self.maxLoopIterations = maxLoopIterations
     self.defaultTimeoutMs = defaultTimeoutMs
     self.timeoutMs = timeoutMs
+    self.addonAttachments = addonAttachments
+    self.addonAttachmentDescriptors = addonAttachmentDescriptors
   }
 }
 
@@ -64,18 +70,27 @@ public protocol DeterministicWorkflowRunning: Sendable {
 public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
   public var store: any WorkflowRuntimeStore
   public var adapter: any NodeAdapter
+  public var addonResolver: (any WorkflowAddonResolving)?
+  public var attachmentProjector: any WorkflowAddonAttachmentProjecting
+  public var stdioNodeExecutor: (any WorkflowStdioNodeExecuting)?
   public var publisher: any WorkflowOutputPublishing
   public var inputResolver: any WorkflowMessageInputResolving
 
   public init(
     store: (any WorkflowRuntimeStore)? = nil,
     adapter: any NodeAdapter = DeterministicLocalNodeAdapter(),
+    addonResolver: (any WorkflowAddonResolving)? = nil,
+    attachmentProjector: any WorkflowAddonAttachmentProjecting = InlineWorkflowAddonAttachmentProjector(),
+    stdioNodeExecutor: (any WorkflowStdioNodeExecuting)? = nil,
     publisher: (any WorkflowOutputPublishing)? = nil,
     inputResolver: any WorkflowMessageInputResolving = DefaultWorkflowMessageInputResolver()
   ) {
     let resolvedStore = store ?? InMemoryWorkflowRuntimeStore()
     self.store = resolvedStore
     self.adapter = adapter
+    self.addonResolver = addonResolver
+    self.attachmentProjector = attachmentProjector
+    self.stdioNodeExecutor = stdioNodeExecutor
     self.publisher = publisher ?? InMemoryWorkflowOutputPublisher(store: resolvedStore)
     self.inputResolver = inputResolver
   }
@@ -105,44 +120,76 @@ public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
       guard let step = request.workflow.steps.first(where: { $0.id == stepId }) else {
         throw DeterministicWorkflowRunnerError.missingStep(stepId)
       }
-      guard let basePayload = request.nodePayloads[step.nodeId] else {
-        throw DeterministicWorkflowRunnerError.missingNodePayload(step.nodeId)
+      guard let registryNode = request.workflow.nodeRegistry.first(where: { $0.id == step.nodeId }) else {
+        throw DeterministicWorkflowRunnerError.missingNode(step.nodeId)
       }
       let executionIndex = (executionCounts[step.id] ?? 0) + 1
       executionCounts[step.id] = executionIndex
-      var executionPayload = try payload(basePayload, applyingPromptVariantFrom: step)
-      executionPayload.id = step.id
       let resolvedInput = try await inputResolver.resolveInput(for: session.sessionId, stepId: step.id, store: store)
-      let mergedVariables = promptVariables(
-        workflow: request.workflow,
-        step: step,
-        payload: executionPayload,
-        requestVariables: request.variables,
-        resolvedInputPayload: resolvedInput.payload
-      )
-      let prompts = composedPrompts(
-        workflow: request.workflow,
-        step: step,
-        payload: executionPayload,
-        variables: mergedVariables
-      )
-      let adapterInput = AdapterExecutionInput(
-        node: executionPayload,
-        promptText: prompts.promptText,
-        systemPromptText: prompts.systemPromptText,
-        arguments: request.variables,
-        mergedVariables: mergedVariables
-      )
       let transitions = step.transitions ?? []
-      let publishResult = try await executeAndPublish(
-        adapterInput: adapterInput,
-        sessionId: session.sessionId,
-        step: step,
-        basePayload: basePayload,
-        transitions: transitions,
-        request: request,
-        executionIndex: executionIndex
-      )
+      let publishResult: WorkflowPublicationResult
+      if let basePayload = request.nodePayloads[step.nodeId] {
+        if let stdioNodeKind = workflowStdioNodeExecutionKind(for: basePayload) {
+          var executionPayload = basePayload
+          executionPayload.id = step.id
+          publishResult = try await executeStdioNodeAndPublish(
+            kind: stdioNodeKind,
+            payload: executionPayload,
+            sessionId: session.sessionId,
+            workflow: request.workflow,
+            step: step,
+            resolvedInputPayload: resolvedInput.payload,
+            transitions: transitions,
+            request: request,
+            executionIndex: executionIndex
+          )
+        } else {
+          var executionPayload = try payload(basePayload, applyingPromptVariantFrom: step)
+          executionPayload.id = step.id
+          let mergedVariables = promptVariables(
+            workflow: request.workflow,
+            step: step,
+            payload: executionPayload,
+            requestVariables: request.variables,
+            resolvedInputPayload: resolvedInput.payload
+          )
+          let prompts = composedPrompts(
+            workflow: request.workflow,
+            step: step,
+            payload: executionPayload,
+            variables: mergedVariables
+          )
+          let adapterInput = AdapterExecutionInput(
+            node: executionPayload,
+            promptText: prompts.promptText,
+            systemPromptText: prompts.systemPromptText,
+            arguments: request.variables,
+            mergedVariables: mergedVariables
+          )
+          publishResult = try await executeAndPublish(
+            adapterInput: adapterInput,
+            sessionId: session.sessionId,
+            step: step,
+            basePayload: basePayload,
+            transitions: transitions,
+            request: request,
+            executionIndex: executionIndex
+          )
+        }
+      } else if let addon = registryNode.addon {
+        publishResult = try await executeAddonAndPublish(
+          addon: addon,
+          sessionId: session.sessionId,
+          workflow: request.workflow,
+          step: step,
+          resolvedInputPayload: resolvedInput.payload,
+          transitions: transitions,
+          request: request,
+          executionIndex: executionIndex
+        )
+      } else {
+        throw DeterministicWorkflowRunnerError.missingNodePayload(step.nodeId)
+      }
       session = publishResult.session
       publishedTransitions += publishResult.publishedMessages.count
       rootOutput = publishResult.rootOutput ?? rootOutput
@@ -159,6 +206,108 @@ public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
       exitCode: loadedSession.status == .completed ? 0 : 1,
       transitions: publishedTransitions
     )
+  }
+
+  private func executeStdioNodeAndPublish(
+    kind: WorkflowStdioNodeExecutionKind,
+    payload: AgentNodePayload,
+    sessionId: String,
+    workflow: WorkflowDefinition,
+    step: WorkflowStepRef,
+    resolvedInputPayload: JSONObject,
+    transitions: [WorkflowStepTransition],
+    request: DeterministicWorkflowRunRequest,
+    executionIndex: Int
+  ) async throws -> WorkflowPublicationResult {
+    guard let stdioNodeExecutor else {
+      let adapterFailure = AdapterExecutionError(.providerError, "missing stdio-node executor for '\(kind.rawValue)' node '\(step.nodeId)'")
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw adapterFailure
+    }
+
+    do {
+      let result = try await stdioNodeExecutor.execute(
+        WorkflowStdioNodeExecutionInput(
+          workflowId: workflow.workflowId,
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          executionIndex: executionIndex,
+          kind: kind,
+          node: payload,
+          variables: request.variables,
+          resolvedInputPayload: resolvedInputPayload
+        ),
+        context: AdapterExecutionContext(deadline: deadline(for: step, request: request))
+      )
+      if let payload = result.payload {
+        let candidate = try normalizeRuntimeInlineCandidate(payload)
+        if let adapterFailure = multiplePublishableTransitionFailure(transitions: transitions, candidate: candidate) {
+          _ = try? await publisher.publishAcceptedOutput(
+            WorkflowPublicationRequest(
+              sessionId: sessionId,
+              stepId: step.id,
+              nodeId: step.nodeId,
+              attempt: executionIndex,
+              adapterFailure: adapterFailure,
+              transitions: transitions,
+              publishesRootOutput: transitions.isEmpty
+            )
+          )
+          throw adapterFailure
+        }
+      }
+      return try await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          inlineCandidate: result.payload,
+          outputContract: workflowOutputContract(from: payload.output),
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty,
+          allowsNoOutput: result.payload == nil
+        )
+      )
+    } catch let adapterFailure as AdapterExecutionError {
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw adapterFailure
+    } catch {
+      let adapterFailure = AdapterExecutionError(.providerError, String(describing: error))
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw error
+    }
   }
 
   private func workflowOutputContract(from output: NodeOutputContract?) -> WorkflowOutputContract? {
@@ -275,6 +424,148 @@ public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
     throw lastValidationError ?? WorkflowPublicationError.validationRejected("output validation rejected candidate")
   }
 
+  private func executeAddonAndPublish(
+    addon: WorkflowNodeAddonRef,
+    sessionId: String,
+    workflow: WorkflowDefinition,
+    step: WorkflowStepRef,
+    resolvedInputPayload: JSONObject,
+    transitions: [WorkflowStepTransition],
+    request: DeterministicWorkflowRunRequest,
+    executionIndex: Int
+  ) async throws -> WorkflowPublicationResult {
+    let attachments: [String: WorkflowAddonAttachmentValue]
+    do {
+      attachments = try await attachmentProjector.project(
+        WorkflowAddonAttachmentProjectionRequest(
+          workflowId: workflow.workflowId,
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          addon: addon,
+          preprojectedAttachments: request.addonAttachments,
+          descriptors: request.addonAttachmentDescriptors
+        )
+      )
+    } catch let projectionError as WorkflowAddonAttachmentProjectionError {
+      let adapterFailure = projectionError.adapterError
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw adapterFailure
+    } catch {
+      let adapterFailure = AdapterExecutionError(.policyBlocked, "native_attachment_projection_failed: \(String(describing: error))")
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw adapterFailure
+    }
+
+    let addonInput = WorkflowAddonExecutionInput(
+      workflowId: workflow.workflowId,
+      stepId: step.id,
+      nodeId: step.nodeId,
+      addon: addon,
+      variables: request.variables,
+      resolvedInputPayload: resolvedInputPayload,
+      attachments: attachments
+    )
+    guard let addonResolver else {
+      let adapterFailure = AdapterExecutionError(.providerError, "missing add-on resolver for '\(addon.name)'")
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw adapterFailure
+    }
+
+    let adapterOutput: AdapterExecutionOutput
+    do {
+      adapterOutput = try await addonResolver.execute(
+        addonInput,
+        context: AdapterExecutionContext(deadline: deadline(for: step, request: request))
+      )
+    } catch let adapterFailure as AdapterExecutionError {
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw adapterFailure
+    } catch {
+      let adapterFailure = AdapterExecutionError(.providerError, String(describing: error))
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw error
+    }
+
+    let candidate = try normalizeRuntimeAdapterOutput(adapterOutput)
+    if let adapterFailure = multiplePublishableTransitionFailure(transitions: transitions, candidate: candidate) {
+      _ = try? await publisher.publishAcceptedOutput(
+        WorkflowPublicationRequest(
+          sessionId: sessionId,
+          stepId: step.id,
+          nodeId: step.nodeId,
+          attempt: executionIndex,
+          adapterFailure: adapterFailure,
+          adapterOutput: adapterOutput,
+          transitions: transitions,
+          publishesRootOutput: transitions.isEmpty
+        )
+      )
+      throw adapterFailure
+    }
+    return try await publisher.publishAcceptedOutput(
+      WorkflowPublicationRequest(
+        sessionId: sessionId,
+        stepId: step.id,
+        nodeId: step.nodeId,
+        attempt: executionIndex,
+        adapterOutput: adapterOutput,
+        transitions: transitions,
+        publishesRootOutput: transitions.isEmpty
+      )
+    )
+  }
+
   private func maxValidationAttempts(from output: NodeOutputContract?) -> Int {
     max(1, output?.maxValidationAttempts ?? 1)
   }
@@ -389,6 +680,7 @@ public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
 
 public enum DeterministicWorkflowRunnerError: Error, Equatable, Sendable {
   case invalidWorkflow(String)
+  case missingNode(String)
   case missingStep(String)
   case missingNodePayload(String)
   case missingPromptVariant(String, String)

@@ -1825,10 +1825,10 @@ That means:
   "last response"
 
 Workers return candidate payloads through their backend-specific channel such
-as prompt response, JSON stdin/stdout, an executor-private request file, or an
-in-process add-on return value. Runtime-owned candidate staging paths may exist
-for structured output validation, but they are not a stable mailbox ABI and
-must not be named `outbox/output.json`.
+as prompt response, JSON stdin/stdout, or an in-process add-on return value.
+Runtime-owned candidate staging paths may exist for structured output
+validation, but they are not a stable mailbox ABI and must not be named
+`outbox/output.json`.
 
 This is especially important for nodes that declare `output.jsonSchema`.
 

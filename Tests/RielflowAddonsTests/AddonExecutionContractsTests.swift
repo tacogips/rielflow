@@ -56,4 +56,31 @@ final class AddonExecutionContractsTests: XCTestCase {
     }
     XCTAssertEqual(diagnostics.first?.code, "UNKNOWN_ADDON")
   }
+
+  func testAddonInputsDefaultMissingAttachmentsWhenDecodingLegacyJSON() throws {
+    let addonExecutionJSON = """
+    {
+      "addonName": "native-runner",
+      "nodePayload": { "prompt": "hello" },
+      "variables": {},
+      "source": { "packageName": "pkg", "addonName": "native-runner", "builtin": false }
+    }
+    """
+    let addonInput = try JSONDecoder().decode(AddonExecutionInput.self, from: Data(addonExecutionJSON.utf8))
+    XCTAssertEqual(addonInput.attachments, [:])
+    XCTAssertEqual(addonInput.options.boundary, .async)
+
+    let workflowAddonJSON = """
+    {
+      "workflowId": "workflow-a",
+      "stepId": "step-a",
+      "nodeId": "node-a",
+      "addon": { "name": "native-runner" },
+      "variables": {},
+      "resolvedInputPayload": {}
+    }
+    """
+    let workflowInput = try JSONDecoder().decode(WorkflowAddonExecutionInput.self, from: Data(workflowAddonJSON.utf8))
+    XCTAssertEqual(workflowInput.attachments, [:])
+  }
 }

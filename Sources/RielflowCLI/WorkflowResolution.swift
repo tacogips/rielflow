@@ -1,4 +1,5 @@
 import Foundation
+import RielflowAddons
 import RielflowCore
 
 public struct ResolvedWorkflowBundle: Equatable, Sendable {
@@ -7,19 +8,22 @@ public struct ResolvedWorkflowBundle: Equatable, Sendable {
   public var sourceScope: WorkflowScope
   public var workflowDirectory: String
   public var diagnostics: [WorkflowValidationDiagnostic]
+  public var packageManifest: WorkflowPackageManifest?
 
   public init(
     workflow: WorkflowDefinition,
     nodePayloads: [String: AgentNodePayload],
     sourceScope: WorkflowScope,
     workflowDirectory: String,
-    diagnostics: [WorkflowValidationDiagnostic] = []
+    diagnostics: [WorkflowValidationDiagnostic] = [],
+    packageManifest: WorkflowPackageManifest? = nil
   ) {
     self.workflow = workflow
     self.nodePayloads = nodePayloads
     self.sourceScope = sourceScope
     self.workflowDirectory = workflowDirectory
     self.diagnostics = diagnostics
+    self.packageManifest = packageManifest
   }
 }
 
@@ -135,13 +139,23 @@ public struct FileSystemWorkflowBundleResolver: WorkflowBundleResolving {
       }
       nodePayloads[registryNode.id] = hydratedPayload
     }
+    let packageManifest = try loadPackageManifestIfPresent(at: directory)
     return ResolvedWorkflowBundle(
       workflow: workflow,
       nodePayloads: nodePayloads,
       sourceScope: scope,
       workflowDirectory: directory.path,
-      diagnostics: validation.diagnostics
+      diagnostics: validation.diagnostics,
+      packageManifest: packageManifest
     )
+  }
+
+  private func loadPackageManifestIfPresent(at directory: URL) throws -> WorkflowPackageManifest? {
+    let manifestURL = directory.appendingPathComponent("rielflow-package.json")
+    guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+      return nil
+    }
+    return try JSONDecoder().decode(WorkflowPackageManifest.self, from: Data(contentsOf: manifestURL))
   }
 
   private func containedFile(_ file: URL, in directory: URL, scope: WorkflowScope, label: String) throws -> URL {

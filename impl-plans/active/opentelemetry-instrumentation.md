@@ -245,7 +245,6 @@ interface BackendAdapterSpanAttributes {
 ### 5. Communication And Mailbox Spans
 
 #### packages/rielflow/src/workflow/communication-service.ts
-#### packages/rielflow/src/workflow/communication-artifact-persistence.ts
 #### packages/rielflow/src/workflow/node-execution-mailbox.ts
 #### packages/rielflow/src/workflow/engine/mailbox-and-communications.ts
 #### packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts

@@ -93,6 +93,7 @@ public struct WorkflowStepExecutionUpdateInput: Equatable, Sendable {
   public var acceptedOutput: WorkflowAcceptedOutputMetadata?
   public var adapterOutput: WorkflowAdapterOutputMetadata?
   public var failureReason: String?
+  public var completesRootWithoutOutput: Bool
 
   public init(
     sessionId: String,
@@ -100,7 +101,8 @@ public struct WorkflowStepExecutionUpdateInput: Equatable, Sendable {
     status: WorkflowStepExecutionStatus,
     acceptedOutput: WorkflowAcceptedOutputMetadata? = nil,
     adapterOutput: WorkflowAdapterOutputMetadata? = nil,
-    failureReason: String? = nil
+    failureReason: String? = nil,
+    completesRootWithoutOutput: Bool = false
   ) {
     self.sessionId = sessionId
     self.executionId = executionId
@@ -108,6 +110,7 @@ public struct WorkflowStepExecutionUpdateInput: Equatable, Sendable {
     self.acceptedOutput = acceptedOutput
     self.adapterOutput = adapterOutput
     self.failureReason = failureReason
+    self.completesRootWithoutOutput = completesRootWithoutOutput
   }
 }
 
@@ -319,7 +322,7 @@ public actor InMemoryWorkflowRuntimeStore: WorkflowRuntimeStore {
     switch input.status {
     case .failed:
       session.status = .failed
-    case .completed where input.acceptedOutput?.isRootOutput == true:
+    case .completed where input.acceptedOutput?.isRootOutput == true || input.completesRootWithoutOutput:
       session.status = .completed
     case .completed, .running:
       session.status = .running

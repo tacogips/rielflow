@@ -309,6 +309,97 @@ final class DeterministicWorkflowRunnerTests: XCTestCase {
     XCTAssertGreaterThan(deadline.timeIntervalSinceNow, 0)
   }
 
+  func testAddonOnlyNodePublishesThroughInjectedResolver() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let resolver = CapturingAddonResolver(output: output(payload: ["status": .string("addon-ok")]))
+    let runner = DeterministicWorkflowRunner(store: store, addonResolver: resolver)
+
+    let result = try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: addonWorkflow(),
+      variables: ["request": .string("value")]
+    ))
+
+    XCTAssertEqual(result.status, .completed)
+    XCTAssertEqual(result.rootOutput, ["status": .string("addon-ok")])
+    XCTAssertEqual(result.nodeExecutions, 1)
+    let maybeCaptured = await resolver.capturedInput()
+    let captured = try XCTUnwrap(maybeCaptured)
+    XCTAssertEqual(captured.workflowId, "addon-runner")
+    XCTAssertEqual(captured.stepId, "addon-step")
+    XCTAssertEqual(captured.nodeId, "addon-node")
+    XCTAssertEqual(captured.addon.name, "rielflow/native-runner")
+    XCTAssertEqual(captured.variables["request"], .string("value"))
+  }
+
+  func testAddonOnlyNodeProjectsInlineAttachmentDescriptorsBeforeResolver() async throws {
+    let resolver = CapturingAddonResolver(output: output(payload: ["status": .string("addon-ok")]))
+    let runner = DeterministicWorkflowRunner(addonResolver: resolver)
+
+    let result = try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: addonWorkflow(),
+      addonAttachmentDescriptors: [
+        "attachmentId": WorkflowAddonAttachmentDescriptor(
+          id: "att_123",
+          mediaType: "text/plain",
+          filename: "note.txt",
+          contentText: "hello native"
+        )
+      ]
+    ))
+
+    XCTAssertEqual(result.status, .completed)
+    let maybeCaptured = await resolver.capturedInput()
+    let captured = try XCTUnwrap(maybeCaptured)
+    let attachment = try XCTUnwrap(captured.attachments["attachmentId"])
+    XCTAssertEqual(attachment.id, "att_123")
+    XCTAssertEqual(attachment.mediaType, "text/plain")
+    XCTAssertEqual(attachment.filename, "note.txt")
+    XCTAssertEqual(attachment.sizeBytes, "hello native".utf8.count)
+    XCTAssertTrue(attachment.sha256.hasPrefix("sha256:"))
+    XCTAssertEqual(attachment.contentText, "hello native")
+    XCTAssertNil(attachment.contentBase64)
+  }
+
+  func testAddonOnlyNodeRejectsHostPathAttachmentDescriptorsBeforeResolver() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let resolver = CapturingAddonResolver(output: output(payload: ["status": .string("should-not-run")]))
+    let runner = DeterministicWorkflowRunner(store: store, addonResolver: resolver)
+
+    await XCTAssertThrowsErrorAsync(try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: addonWorkflow(),
+      addonAttachmentDescriptors: [
+        "attachmentId": WorkflowAddonAttachmentDescriptor(
+          id: "att_123",
+          mediaType: "text/plain",
+          filename: "note.txt",
+          localPath: "/tmp/secret.txt"
+        )
+      ]
+    )))
+
+    let captured = await resolver.capturedInput()
+    XCTAssertNil(captured)
+    let maybeSession = await store.loadSessionForTest(id: "addon-runner-session-1")
+    let session = try XCTUnwrap(maybeSession)
+    XCTAssertEqual(session.status, .failed)
+    XCTAssertEqual(session.executions.first?.status, .failed)
+    XCTAssertTrue(session.executions.first?.failureReason?.contains("native_attachment_metadata_only") == true)
+  }
+
+  func testAddonOnlyNodeWithoutResolverRecordsFailure() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let runner = DeterministicWorkflowRunner(store: store)
+
+    await XCTAssertThrowsErrorAsync(try await runner.run(DeterministicWorkflowRunRequest(workflow: addonWorkflow())))
+
+    let maybeSession = await store.loadSessionForTest(id: "addon-runner-session-1")
+    let session = try XCTUnwrap(maybeSession)
+    XCTAssertEqual(session.status, .failed)
+    XCTAssertEqual(session.executions.count, 1)
+    XCTAssertEqual(session.executions.first?.status, .failed)
+    XCTAssertTrue(session.executions.first?.failureReason?.contains("missing add-on resolver") == true)
+  }
+
   func testRunRendersHydratedPromptTemplateAndPromptVariantBeforeAdapterExecution() async throws {
     let adapter = InputCapturingAdapter()
     let workflow = WorkflowDefinition(
@@ -423,6 +514,106 @@ final class DeterministicWorkflowRunnerTests: XCTestCase {
     }
   }
 
+  func testCommandNodePublishesValidStdoutOutputThroughRuntimeStore() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let executor = StaticStdioNodeExecutor(result: WorkflowStdioNodeExecutionResult(payload: ["status": .string("ok")]))
+    let runner = DeterministicWorkflowRunner(store: store, stdioNodeExecutor: executor)
+    let result = try await runner.run(request(nodePayload: commandPayload()))
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertEqual(result.rootOutput, ["status": .string("ok")])
+    let capturedInputs = await executor.capturedInputs()
+    let capturedInput = try XCTUnwrap(capturedInputs.first)
+    XCTAssertEqual(capturedInput.workflowId, "runner")
+    XCTAssertEqual(capturedInput.stepId, "step")
+    XCTAssertEqual(capturedInput.kind, .command)
+    let loadedSession = await store.loadSessionForTest(id: result.session.sessionId)
+    let session = try XCTUnwrap(loadedSession)
+    XCTAssertEqual(session.executions.first?.acceptedOutput?.payload, ["status": .string("ok")])
+  }
+
+  func testCommandNodeEmptyStdoutCompletesWithoutAcceptedOutput() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let runner = DeterministicWorkflowRunner(
+      store: store,
+      stdioNodeExecutor: StaticStdioNodeExecutor(result: WorkflowStdioNodeExecutionResult(payload: nil))
+    )
+    let result = try await runner.run(request(nodePayload: commandPayload()))
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertNil(result.rootOutput)
+    let loadedSession = await store.loadSessionForTest(id: result.session.sessionId)
+    let session = try XCTUnwrap(loadedSession)
+    XCTAssertEqual(session.status, .completed)
+    XCTAssertEqual(session.executions.first?.status, .completed)
+    XCTAssertNil(session.executions.first?.acceptedOutput)
+    let messages = try await store.listMessages(for: session.sessionId, toStepId: nil)
+    XCTAssertEqual(messages, [])
+  }
+
+  func testCommandNodeInvalidStdoutRecordsFailedExecution() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let runner = DeterministicWorkflowRunner(
+      store: store,
+      stdioNodeExecutor: StaticStdioNodeExecutor(error: AdapterExecutionError(.invalidOutput, "stdout invalid JSONL"))
+    )
+
+    await XCTAssertThrowsErrorAsync(try await runner.run(request(nodePayload: commandPayload())))
+
+    let loadedSession = await store.loadSessionForTest(id: "runner-session-1")
+    let session = try XCTUnwrap(loadedSession)
+    XCTAssertEqual(session.status, .failed)
+    XCTAssertEqual(session.executions.first?.status, .failed)
+    XCTAssertEqual(session.executions.first?.failureReason, "invalid_output: stdout invalid JSONL")
+  }
+
+  func testCommandNodeMultiplePublishableTransitionsFailClosed() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let workflow = WorkflowDefinition(
+      workflowId: "runner",
+      defaults: WorkflowDefaults(nodeTimeoutMs: 120_000, maxLoopIterations: 3),
+      entryStepId: "step",
+      nodeRegistry: [
+        WorkflowNodeRegistryRef(id: "node", nodeFile: "nodes/node.json"),
+        WorkflowNodeRegistryRef(id: "left-node", nodeFile: "nodes/left-node.json"),
+        WorkflowNodeRegistryRef(id: "right-node", nodeFile: "nodes/right-node.json"),
+      ],
+      steps: [
+        WorkflowStepRef(
+          id: "step",
+          nodeId: "node",
+          transitions: [
+            WorkflowStepTransition(toStepId: "left"),
+            WorkflowStepTransition(toStepId: "right"),
+          ]
+        ),
+        WorkflowStepRef(id: "left", nodeId: "left-node"),
+        WorkflowStepRef(id: "right", nodeId: "right-node"),
+      ],
+      nodes: [
+        WorkflowNodeRef(id: "step", nodeFile: "nodes/node.json"),
+        WorkflowNodeRef(id: "left", nodeFile: "nodes/left-node.json"),
+        WorkflowNodeRef(id: "right", nodeFile: "nodes/right-node.json"),
+      ]
+    )
+    let runner = DeterministicWorkflowRunner(
+      store: store,
+      stdioNodeExecutor: StaticStdioNodeExecutor(result: WorkflowStdioNodeExecutionResult(payload: ["status": .string("ok")]))
+    )
+
+    await XCTAssertThrowsErrorAsync(try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: workflow,
+      nodePayloads: ["node": commandPayload()]
+    )))
+
+    let loadedSession = await store.loadSessionForTest(id: "runner-session-1")
+    let session = try XCTUnwrap(loadedSession)
+    XCTAssertEqual(session.status, .failed)
+    XCTAssertEqual(session.executions.first?.failureReason, "invalid_output: multiple direct transitions are not supported by the Swift TASK-007 sequential runner")
+    let messages = try await store.listMessages(for: session.sessionId, toStepId: nil)
+    XCTAssertEqual(messages, [])
+  }
+
   private func request(
     workflow: WorkflowDefinition? = nil,
     nodePayload: AgentNodePayload? = nil,
@@ -452,8 +643,39 @@ final class DeterministicWorkflowRunnerTests: XCTestCase {
     )
   }
 
+  private func addonWorkflow() -> WorkflowDefinition {
+    WorkflowDefinition(
+      workflowId: "addon-runner",
+      defaults: WorkflowDefaults(nodeTimeoutMs: 120_000, maxLoopIterations: 3),
+      entryStepId: "addon-step",
+      nodeRegistry: [
+        WorkflowNodeRegistryRef(
+          id: "addon-node",
+          addon: WorkflowNodeAddonRef(name: "rielflow/native-runner", version: "1.0.0")
+        )
+      ],
+      steps: [WorkflowStepRef(id: "addon-step", nodeId: "addon-node")],
+      nodes: [
+        WorkflowNodeRef(
+          id: "addon-node",
+          addon: WorkflowNodeAddonRef(name: "rielflow/native-runner", version: "1.0.0")
+        )
+      ]
+    )
+  }
+
   private func payload(output: NodeOutputContract? = nil) -> AgentNodePayload {
     AgentNodePayload(id: "node", executionBackend: .codexAgent, model: "gpt-5-nano", output: output)
+  }
+
+  private func commandPayload(output: NodeOutputContract? = nil) -> AgentNodePayload {
+    AgentNodePayload(
+      id: "node",
+      nodeType: .command,
+      model: "",
+      command: WorkflowCommandExecution(executable: "/bin/sh", arguments: ["-c", "true"]),
+      output: output
+    )
   }
 
   private func output(
@@ -521,6 +743,50 @@ private actor InputCapturingAdapter: NodeAdapter {
 
   func capturedInput() -> AdapterExecutionInput? {
     input
+  }
+}
+
+private actor CapturingAddonResolver: WorkflowAddonResolving {
+  private var input: WorkflowAddonExecutionInput?
+  var output: AdapterExecutionOutput
+
+  init(output: AdapterExecutionOutput) {
+    self.output = output
+  }
+
+  func execute(_ input: WorkflowAddonExecutionInput, context: AdapterExecutionContext) async throws -> AdapterExecutionOutput {
+    self.input = input
+    return output
+  }
+
+  func capturedInput() -> WorkflowAddonExecutionInput? {
+    input
+  }
+}
+
+private actor StaticStdioNodeExecutor: WorkflowStdioNodeExecuting {
+  private let result: WorkflowStdioNodeExecutionResult?
+  private let error: AdapterExecutionError?
+  private var inputs: [WorkflowStdioNodeExecutionInput] = []
+
+  init(result: WorkflowStdioNodeExecutionResult? = nil, error: AdapterExecutionError? = nil) {
+    self.result = result
+    self.error = error
+  }
+
+  func execute(
+    _ input: WorkflowStdioNodeExecutionInput,
+    context: AdapterExecutionContext
+  ) async throws -> WorkflowStdioNodeExecutionResult {
+    inputs.append(input)
+    if let error {
+      throw error
+    }
+    return result ?? WorkflowStdioNodeExecutionResult(payload: nil)
+  }
+
+  func capturedInputs() -> [WorkflowStdioNodeExecutionInput] {
+    inputs
   }
 }
 

@@ -18,6 +18,7 @@ public enum WorkflowPackageAddonExecutionKind: String, Codable, Sendable {
   case declarative
   case container
   case localCommand = "local-command"
+  case nativeBundle = "native-bundle"
 }
 
 public struct WorkflowAddonCapability: Codable, Equatable, Sendable {
@@ -139,17 +140,26 @@ public struct WorkflowPackageAddonExecutionDescriptor: Codable, Equatable, Senda
   public var kind: WorkflowPackageAddonExecutionKind
   public var entrypoint: String?
   public var containerfilePath: String?
+  public var abiVersion: Int?
+  public var bundleIdentifier: String?
+  public var codeSignatureRequirement: String?
   public var runtimeHints: [String]
 
   public init(
     kind: WorkflowPackageAddonExecutionKind,
     entrypoint: String? = nil,
     containerfilePath: String? = nil,
+    abiVersion: Int? = nil,
+    bundleIdentifier: String? = nil,
+    codeSignatureRequirement: String? = nil,
     runtimeHints: [String] = []
   ) {
     self.kind = kind
     self.entrypoint = entrypoint
     self.containerfilePath = containerfilePath
+    self.abiVersion = abiVersion
+    self.bundleIdentifier = bundleIdentifier
+    self.codeSignatureRequirement = codeSignatureRequirement
     self.runtimeHints = runtimeHints
   }
 
@@ -157,6 +167,9 @@ public struct WorkflowPackageAddonExecutionDescriptor: Codable, Equatable, Senda
     case kind
     case entrypoint
     case containerfilePath
+    case abiVersion
+    case bundleIdentifier
+    case codeSignatureRequirement
     case runtimeHints
   }
 
@@ -166,6 +179,9 @@ public struct WorkflowPackageAddonExecutionDescriptor: Codable, Equatable, Senda
     self.kind = try container.decode(WorkflowPackageAddonExecutionKind.self, forKey: .kind)
     self.entrypoint = try container.decodeIfPresent(String.self, forKey: .entrypoint)
     self.containerfilePath = try container.decodeIfPresent(String.self, forKey: .containerfilePath)
+    self.abiVersion = try container.decodeIfPresent(Int.self, forKey: .abiVersion)
+    self.bundleIdentifier = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier)
+    self.codeSignatureRequirement = try container.decodeIfPresent(String.self, forKey: .codeSignatureRequirement)
     self.runtimeHints = try container.decodeIfPresent([String].self, forKey: .runtimeHints) ?? []
   }
 }
@@ -219,6 +235,12 @@ public struct WorkflowPackageManifestAddonDependencyLock: Codable, Equatable, Se
   public var name: String
   public var version: String
   public var contentDigest: String?
+  public var executionKind: WorkflowPackageAddonExecutionKind?
+  public var abiVersion: Int?
+  public var bundleIdentifier: String?
+  public var dependencyClosureDigest: String?
+  public var codeSignatureRequirementDigest: String?
+  public var sourceScope: String?
   public var capabilityGrant: [String: WorkflowPackageAddonCapabilityGrant]
   public var optional: Bool
 
@@ -226,12 +248,24 @@ public struct WorkflowPackageManifestAddonDependencyLock: Codable, Equatable, Se
     name: String,
     version: String,
     contentDigest: String? = nil,
+    executionKind: WorkflowPackageAddonExecutionKind? = nil,
+    abiVersion: Int? = nil,
+    bundleIdentifier: String? = nil,
+    dependencyClosureDigest: String? = nil,
+    codeSignatureRequirementDigest: String? = nil,
+    sourceScope: String? = nil,
     capabilityGrant: [String: WorkflowPackageAddonCapabilityGrant] = [:],
     optional: Bool = false
   ) {
     self.name = name
     self.version = version
     self.contentDigest = contentDigest
+    self.executionKind = executionKind
+    self.abiVersion = abiVersion
+    self.bundleIdentifier = bundleIdentifier
+    self.dependencyClosureDigest = dependencyClosureDigest
+    self.codeSignatureRequirementDigest = codeSignatureRequirementDigest
+    self.sourceScope = sourceScope
     self.capabilityGrant = capabilityGrant
     self.optional = optional
   }
@@ -240,6 +274,12 @@ public struct WorkflowPackageManifestAddonDependencyLock: Codable, Equatable, Se
     case name
     case version
     case contentDigest
+    case executionKind
+    case abiVersion
+    case bundleIdentifier
+    case dependencyClosureDigest
+    case codeSignatureRequirementDigest
+    case sourceScope
     case capabilityGrant
     case optional
   }
@@ -250,6 +290,12 @@ public struct WorkflowPackageManifestAddonDependencyLock: Codable, Equatable, Se
     self.name = try container.decode(String.self, forKey: .name)
     self.version = try container.decode(String.self, forKey: .version)
     self.contentDigest = try container.decodeIfPresent(String.self, forKey: .contentDigest)
+    self.executionKind = try container.decodeIfPresent(WorkflowPackageAddonExecutionKind.self, forKey: .executionKind)
+    self.abiVersion = try container.decodeIfPresent(Int.self, forKey: .abiVersion)
+    self.bundleIdentifier = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier)
+    self.dependencyClosureDigest = try container.decodeIfPresent(String.self, forKey: .dependencyClosureDigest)
+    self.codeSignatureRequirementDigest = try container.decodeIfPresent(String.self, forKey: .codeSignatureRequirementDigest)
+    self.sourceScope = try container.decodeIfPresent(String.self, forKey: .sourceScope)
     self.capabilityGrant = try container.decodeIfPresent([String: WorkflowPackageAddonCapabilityGrant].self, forKey: .capabilityGrant) ?? [:]
     self.optional = try container.decodeIfPresent(Bool.self, forKey: .optional) ?? false
   }
@@ -578,7 +624,8 @@ public enum WorkflowPackageManifestValidator {
     "container.build",
     "container.run",
     "device.gpu",
-    "env.read"
+    "env.read",
+    "attachment.read"
   ]
 
   private static let sensitiveAddonCapabilityNames: Set<String> = [
@@ -655,9 +702,40 @@ public enum WorkflowPackageManifestValidator {
         issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons", message: "node-addon dependency requires add-on locks"))
       }
       for (lockIndex, lock) in dependency.addons.enumerated() {
+        if let contentDigest = lock.contentDigest, !isSha256Digest(contentDigest) {
+          issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons[\(lockIndex)].contentDigest", message: "contentDigest must be sha256:<64 lowercase hex>"))
+        }
+        if lock.executionKind == .nativeBundle, lock.contentDigest == nil {
+          issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons[\(lockIndex)].contentDigest", message: "native-bundle dependency locks require a contentDigest"))
+        }
+        if lock.executionKind == .nativeBundle {
+          if lock.abiVersion != 1 {
+            issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons[\(lockIndex)].abiVersion", message: "native-bundle dependency locks require abiVersion 1"))
+          }
+          if let bundleIdentifier = lock.bundleIdentifier, isSafeBundleIdentifier(bundleIdentifier) {
+          } else {
+            issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons[\(lockIndex)].bundleIdentifier", message: "native-bundle dependency locks require a safe reverse-DNS bundleIdentifier"))
+          }
+          if let dependencyClosureDigest = lock.dependencyClosureDigest, !isSha256Digest(dependencyClosureDigest) {
+            issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons[\(lockIndex)].dependencyClosureDigest", message: "dependencyClosureDigest must be sha256:<64 lowercase hex>"))
+          }
+          if let codeSignatureRequirementDigest = lock.codeSignatureRequirementDigest, !isSha256Digest(codeSignatureRequirementDigest) {
+            issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons[\(lockIndex)].codeSignatureRequirementDigest", message: "codeSignatureRequirementDigest must be sha256:<64 lowercase hex>"))
+          }
+          if let sourceScope = lock.sourceScope, sourceScope.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons[\(lockIndex)].sourceScope", message: "sourceScope must be non-empty when present"))
+          }
+        }
         for (capabilityName, grant) in lock.capabilityGrant {
           if !addonCapabilityNames.contains(capabilityName) {
             issues.append(.init(code: "INVALID_MANIFEST", path: "dependencies[\(index)].addons[\(lockIndex)].capabilityGrant", message: "capabilityGrant contains unknown capability"))
+          }
+          if lock.executionKind == .nativeBundle, isNativeBundleForbiddenCapability(capabilityName) {
+            issues.append(.init(
+              code: "INVALID_MANIFEST",
+              path: "dependencies[\(index)].addons[\(lockIndex)].capabilityGrant.\(capabilityName)",
+              message: "native-bundle add-ons must use attachment.read instead of generic filesystem grants"
+            ))
           }
           validateCapabilityScope(grant.scope, path: "dependencies[\(index)].addons[\(lockIndex)].capabilityGrant.\(capabilityName).scope", into: &issues)
         }
@@ -673,6 +751,9 @@ public enum WorkflowPackageManifestValidator {
       }
       if let execution = addon.execution {
         validateAddonExecution(execution, addonIndex: index, into: &issues)
+        if execution.kind == .nativeBundle, manifest.kind != .nodeAddon {
+          issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution.kind", message: "native-bundle execution is only allowed in node-addon packages"))
+        }
         if execution.kind != .declarative {
           if addon.capabilities.isEmpty {
             issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].capabilities", message: "capabilities are required for executable add-ons"))
@@ -685,7 +766,7 @@ public enum WorkflowPackageManifestValidator {
       if addon.capabilities.contains(where: { $0.name.isEmpty }) {
         issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].capabilities", message: "capability names must be non-empty"))
       }
-      validateCapabilities(addon.capabilities, path: "addons[\(index)].capabilities", into: &issues)
+      validateCapabilities(addon.capabilities, path: "addons[\(index)].capabilities", nativeBundle: addon.execution?.kind == .nativeBundle, into: &issues)
     }
     if manifest.kind == .nodeAddon {
       if manifest.workflow != nil || manifest.workflowDirectory != nil {
@@ -750,11 +831,14 @@ public enum WorkflowPackageManifestValidator {
     value.range(of: #"^sha256:[a-f0-9]{64}$"#, options: .regularExpression) != nil
   }
 
-  private static func validateCapabilities(_ capabilities: [WorkflowAddonCapability], path: String, into issues: inout [WorkflowPackageValidationIssue]) {
+  private static func validateCapabilities(_ capabilities: [WorkflowAddonCapability], path: String, nativeBundle: Bool, into issues: inout [WorkflowPackageValidationIssue]) {
     var seen = Set<String>()
     for (index, capability) in capabilities.enumerated() {
       if !addonCapabilityNames.contains(capability.name) {
         issues.append(.init(code: "INVALID_MANIFEST", path: "\(path)[\(index)].name", message: "capability name is unsupported"))
+      }
+      if nativeBundle, isNativeBundleForbiddenCapability(capability.name) {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "\(path)[\(index)].name", message: "native-bundle add-ons must use attachment.read instead of generic filesystem grants"))
       }
       validateCapabilityScope(capability.scope, path: "\(path)[\(index)].scope", into: &issues)
       if let reason = capability.reason, reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -808,6 +892,9 @@ public enum WorkflowPackageManifestValidator {
           message: "declarative execution must not declare executable artifacts"
         ))
       }
+      if execution.abiVersion != nil || execution.bundleIdentifier != nil || execution.codeSignatureRequirement != nil {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution", message: "declarative execution must not declare native-bundle metadata"))
+      }
     case .container, .localCommand:
       if execution.entrypoint == nil && execution.containerfilePath == nil {
         issues.append(.init(
@@ -816,7 +903,41 @@ public enum WorkflowPackageManifestValidator {
           message: "executable add-on execution must declare an entrypoint or containerfilePath"
         ))
       }
+      if execution.abiVersion != nil || execution.bundleIdentifier != nil || execution.codeSignatureRequirement != nil {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution", message: "container and local-command execution must not declare native-bundle metadata"))
+      }
+    case .nativeBundle:
+      guard let entrypoint = execution.entrypoint else {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution.entrypoint", message: "native-bundle execution requires a .bundle entrypoint"))
+        break
+      }
+      if !entrypoint.hasSuffix(".bundle") {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution.entrypoint", message: "native-bundle execution entrypoint must end with .bundle"))
+      }
+      if execution.containerfilePath != nil {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution.containerfilePath", message: "native-bundle execution must not declare containerfilePath"))
+      }
+      if execution.abiVersion != 1 {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution.abiVersion", message: "native-bundle execution requires abiVersion 1"))
+      }
+      if let bundleIdentifier = execution.bundleIdentifier, isSafeBundleIdentifier(bundleIdentifier) {
+      } else {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution.bundleIdentifier", message: "native-bundle execution requires a safe reverse-DNS bundleIdentifier"))
+      }
+      if let codeSignatureRequirement = execution.codeSignatureRequirement,
+        codeSignatureRequirement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      {
+        issues.append(.init(code: "INVALID_MANIFEST", path: "addons[\(index)].execution.codeSignatureRequirement", message: "codeSignatureRequirement must be non-empty when present"))
+      }
     }
+  }
+
+  private static func isNativeBundleForbiddenCapability(_ name: String) -> Bool {
+    name == "filesystem.read" || name == "filesystem.write"
+  }
+
+  private static func isSafeBundleIdentifier(_ value: String) -> Bool {
+    value.range(of: #"^[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z][A-Za-z0-9-]*){2,}$"#, options: .regularExpression) != nil
   }
 
   private static func validateAddonArtifactPath(_ value: String?, path: String, into issues: inout [WorkflowPackageValidationIssue]) {

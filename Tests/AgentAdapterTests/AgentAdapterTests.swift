@@ -955,6 +955,21 @@ final class AgentAdapterTests: XCTestCase {
     XCTAssertEqual(result.stderr.count, 262_144)
   }
 
+  func testFoundationRunnerUnsetsAmbientEnvironmentKeys() async throws {
+    let runner = FoundationLocalAgentProcessRunner()
+    let result = try await runner.run(
+      configuration: LocalAgentProcessConfiguration(
+        executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+        unsetEnvironmentKeys: ["PATH"]
+      ),
+      stdin: "",
+      deadline: Date(timeIntervalSinceNow: 2)
+    )
+
+    XCTAssertEqual(result.terminationStatus, 0)
+    XCTAssertFalse(result.stdout.split(separator: "\n").contains { $0.hasPrefix("PATH=") })
+  }
+
   func testFoundationRunnerClosesChildUnusedPipeDescriptorsForStdinEOF() async throws {
     let runner = FoundationLocalAgentProcessRunner()
     let result = try await runner.run(

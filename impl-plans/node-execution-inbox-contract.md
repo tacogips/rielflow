@@ -18,7 +18,7 @@ Current rules:
 - resolved input snapshots live under runtime-owned `resolved-input/`
 - final workflow message publication is runtime-owned after validation
 - native command and container workers receive resolved input through
-  `RIEL_RESOLVED_INPUT_PATH` and stdin
+  stdin JSONL
 - non-message attachments remain under `RIEL_ATTACHMENT_ROOT`
 - legacy execution-local inbox/outbox paths and legacy mailbox environment
   variables must not be used for node message input or output
@@ -39,12 +39,12 @@ Replacement behavior:
 
 - `packages/rielflow/src/workflow/node-execution-mailbox.ts` builds resolved
   structured node input from SQLite-backed communications and runtime state.
-- `packages/rielflow/src/workflow/communication-artifact-persistence.ts`
+- `packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts`
   persists communication state through SQLite-backed message records and no
   longer materializes communication mirror files.
 - `packages/rielflow-addons/src/native-node-executor/template-env-and-containers.ts`
-  passes native command/container input through executor-private resolved-input
-  request files and stdin, and reads native candidate output from stdout JSON.
+  passes native command/container input through stdin JSONL and reads native
+  candidate output from stdout JSONL.
 - Agent prompts and output-contract prompts describe runtime-owned workflow
   message publication and reserved Candidate-Path submission, not worker-owned
   message files.
