@@ -234,6 +234,30 @@ function extractAssistantMessageText(event: CursorAgentEvent): string | null {
   return text.length === 0 ? null : text;
 }
 
+const COMPOSER_MODEL_PREFIX = "composer-";
+
+function modelSupportsCursorEffortSuffix(model: string): boolean {
+  return !model.startsWith(COMPOSER_MODEL_PREFIX);
+}
+
+function resolveCursorAgentEffort(
+  model: string,
+  effort: string | undefined,
+): string | undefined {
+  if (effort === undefined || !modelSupportsCursorEffortSuffix(model)) {
+    return undefined;
+  }
+  return effort;
+}
+
+function summarizeCursorAgentFailure(stderr: string): string | undefined {
+  const line = stderr
+    .split(/\r?\n/u)
+    .map((entry) => entry.trim())
+    .find((entry) => entry.length > 0);
+  return line;
+}
+
 function resolveLocalSessionConfig(
   config: CursorAdapterConfig,
   input: AdapterExecutionInput,
@@ -246,13 +270,14 @@ function resolveLocalSessionConfig(
   const cwd = config.cwd ?? input.workingDirectory;
   const streamMode: CursorAgentStreamMode = config.streamMode ?? "event";
   const images = resolveAdapterImagePaths(input);
+  const effort = resolveCursorAgentEffort(input.node.model, input.node.effort);
   const baseRequest: Omit<CursorAgentRequest, "prompt" | "sessionId"> = {
     cwd,
     ...(input.systemPromptText === undefined
       ? {}
       : { systemPrompt: input.systemPromptText }),
     model: input.node.model,
-    ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
+    ...(effort === undefined ? {} : { effort }),
     ...(config.mode === undefined ? {} : { mode: config.mode }),
     ...(images.length === 0 ? {} : { images }),
     streamMode,
@@ -399,9 +424,10 @@ async function executeLocalCursorAgent(
           "cursor adapter aborted by timeout",
         );
       }
+      const stderrHint = summarizeCursorAgentFailure(result.stderr);
       throw new AdapterExecutionError(
         "provider_error",
-        `cursor agent session '${sessionId}' failed with exit code ${String(result.exitCode)} signal ${result.signal ?? "null"}`,
+        `cursor agent session '${sessionId}' failed with exit code ${String(result.exitCode)} signal ${result.signal ?? "null"}${stderrHint === undefined ? "" : `: ${stderrHint}`}`,
       );
     }
 
