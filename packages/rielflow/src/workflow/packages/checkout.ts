@@ -510,6 +510,23 @@ async function checkoutWorkflowPackageInternal(
     });
   }
   const sourceDirectory = path.join(packageRoot, record.workflowDirectory);
+  const skills = await validateWorkflowPackageSkills({
+    packageRoot,
+    ...(manifest.value.skillDirectory === undefined
+      ? {}
+      : { skillDirectory: manifest.value.skillDirectory }),
+  });
+  if (!skills.ok) {
+    return skills;
+  }
+  if (
+    dependencyContext.stack.length === 1 &&
+    dependencyContext.projectedSkillVendors === undefined
+  ) {
+    dependencyContext.projectedSkillVendors = new Set(
+      skills.value.map((skill) => skill.vendor),
+    );
+  }
   const dependencies = await installManifestDependencies({
     parent: currentIdentity,
     manifestDependencies: manifest.value.dependencies,
@@ -520,15 +537,6 @@ async function checkoutWorkflowPackageInternal(
   });
   if (!dependencies.ok) {
     return dependencies;
-  }
-  const skills = await validateWorkflowPackageSkills({
-    packageRoot,
-    ...(manifest.value.skillDirectory === undefined
-      ? {}
-      : { skillDirectory: manifest.value.skillDirectory }),
-  });
-  if (!skills.ok) {
-    return skills;
   }
   const checksum = await computeWorkflowPackageChecksum({
     packageRoot,
@@ -797,6 +805,9 @@ async function checkoutWorkflowPackageInternal(
       userRoot,
       ...(input.options?.env === undefined ? {} : { env: input.options.env }),
       overwrite: input.overwrite === true,
+      ...(dependencyContext.projectedSkillVendors === undefined
+        ? {}
+        : { projectedVendors: dependencyContext.projectedSkillVendors }),
       skills: skills.value,
     });
     if (!installedSkills.ok) {
