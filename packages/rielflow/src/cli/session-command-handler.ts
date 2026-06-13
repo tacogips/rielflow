@@ -4,6 +4,7 @@ import {
 } from "../lib-continuation";
 import { listMergedWorkflowExecutionStepRuns } from "../lib-step-runs";
 import { runWorkflow } from "../workflow/engine";
+import { loadWorkflowFromCatalog } from "../workflow/load";
 import { buildFanoutGroupSummaries } from "../workflow/inspect";
 import { listRuntimeNodeLogs } from "../workflow/runtime-db";
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
@@ -17,6 +18,7 @@ import type {
 } from "./storage-and-options";
 import {
   buildStepProgressSummaries,
+  buildSessionWorkflowLoadOptions,
   formatFanoutSummaryLines,
   resolveSessionCommandStorageOptions,
   resolveSessionCurrentStepId,
@@ -45,7 +47,10 @@ import {
   skippedRetainedRegistryRunCleanup,
   type RegistryRunCleanupOutput,
 } from "./registry-run-provenance";
-import { buildLocalWorkflowRunOverrides } from "./workflow-graphql-formatters";
+import {
+  buildLocalWorkflowRunOverrides,
+  optionsForLoadedWorkflow,
+} from "./workflow-graphql-formatters";
 
 async function cleanupRetainedRegistryRunAfterTerminalSession(input: {
   readonly provenance: Parameters<
@@ -691,8 +696,25 @@ export async function runCliSessionScope(
       return 1;
     }
 
+    const workflowLoadOptions = buildSessionWorkflowLoadOptions(
+      sessionOptions,
+      sharedOptions,
+    );
+    const loadedWorkflow = await loadWorkflowFromCatalog(
+      source.value.workflowName,
+      workflowLoadOptions,
+    );
+    if (!loadedWorkflow.ok) {
+      io.stderr(loadedWorkflow.error.message);
+      return loadedWorkflow.error.code === "VALIDATION" ||
+        loadedWorkflow.error.code === "INVALID_WORKFLOW_NAME" ||
+        loadedWorkflow.error.code === "INVALID_SCOPE"
+        ? 2
+        : 1;
+    }
+
     const result = await runWorkflow(source.value.workflowName, {
-      ...sessionOptions,
+      ...optionsForLoadedWorkflow(loadedWorkflow.value, workflowLoadOptions),
       ...buildLocalWorkflowRunOverrides(parsed.options),
       ...buildSupervisorProgressEventSink(parsed.options, io),
       rerunFromSessionId: source.value.sessionId,

@@ -22,6 +22,7 @@ import { WORKFLOW_PACKAGE_MANIFEST_FILE } from "./workflow/packages/types";
 import { mockAgentBackendReadinessOperations } from "./workflow/runtime-readiness-agent-probes-test-helpers";
 import * as workflowCallStep from "./workflow/call-step";
 import * as workflowEngine from "./workflow/engine";
+import * as workflowLoad from "./workflow/load";
 import { err, ok } from "./workflow/result";
 import type {
   NodeAddonDefinition,
@@ -47,6 +48,71 @@ async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "rielflow-cli-test-"));
   tempDirs.push(directory);
   return directory;
+}
+
+function createCliTestLoadedWorkflow(input: {
+  readonly workflowName: string;
+  readonly workflowDirectory: string;
+  readonly source?: ResolvedWorkflowSource;
+}): workflowLoad.LoadedWorkflow {
+  return {
+    workflowName: input.workflowName,
+    workflowDirectory: input.workflowDirectory,
+    artifactWorkflowRoot: path.join(
+      input.workflowDirectory,
+      "..",
+      "artifacts",
+      input.workflowName,
+    ),
+    workflowDefinitionJsonBody: `{"workflowId":"${input.workflowName}","nodes":[{"id":"main-worker","type":"worker","executionBackend":"codex-agent","payloadFile":"nodes/node-main-worker.json"},{"id":"workflow-output","type":"worker","executionBackend":"codex-agent","payloadFile":"nodes/node-workflow-output.json"}]}`,
+    bundle: {
+      workflow: {
+        workflowId: input.workflowName,
+        description: "test workflow",
+        defaults: { nodeTimeoutMs: 1000, maxLoopIterations: 1 },
+        entryStepId: "main-worker",
+        nodeRegistry: [
+          {
+            id: "main-worker",
+            nodeFile: "nodes/node-main-worker.json",
+          },
+          {
+            id: "workflow-output",
+            nodeFile: "nodes/node-workflow-output.json",
+          },
+        ],
+        steps: [
+          { id: "main-worker", nodeId: "main-worker" },
+          { id: "workflow-output", nodeId: "workflow-output" },
+        ],
+        nodes: [
+          {
+            id: "main-worker",
+            nodeFile: "nodes/node-main-worker.json",
+          },
+          {
+            id: "workflow-output",
+            nodeFile: "nodes/node-workflow-output.json",
+          },
+        ],
+      },
+      nodePayloads: {
+        "main-worker": {
+          id: "main-worker",
+          executionBackend: "codex-agent",
+          variables: {},
+        },
+        "workflow-output": {
+          id: "workflow-output",
+          executionBackend: "codex-agent",
+          variables: {},
+        },
+      },
+    },
+    validationIssues: [],
+    nodeValidationResults: [],
+    ...(input.source === undefined ? {} : { source: input.source }),
+  };
 }
 
 async function writeRetainedRegistryRunProvenance(input: {
@@ -7743,6 +7809,15 @@ describe("runCli", () => {
     });
     await saveSession(session, { sessionStoreRoot });
 
+    vi.spyOn(workflowLoad, "loadWorkflowFromCatalog").mockResolvedValue(
+      ok(
+        createCliTestLoadedWorkflow({
+          workflowName: "demo",
+          workflowDirectory: path.join(root, "workflows", "demo"),
+        }),
+      ),
+    );
+
     const runWorkflowSpy = vi
       .spyOn(workflowEngine, "runWorkflow")
       .mockResolvedValue(
@@ -7809,6 +7884,82 @@ describe("runCli", () => {
       rerunFromStepId: "workflow-output",
       exitCode: 0,
     });
+  });
+
+  test("local session rerun forwards workflow scope overrides", async () => {
+    const root = await makeTempDir();
+    const sessionStoreRoot = path.join(root, "sessions");
+    const capture = createIoCapture();
+    const session = createSessionState({
+      sessionId: "sess-local-rerun-scope",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+
+    vi.spyOn(workflowLoad, "loadWorkflowFromCatalog").mockResolvedValue(
+      ok(
+        createCliTestLoadedWorkflow({
+          workflowName: "demo",
+          workflowDirectory: path.join(root, "user-workflows", "demo"),
+          source: {
+            scope: "user",
+            workflowRoot: path.join(root, "user-workflows"),
+            workflowName: "demo",
+            workflowDirectory: path.join(root, "user-workflows", "demo"),
+          },
+        }),
+      ),
+    );
+
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: {
+            ...session,
+            sessionId: "sess-local-rerun-scope-2",
+            status: "running",
+          },
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+
+    const code = await runCli(
+      [
+        "session",
+        "rerun",
+        "sess-local-rerun-scope",
+        "workflow-output",
+        "--scope",
+        "user",
+        "--session-store",
+        sessionStoreRoot,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        workflowScope: "user",
+        rerunFromSessionId: "sess-local-rerun-scope",
+        rerunFromStepId: "workflow-output",
+      }),
+    );
   });
 
   test("session continue requires --start-step and --after-step-run", async () => {
