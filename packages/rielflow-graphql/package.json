@@ -1,6 +1,6 @@
 {
   "name": "rielflow-graphql",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "GraphQL control-plane contracts and public DTOs for Rielflow",
   "type": "module",
   "main": "dist/index.js",

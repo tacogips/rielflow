@@ -1,6 +1,6 @@
 {
   "name": "rielflow-hook",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Agent hook parsing, vendor detection, handler, and recorder contracts for Rielflow",
   "type": "module",
   "main": "dist/index.js",
