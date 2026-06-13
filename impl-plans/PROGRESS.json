@@ -4894,60 +4894,6 @@
         }
       }
     },
-    "swift-native-bundle-addons": {
-      "phase": 199,
-      "status": "In Progress",
-      "path": "impl-plans/swift-native-bundle-addons.md",
-      "designReference": "https://github.com/tacogips/rielflow/issues/55",
-      "tasks": {
-        "TASK-001": {
-          "status": "IN_PROGRESS",
-          "parallelizable": true,
-          "deps": []
-        },
-        "TASK-002": {
-          "status": "IN_PROGRESS",
-          "parallelizable": false,
-          "deps": [
-            "TASK-001"
-          ]
-        },
-        "TASK-003": {
-          "status": "IN_PROGRESS",
-          "parallelizable": false,
-          "deps": [
-            "TASK-001",
-            "TASK-002"
-          ]
-        },
-        "TASK-004": {
-          "status": "IN_PROGRESS",
-          "parallelizable": false,
-          "deps": [
-            "TASK-003"
-          ]
-        },
-        "TASK-005": {
-          "status": "IN_PROGRESS",
-          "parallelizable": false,
-          "deps": [
-            "TASK-001",
-            "TASK-003"
-          ]
-        },
-        "TASK-006": {
-          "status": "NOT_STARTED",
-          "parallelizable": false,
-          "deps": [
-            "TASK-001",
-            "TASK-002",
-            "TASK-003",
-            "TASK-004",
-            "TASK-005"
-          ]
-        }
-      }
-    },
     "third-party-addon-resolution": {
       "phase": 109,
       "status": "Completed",
