@@ -138,6 +138,14 @@ rielflow package install claude-code-design-and-implement-review-loop \
   --pre-install-check
 ```
 
+Cursor CLI:
+
+```bash
+rielflow package install cursor-cli-developer-workflows \
+  --user-scope \
+  --pre-install-check
+```
+
 Agent backends need their own credentials and local tools. For example,
 OpenAI/Codex SDK-backed nodes use `OPENAI_API_KEY`, Anthropic/Claude SDK-backed
 nodes use `ANTHROPIC_API_KEY`, Cursor SDK-backed nodes use `CURSOR_API_KEY`,
@@ -508,7 +516,12 @@ removal.
 Package-installed agent skills are projected only through safe project or user
 skill roots. Checkout rejects symlink ancestors and file ancestors before
 copying skill files, so an existing file such as `.codex` is preserved instead
-of being replaced by a skill directory.
+of being replaced by a skill directory. User-scope package installs keep agent
+surfaces separated: Claude skills project to `~/.claude/skills/<name>`, Codex
+skills project to `$CODEX_HOME/skills/<name>` or `~/.codex/skills/<name>`, and
+Cursor skills project to `$CURSOR_HOME/skills/<name>/SKILL.md` or
+`~/.cursor/skills/<name>/SKILL.md`. Project-scope Cursor skills remain Cursor
+rules under `.cursor/rules/<name>.mdc`.
 
 Remove a package:
 

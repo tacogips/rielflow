@@ -6,6 +6,7 @@ import type {
   WorkflowPackageFailure,
   WorkflowPackageSkillInstallTarget,
   WorkflowPackageSkillSelection,
+  WorkflowPackageSkillVendor,
 } from "./types";
 
 function packageFailure(
@@ -153,8 +154,14 @@ function userProjectionPathForSkill(input: {
         "skills",
         input.skill.name,
       );
-    case "agents":
     case "cursor":
+      return path.join(
+        input.env?.["CURSOR_HOME"] ?? path.join(home, ".cursor"),
+        "skills",
+        input.skill.name,
+        "SKILL.md",
+      );
+    case "agents":
     case "gemini":
       return undefined;
   }
@@ -176,8 +183,9 @@ function projectionRootForSkill(input: {
       return home;
     case "codex":
       return input.env?.["CODEX_HOME"] ?? path.join(home, ".codex");
-    case "agents":
     case "cursor":
+      return input.env?.["CURSOR_HOME"] ?? path.join(home, ".cursor");
+    case "agents":
     case "gemini":
       return undefined;
   }
@@ -245,6 +253,7 @@ export async function installWorkflowPackageSkills(input: {
   readonly userRoot: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly overwrite: boolean;
+  readonly projectedVendors?: ReadonlySet<WorkflowPackageSkillVendor>;
   readonly skills: readonly WorkflowPackageSkillSelection[];
 }): Promise<
   Result<
@@ -258,13 +267,17 @@ export async function installWorkflowPackageSkills(input: {
   const managedSkillRoot = resolveWorkflowPackageManagedSkillRoot(input);
   const targets: WorkflowPackageSkillInstallTarget[] = input.skills.map(
     (skill) => {
-      const projectionPath = projectionPathForSkill({
-        scope: input.scope,
-        projectRoot: input.projectRoot,
-        userRoot: input.userRoot,
-        ...(input.env === undefined ? {} : { env: input.env }),
-        skill,
-      });
+      const projectionPath =
+        input.projectedVendors !== undefined &&
+        !input.projectedVendors.has(skill.vendor)
+          ? undefined
+          : projectionPathForSkill({
+              scope: input.scope,
+              projectRoot: input.projectRoot,
+              userRoot: input.userRoot,
+              ...(input.env === undefined ? {} : { env: input.env }),
+              skill,
+            });
       return {
         ...skill,
         managedPath: managedPathForSkill({ managedSkillRoot, skill }),

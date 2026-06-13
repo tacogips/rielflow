@@ -3690,10 +3690,11 @@ describe("workflow package registry", () => {
     ).rejects.toThrow();
   });
 
-  test("checkout projects user-scope Claude and Codex skills safely", async () => {
+  test("checkout projects user-scope Claude, Codex, and Cursor skills safely", async () => {
     const homeRoot = await makeTempDir();
     const userRoot = path.join(homeRoot, ".rielflow");
     const codexHome = path.join(homeRoot, "codex-home");
+    const cursorHome = path.join(homeRoot, "cursor-home");
     const registryRoot = await makeTempDir();
     const packageRoot = await createPackagedWorkflow({
       registryRoot,
@@ -3714,6 +3715,14 @@ describe("workflow package registry", () => {
     await writeFile(
       path.join(packageRoot, "skills", "codex", "audit", "SKILL.md"),
       "---\nname: audit\ndescription: User audit\n---\n",
+      "utf8",
+    );
+    await mkdir(path.join(packageRoot, "skills", "cursor"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "cursor", "inspect.mdc"),
+      "---\nname: inspect\ndescription: User inspect\n---\n",
       "utf8",
     );
     await mkdir(path.join(packageRoot, "skills", "agents"), {
@@ -3753,7 +3762,7 @@ describe("workflow package registry", () => {
       userScope: true,
       options: {
         userRoot,
-        env: { CODEX_HOME: codexHome },
+        env: { CODEX_HOME: codexHome, CURSOR_HOME: cursorHome },
       },
     });
 
@@ -3770,6 +3779,11 @@ describe("workflow package registry", () => {
         )?.projectionPath,
       ).toBe(path.join(codexHome, "skills", "audit"));
       expect(
+        checkedOut.value.skills.find(
+          (skill) => skill.vendor === "cursor" && skill.name === "inspect",
+        )?.projectionPath,
+      ).toBe(path.join(cursorHome, "skills", "inspect", "SKILL.md"));
+      expect(
         checkedOut.value.skills.find((skill) => skill.vendor === "agents")
           ?.installMode,
       ).toBe("managed-only");
@@ -3782,6 +3796,117 @@ describe("workflow package registry", () => {
       await expect(
         readFile(path.join(codexHome, "skills", "audit", "SKILL.md"), "utf8"),
       ).resolves.toContain("User audit");
+      await expect(
+        readFile(
+          path.join(cursorHome, "skills", "inspect", "SKILL.md"),
+          "utf8",
+        ),
+      ).resolves.toContain("User inspect");
+    }
+  });
+
+  test("checkout limits dependency skill projections to the root package vendors", async () => {
+    const homeRoot = await makeTempDir();
+    const userRoot = path.join(homeRoot, ".rielflow");
+    const codexHome = path.join(homeRoot, "codex-home");
+    const cursorHome = path.join(homeRoot, "cursor-home");
+    const registryRoot = await makeTempDir();
+    const dependencyRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "codex-dependency-flow",
+      workflowName: "codex-dependency-flow",
+    });
+    await mkdir(path.join(dependencyRoot, "skills", "codex", "dep-audit"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(dependencyRoot, "skills", "codex", "dep-audit", "SKILL.md"),
+      "---\nname: dep-audit\ndescription: Dependency audit\n---\n",
+      "utf8",
+    );
+    let manifest = JSON.parse(
+      await readFile(
+        path.join(dependencyRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      path.join(dependencyRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot: dependencyRoot,
+      workflowDirectory: "codex-dependency-flow",
+    });
+    const callerRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "cursor-caller-flow",
+      workflowName: "cursor-caller-flow",
+      dependencies: ["codex-dependency-flow"],
+    });
+    await mkdir(path.join(callerRoot, "skills", "cursor"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(callerRoot, "skills", "cursor", "caller-inspect.mdc"),
+      "---\nname: caller-inspect\ndescription: Caller inspect\n---\n",
+      "utf8",
+    );
+    manifest = JSON.parse(
+      await readFile(
+        path.join(callerRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      path.join(callerRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot: callerRoot,
+      workflowDirectory: "cursor-caller-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "cursor-caller-flow",
+      registry: "local",
+      userScope: true,
+      options: {
+        userRoot,
+        env: { CODEX_HOME: codexHome, CURSOR_HOME: cursorHome },
+      },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      await expect(
+        readFile(
+          path.join(cursorHome, "skills", "caller-inspect", "SKILL.md"),
+          "utf8",
+        ),
+      ).resolves.toContain("Caller inspect");
+      await expect(
+        stat(path.join(codexHome, "skills", "dep-audit", "SKILL.md")),
+      ).rejects.toThrow();
+      const dependency = checkedOut.value.dependencies?.find(
+        (entry) => entry.packageId === "codex-dependency-flow",
+      );
+      expect(dependency).toBeDefined();
+      const dependencyRecord = JSON.parse(
+        await readFile(dependency?.checkoutRecordPath ?? "", "utf8"),
+      ) as { readonly skills?: readonly { readonly installMode?: string }[] };
+      expect(dependencyRecord.skills?.[0]?.installMode).toBe("managed-only");
     }
   });
 
