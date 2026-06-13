@@ -111,6 +111,43 @@ export interface CliStorageOptions {
 export interface RunCliSharedOptions extends CliStorageOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
+
+export function buildSharedWorkflowCatalogOptions(
+  sharedOptions: CliStorageOptions,
+): Pick<
+  CliStorageOptions,
+  "workflowScope" | "workflowRoot" | "userRoot" | "projectRoot" | "addonRoot"
+> {
+  return {
+    ...(sharedOptions.workflowScope === undefined
+      ? {}
+      : { workflowScope: sharedOptions.workflowScope }),
+    ...(sharedOptions.workflowRoot === undefined
+      ? {}
+      : { workflowRoot: sharedOptions.workflowRoot }),
+    ...(sharedOptions.userRoot === undefined
+      ? {}
+      : { userRoot: sharedOptions.userRoot }),
+    ...(sharedOptions.projectRoot === undefined
+      ? {}
+      : { projectRoot: sharedOptions.projectRoot }),
+    ...(sharedOptions.addonRoot === undefined
+      ? {}
+      : { addonRoot: sharedOptions.addonRoot }),
+  };
+}
+
+export function buildSessionWorkflowLoadOptions(
+  sessionOptions: CliStorageOptions,
+  sharedOptions: RunCliSharedOptions,
+): CliStorageOptions {
+  return {
+    ...sessionOptions,
+    ...buildSharedWorkflowCatalogOptions(sharedOptions),
+    env: sharedOptions.env,
+  };
+}
+
 export interface RunCliScopeContext {
   readonly parsed: ParsedArgs;
   readonly positionals: readonly string[];
