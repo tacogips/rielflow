@@ -208,6 +208,37 @@ describe("CursorCliAgentAdapter", () => {
     );
   });
 
+  test("does not forward effort for composer models", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "composer-2.5",
+          effort: "high",
+        },
+      },
+      baseContext,
+    );
+
+    expect(output.effort).toBe("high");
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "composer-2.5",
+      }),
+    );
+    expect(runner.start).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: "high",
+      }),
+    );
+  });
+
   test("injects ambient manager env without adding mailbox env to hook context", async () => {
     let observedGraphqlEndpoint: string | undefined;
     let observedWorkflowExecutionId: string | undefined;
@@ -492,9 +523,12 @@ describe("CursorCliAgentAdapter", () => {
       createRunner: vi.fn(() => runner),
     });
 
-    await expect(
-      adapter.execute(baseInput, baseContext),
-    ).rejects.toHaveProperty("code", "provider_error");
+    await expect(adapter.execute(baseInput, baseContext)).rejects.toMatchObject(
+      {
+        code: "provider_error",
+        message: expect.stringContaining("something went wrong"),
+      },
+    );
   });
 
   test("maps invalid structured output to invalid_output", async () => {

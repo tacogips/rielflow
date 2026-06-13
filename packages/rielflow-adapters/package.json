@@ -1,6 +1,6 @@
 {
   "name": "rielflow-adapters",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Agent backend adapters and dispatch registry for Rielflow",
   "type": "module",
   "main": "dist/index.js",
