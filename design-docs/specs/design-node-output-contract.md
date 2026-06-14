@@ -96,7 +96,7 @@ Rules:
 - when `output` is present, it must define at least one of `output.description` or `output.jsonSchema`.
 - `output.description` is optional free text passed to the backend as contract guidance, but if present it must be non-empty after trimming.
 - `output.jsonSchema` is optional. If omitted, no schema validation occurs.
-- `output.maxValidationAttempts` is optional and applies whenever `output` is present.
+- `output.maxValidationAttempts` is optional and applies whenever `output` is present. When omitted, any configured `output` (with or without `jsonSchema`) defaults to multiple attempts so a single malformed/non-object candidate can be repaired via retry feedback rather than terminally failing the node.
 - unknown keys inside `output` are rejected at workflow validation time so contract authoring mistakes fail fast instead of being silently ignored.
 - schema validation applies to the candidate business payload only, not to the runtime envelope fields.
 - the candidate payload is always a top-level JSON object because published `output.payload` remains object-shaped for downstream compatibility, so the root schema must allow `object`.
@@ -162,14 +162,21 @@ Artifact rules:
 
 ## Execution Model
 
-For a node without `output.jsonSchema`:
+For a node with no `output` contract at all:
 
 1. Runtime executes the adapter once.
 2. Adapter returns a candidate payload.
 3. Runtime wraps it in the standard output envelope and publishes `output.json`.
-4. No `output-attempts/` retry artifacts are created unless `node.output` is configured.
+4. No `output-attempts/` retry artifacts are created.
 
-If `output.maxValidationAttempts` is configured without `jsonSchema`, the same flow is used except malformed/non-object candidate submissions may be retried before the runtime gives up.
+For a node with `output` configured but without `output.jsonSchema`:
+
+1. Runtime executes the adapter with output contract metadata and a reserved candidate path.
+2. Adapter returns a candidate payload, or signals that its response was not a valid top-level JSON object candidate.
+3. If the candidate is malformed or non-object and attempts remain, the runtime records the rejection in `validation.json`, feeds the parse/object error back into the next adapter attempt, and requests a corrected top-level JSON object.
+4. Once a valid top-level JSON object is produced, the runtime publishes `output.json` (no field-level schema validation occurs).
+
+This schema-less repair loop runs up to `output.maxValidationAttempts` attempts. When `maxValidationAttempts` is omitted it defaults to multiple attempts, so a single stray non-JSON response (for example an agent emitting prose) does not terminally fail the node.
 
 For a node with `output.jsonSchema`:
 
