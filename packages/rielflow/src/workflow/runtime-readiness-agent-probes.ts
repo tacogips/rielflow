@@ -76,12 +76,6 @@ function resolveProbeCwd(cwd: string | undefined): string {
   return cwd ?? process.cwd();
 }
 
-function hasAuthLikeFailure(value: string): boolean {
-  return /auth|login|credential|unauthorized|permission|forbidden|expired/i.test(
-    value,
-  );
-}
-
 function resultForCandidate(input: {
   readonly candidate: AgentBackendPreflightCandidate;
   readonly status: NodeValidationResult["status"];
@@ -451,39 +445,13 @@ async function checkCursorModel(input: {
       ...(input.options.cwd === undefined ? {} : { cwd: input.options.cwd }),
       ...(input.options.env === undefined ? {} : { env: input.options.env }),
       timeoutMs: MODEL_CHECK_COMMAND_TIMEOUT_MS,
-      probe: true,
+      probe: false,
     });
-  const combined = [
-    result.auth.detail,
-    result.modelReachability.error,
-    result.modelReachability.output,
-    result.binary.error,
-  ]
-    .filter((value): value is string => value !== undefined)
-    .join("\n");
-  if (
-    result.auth.status === "unavailable" ||
-    (result.modelReachability.status !== "available" &&
-      hasAuthLikeFailure(combined))
-  ) {
-    return resultForCandidate({
-      candidate: input.candidate,
-      status: "invalid",
-      message: `cursor-cli-agent model '${input.model}' probe reported an authentication failure: ${compactAgentCliMessage(combined, "auth failure")}`,
-    });
-  }
   if (!toolIsAvailable(result.binary)) {
     return resultForCandidate({
       candidate: input.candidate,
       status: "invalid",
       message: `cursor-cli-agent model '${input.model}' is not reachable: ${result.binary.name} is unavailable: ${compactAgentCliMessage(result.binary.error, "tool unavailable")}`,
-    });
-  }
-  if (result.modelReachability.status !== "available") {
-    return resultForCandidate({
-      candidate: input.candidate,
-      status: "invalid",
-      message: `cursor-cli-agent model '${input.model}' is not reachable: ${compactAgentCliMessage(result.modelReachability.error ?? result.modelReachability.output, "model check failed")}`,
     });
   }
   return resultForCandidate({

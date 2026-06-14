@@ -4,7 +4,11 @@ import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
 } from "../adapter";
-import { CursorCliAgentAdapter, resolveCursorModelSlug } from "./cursor";
+import {
+  CursorCliAgentAdapter,
+  resolveCursorModelSlug,
+  resolveCursorAgentBinary,
+} from "./cursor";
 import { setCursorSdkCheckModelForTest } from "./readiness";
 
 const baseInput: AdapterExecutionInput = {
@@ -877,6 +881,195 @@ describe("CursorCliAgentAdapter", () => {
     });
     expect(checkAuthPreflight).not.toHaveBeenCalled();
     expect(createRunner).toHaveBeenCalledTimes(1);
+  });
+
+  test("default execution skips preflight even when SDK would report auth required", async () => {
+    setCursorSdkCheckModelForTest(async (_commandRunner, _options) => ({
+      model: _options.model,
+      binary: {
+        name: "cursor-agent",
+        command: "cursor-agent",
+        version: "1.0.0",
+        status: "available",
+        checkedAt: new Date().toISOString(),
+      },
+      auth: {
+        status: "unavailable",
+        detail: "authentication required",
+        provenance: "not_available",
+      },
+      modelReachability: {
+        status: "unavailable",
+        probed: true,
+        error:
+          "Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY.",
+      },
+      checkedAt: new Date().toISOString(),
+    }));
+
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = new CursorCliAgentAdapter({ createRunner });
+
+    await expect(
+      adapter.execute(baseInput, baseContext),
+    ).resolves.toMatchObject({ provider: "cursor-cli-agent" });
+    expect(createRunner).toHaveBeenCalledTimes(1);
+  });
+
+  test("explicit authPreflight:true fails on auth probe with unavailable auth status", async () => {
+    setCursorSdkCheckModelForTest(async (_commandRunner, options) => ({
+      model: options.model,
+      binary: {
+        name: "cursor-agent",
+        command: "cursor-agent",
+        version: "1.0.0",
+        status: "available",
+        checkedAt: new Date().toISOString(),
+      },
+      auth: {
+        status: "unavailable",
+        detail: "not authenticated",
+        provenance: "not_available",
+      },
+      modelReachability: {
+        status: "not_checked",
+        probed: false,
+      },
+      checkedAt: new Date().toISOString(),
+    }));
+
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      authPreflight: true,
+      createRunner: vi.fn(() => runner),
+    });
+
+    await expect(adapter.execute(baseInput, baseContext)).rejects.toMatchObject(
+      {
+        code: "policy_blocked",
+        message: expect.stringContaining(
+          "cursor-cli-agent authentication is unavailable",
+        ),
+      },
+    );
+  });
+
+  test("custom cursor binary from adapter config is passed to createRunner", async () => {
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = new CursorCliAgentAdapter({
+      createRunner,
+      cursorBinary: "/custom/cursor-agent",
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ cursorBinary: "/custom/cursor-agent" }),
+    );
+  });
+
+  test("custom cursor binary from node variable is passed to createRunner", async () => {
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = new CursorCliAgentAdapter({ createRunner });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          variables: { cursorBinary: "/node-var/cursor-agent" },
+        },
+      },
+      baseContext,
+    );
+
+    expect(createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ cursorBinary: "/node-var/cursor-agent" }),
+    );
+  });
+
+  test("cursor binary from node cursorExecutable variable is passed to createRunner when cursorBinary is absent", async () => {
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = new CursorCliAgentAdapter({ createRunner });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          variables: { cursorExecutable: "/exec-var/cursor" },
+        },
+      },
+      baseContext,
+    );
+
+    expect(createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ cursorBinary: "/exec-var/cursor" }),
+    );
+  });
+});
+
+describe("resolveCursorAgentBinary", () => {
+  afterEach(() => {
+    for (const key of [
+      "RIELFLOW_CURSOR_AGENT_BINARY",
+      "CURSOR_AGENT_BINARY",
+      "CURSOR_CLI_AGENT_BINARY",
+    ]) {
+      delete process.env[key];
+    }
+  });
+
+  test("returns config cursorBinary first", () => {
+    process.env["CURSOR_AGENT_BINARY"] = "/env/cursor";
+    const result = resolveCursorAgentBinary({
+      cursorBinary: "/config/cursor",
+      nodeVariables: { cursorBinary: "/node/cursor" },
+    });
+    expect(result).toBe("/config/cursor");
+  });
+
+  test("returns node variable cursorBinary when config is absent", () => {
+    const result = resolveCursorAgentBinary({
+      nodeVariables: { cursorBinary: "/node/cursor" },
+    });
+    expect(result).toBe("/node/cursor");
+  });
+
+  test("returns node variable cursorExecutable when cursorBinary variable is absent", () => {
+    const result = resolveCursorAgentBinary({
+      nodeVariables: { cursorExecutable: "/node/cursor-exec" },
+    });
+    expect(result).toBe("/node/cursor-exec");
+  });
+
+  test("returns RIELFLOW_CURSOR_AGENT_BINARY env var when config and node vars absent", () => {
+    process.env["RIELFLOW_CURSOR_AGENT_BINARY"] = "/rielflow-env/cursor";
+    process.env["CURSOR_AGENT_BINARY"] = "/env/cursor";
+    const result = resolveCursorAgentBinary({});
+    expect(result).toBe("/rielflow-env/cursor");
+  });
+
+  test("returns CURSOR_AGENT_BINARY env var when RIELFLOW_CURSOR_AGENT_BINARY is absent", () => {
+    process.env["CURSOR_AGENT_BINARY"] = "/env/cursor";
+    process.env["CURSOR_CLI_AGENT_BINARY"] = "/cli-env/cursor";
+    const result = resolveCursorAgentBinary({});
+    expect(result).toBe("/env/cursor");
+  });
+
+  test("returns CURSOR_CLI_AGENT_BINARY as last env fallback", () => {
+    process.env["CURSOR_CLI_AGENT_BINARY"] = "/cli-env/cursor";
+    const result = resolveCursorAgentBinary({});
+    expect(result).toBe("/cli-env/cursor");
+  });
+
+  test("returns undefined when nothing is configured", () => {
+    const result = resolveCursorAgentBinary({});
+    expect(result).toBeUndefined();
   });
 });
 

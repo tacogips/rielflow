@@ -273,4 +273,149 @@ describe("probeAgentBackendAuthReadiness", () => {
       "cursor-cli-agent tool",
     );
   });
+
+  test("cursor node executability calls checkCursorBackendModelAvailability with probe:false", async () => {
+    let capturedProbe: boolean | undefined;
+    mocks.push(
+      mockAgentBackendReadinessOperations({
+        getCursorBackendToolVersions: async () => ({
+          packageVersion: "0.1.0",
+          tools: [
+            {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: "0.45.0",
+              status: "available",
+            },
+          ],
+        }),
+        checkCursorBackendModelAvailability: async (input) => {
+          capturedProbe = input.probe;
+          return {
+            model: input.model,
+            binary: {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: "0.45.0",
+              status: "available",
+            },
+            auth: {
+              status: "unavailable",
+              detail: "authentication required",
+            },
+            modelReachability: {
+              status: "not_checked",
+              probed: false,
+            },
+          };
+        },
+      }),
+    );
+
+    const results = await probeAgentBackendNodeExecutability(
+      cursorCandidate,
+      {},
+    );
+
+    expect(capturedProbe).toBe(false);
+    expect(results.some((entry) => entry.status === "invalid")).toBe(false);
+  });
+
+  test("cursor node executability does not invalidate when binary is available but auth or model reachability fails", async () => {
+    mocks.push(
+      mockAgentBackendReadinessOperations({
+        getCursorBackendToolVersions: async () => ({
+          packageVersion: "0.1.0",
+          tools: [
+            {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: "0.45.0",
+              status: "available",
+            },
+          ],
+        }),
+        checkCursorBackendModelAvailability: async (input) => ({
+          model: input.model,
+          binary: {
+            name: "cursor-agent",
+            command: "cursor-agent",
+            version: "0.45.0",
+            status: "available",
+          },
+          auth: {
+            status: "unavailable",
+            detail:
+              "Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY.",
+          },
+          modelReachability: {
+            status: "unavailable",
+            probed: false,
+            error: "Authentication required: agent login",
+          },
+        }),
+      }),
+    );
+
+    const results = await probeAgentBackendNodeExecutability(
+      cursorCandidate,
+      {},
+    );
+
+    expect(
+      results.some(
+        (entry) =>
+          entry.status === "invalid" && entry.backend === "cursor-cli-agent",
+      ),
+    ).toBe(false);
+  });
+
+  test("cursor node executability reports invalid when cursor binary is unavailable", async () => {
+    mocks.push(
+      mockAgentBackendReadinessOperations({
+        getCursorBackendToolVersions: async () => ({
+          packageVersion: "unknown",
+          tools: [
+            {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: null,
+              status: "unavailable",
+              error: "cursor-agent: command not found",
+            },
+          ],
+        }),
+        checkCursorBackendModelAvailability: async (input) => ({
+          model: input.model,
+          binary: {
+            name: "cursor-agent",
+            command: "cursor-agent",
+            version: null,
+            status: "unavailable",
+            error: "cursor-agent: command not found",
+          },
+          auth: {
+            status: "unknown",
+            detail: "binary unavailable",
+          },
+          modelReachability: {
+            status: "not_checked",
+            probed: false,
+          },
+        }),
+      }),
+    );
+
+    const results = await probeAgentBackendNodeExecutability(
+      cursorCandidate,
+      {},
+    );
+
+    expect(
+      results.some(
+        (entry) =>
+          entry.status === "invalid" && entry.backend === "cursor-cli-agent",
+      ),
+    ).toBe(true);
+  });
 });

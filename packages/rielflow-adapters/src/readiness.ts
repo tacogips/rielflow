@@ -22,6 +22,7 @@ const DEFAULT_MODEL_TIMEOUT_MS = 30_000;
 
 export interface AgentBackendProbeOptions {
   readonly codexBinary?: string;
+  readonly cursorBinary?: string;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs?: number;
@@ -149,13 +150,18 @@ export function setCodexBackendSdkOperationsForTest(
 type CursorSdkCheckModelFn = (
   commandRunner: ReturnType<typeof createCursorCommandRunner>,
   options: CursorModelAvailabilityOptions,
+  cursorBinary?: string,
 ) => Promise<CursorModelAvailabilityReport>;
 
 const defaultCursorSdkCheckModel: CursorSdkCheckModelFn = async (
   commandRunner,
   options,
+  cursorBinary,
 ) => {
-  const sdk = createCursorAgentSdk({ commandRunner });
+  const sdk = createCursorAgentSdk({
+    commandRunner,
+    ...(cursorBinary !== undefined ? { cursorBinary } : {}),
+  });
   return await sdk.tools.checkModel(options);
 };
 
@@ -694,6 +700,9 @@ export async function getCursorBackendToolVersions(
   try {
     const sdk = createCursorAgentSdk({
       commandRunner: createCursorCommandRunner(options),
+      ...(options.cursorBinary !== undefined
+        ? { cursorBinary: options.cursorBinary }
+        : {}),
     });
     const report = await sdk.tools.versions({
       timeoutMs: normalizeTimeout(options.timeoutMs, DEFAULT_TOOL_TIMEOUT_MS),
@@ -714,6 +723,7 @@ export async function getCursorBackendToolVersions(
 
 export async function checkCursorBackendModelAvailability(input: {
   readonly model: string;
+  readonly cursorBinary?: string;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs?: number;
@@ -729,10 +739,10 @@ export async function checkCursorBackendModelAvailability(input: {
     );
     const report = await cursorSdkCheckModelImpl(commandRunner, {
       model: input.model,
-      probe: input.probe ?? true,
+      probe: input.probe ?? false,
       timeoutMs: normalizeTimeout(input.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),
       ...(input.cwd === undefined ? {} : { workspace: input.cwd }),
-    });
+    }, input.cursorBinary);
     return {
       model: report.model,
       binary: normalizeCursorToolInfo(report.binary),

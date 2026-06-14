@@ -157,6 +157,39 @@ export interface CursorAdapterConfig extends LlmSessionStallWatchConfig {
 
 const DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS = 30_000;
 
+const CURSOR_BINARY_ENV_KEYS = [
+  "RIELFLOW_CURSOR_AGENT_BINARY",
+  "CURSOR_AGENT_BINARY",
+  "CURSOR_CLI_AGENT_BINARY",
+] as const;
+
+export function resolveCursorAgentBinary(input: {
+  readonly cursorBinary?: string;
+  readonly nodeVariables?: Readonly<Record<string, unknown>>;
+}): string | undefined {
+  if (input.cursorBinary !== undefined && input.cursorBinary.length > 0) {
+    return input.cursorBinary;
+  }
+  const vars = input.nodeVariables;
+  if (vars !== undefined) {
+    const varBinary = vars["cursorBinary"];
+    if (typeof varBinary === "string" && varBinary.length > 0) {
+      return varBinary;
+    }
+    const varExecutable = vars["cursorExecutable"];
+    if (typeof varExecutable === "string" && varExecutable.length > 0) {
+      return varExecutable;
+    }
+  }
+  for (const key of CURSOR_BINARY_ENV_KEYS) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 const AUTH_REQUIRED_PATTERNS: readonly RegExp[] = [
   /authentication required/iu,
   /agent login/iu,
@@ -180,10 +213,13 @@ async function createDefaultRunner(
 }
 
 function shouldRunAuthPreflight(config: CursorAdapterConfig): boolean {
-  if (config.authPreflight !== undefined) {
-    return config.authPreflight;
+  if (config.authPreflight === false) {
+    return false;
   }
-  return config.checkAuthPreflight !== undefined || config.createRunner === undefined;
+  if (config.authPreflight === true) {
+    return true;
+  }
+  return config.checkAuthPreflight !== undefined;
 }
 
 async function runCursorAuthPreflight(
@@ -211,10 +247,15 @@ async function runCursorAuthPreflight(
     await config.checkAuthPreflight(input, options);
     return;
   }
+  const resolvedBinary = resolveCursorAgentBinary({
+    ...(config.cursorBinary !== undefined ? { cursorBinary: config.cursorBinary } : {}),
+    nodeVariables: input.node.variables,
+  });
   const resolvedModel = resolveCursorModelSlug(input.node.model, input.node.effort);
   const availability = await checkCursorBackendModelAvailability({
     model: resolvedModel,
     ...options,
+    ...(resolvedBinary !== undefined ? { cursorBinary: resolvedBinary } : {}),
     probe: true,
   });
   if (availability.binary.status !== "available") {
@@ -396,10 +437,12 @@ async function executeLocalCursorAgent(
 ): Promise<AdapterExecutionOutput> {
   throwIfAborted(context.signal, "cursor adapter aborted before start");
 
+  const resolvedBinary = resolveCursorAgentBinary({
+    ...(config.cursorBinary !== undefined ? { cursorBinary: config.cursorBinary } : {}),
+    nodeVariables: input.node.variables,
+  });
   const runner = await (config.createRunner ?? createDefaultRunner)({
-    ...(config.cursorBinary === undefined
-      ? {}
-      : { cursorBinary: config.cursorBinary }),
+    ...(resolvedBinary === undefined ? {} : { cursorBinary: resolvedBinary }),
   });
 
   const { promptText, startRequest, baseResumeRequest } =
