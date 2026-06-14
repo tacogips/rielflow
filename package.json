@@ -1,6 +1,6 @@
 {
   "name": "rielflow-workspace",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "description": "TypeScript/Bun workflow runtime for cooperative multi-agent execution",
   "private": true,
   "workspaces": [
