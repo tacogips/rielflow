@@ -13,6 +13,11 @@ import type {
   NodeExecutionRecord,
   WorkflowSessionState,
 } from "../session";
+import { usesUserScopedBackendSessionPersistence } from "../session";
+import {
+  saveUserBackendSession,
+  deleteUserBackendSession,
+} from "../user-backend-session-store";
 import type { LoopRule } from "../types";
 import type {
   FinalizeExecutedNodeInput,
@@ -144,6 +149,55 @@ export async function finalizeExecutedNode(
             ? {}
             : { returnedSessionId: backendSessionId }),
         });
+  if (
+    agentNodePayload !== null &&
+    usesUserScopedBackendSessionPersistence(agentNodePayload) &&
+    agentNodePayload.executionBackend !== undefined
+  ) {
+    const userSessionKeyInput = {
+      workflowId: workflow.workflowId,
+      nodeId:
+        backendSessionSelection?.sessionLookupNodeId ??
+        backendSessionSelection?.nodeRegistryId ??
+        nodeId,
+      ...(backendSessionSelection?.nodeRegistryId === undefined
+        ? {}
+        : { nodeRegistryId: backendSessionSelection.nodeRegistryId }),
+      backend: agentNodePayload.executionBackend,
+    };
+    if (nodeStatus === "succeeded" && backendSessionId !== undefined) {
+      try {
+        await saveUserBackendSession(
+          {
+            workflowId: workflow.workflowId,
+            nodeId: userSessionKeyInput.nodeId,
+            ...(userSessionKeyInput.nodeRegistryId === undefined
+              ? {}
+              : { nodeRegistryId: userSessionKeyInput.nodeRegistryId }),
+            backend: agentNodePayload.executionBackend,
+            provider:
+              backendSessionProvider ??
+              outputPayload["provider"]?.toString() ??
+              "unknown-provider",
+            sessionId: backendSessionId,
+            ...(agentNodePayload.workingDirectory === undefined
+              ? {}
+              : { workingDirectory: agentNodePayload.workingDirectory }),
+            updatedAt: endedAt,
+          },
+          options,
+        );
+      } catch {
+        // Best-effort; do not fail execution on user session store write errors.
+      }
+    } else if (nodeStatus === "failed") {
+      try {
+        await deleteUserBackendSession(userSessionKeyInput, options);
+      } catch {
+        // Best-effort cleanup.
+      }
+    }
+  }
   const buildNodeExecutionRecord = (
     status: NodeExecutionRecord["status"] = nodeStatus,
   ): NodeExecutionRecord => ({

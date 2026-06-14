@@ -41,6 +41,11 @@ interface CursorAgentRequest {
   readonly mode?: CursorAgentMode;
   readonly streamMode?: CursorAgentStreamMode;
   readonly images?: readonly string[];
+  readonly trust?: boolean;
+  readonly force?: boolean;
+  readonly yolo?: boolean;
+  readonly sandbox?: "enabled" | "disabled";
+  readonly approveMcps?: boolean;
 }
 
 interface CursorAgentRunResult {
@@ -133,6 +138,11 @@ export interface CursorAdapterConfig extends LlmSessionStallWatchConfig {
   readonly cursorBinary?: string;
   readonly mode?: CursorAgentMode;
   readonly streamMode?: CursorAgentStreamMode;
+  readonly trust?: boolean;
+  readonly force?: boolean;
+  readonly yolo?: boolean;
+  readonly sandbox?: "enabled" | "disabled";
+  readonly approveMcps?: boolean;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly createRunner?: CursorRunnerFactory;
   readonly checkAuthPreflight?: (
@@ -147,6 +157,93 @@ export interface CursorAdapterConfig extends LlmSessionStallWatchConfig {
 
 const DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS = 30_000;
 
+const CURSOR_BINARY_ENV_KEYS = [
+  "RIELFLOW_CURSOR_AGENT_BINARY",
+  "CURSOR_AGENT_BINARY",
+  "CURSOR_CLI_AGENT_BINARY",
+] as const;
+
+export function resolveCursorAgentBinary(input: {
+  readonly cursorBinary?: string;
+  readonly nodeVariables?: Readonly<Record<string, unknown>>;
+}): string | undefined {
+  if (input.cursorBinary !== undefined && input.cursorBinary.length > 0) {
+    return input.cursorBinary;
+  }
+  const vars = input.nodeVariables;
+  if (vars !== undefined) {
+    const varBinary = vars["cursorBinary"];
+    if (typeof varBinary === "string" && varBinary.length > 0) {
+      return varBinary;
+    }
+    const varExecutable = vars["cursorExecutable"];
+    if (typeof varExecutable === "string" && varExecutable.length > 0) {
+      return varExecutable;
+    }
+  }
+  for (const key of CURSOR_BINARY_ENV_KEYS) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+const AUTH_REQUIRED_PATTERNS: readonly RegExp[] = [
+  /authentication required/iu,
+  /agent login/iu,
+  /CURSOR_API_KEY/u,
+  /not logged in/iu,
+];
+
+const CURSOR_API_KEY_ENV_KEYS = [
+  "RIELFLOW_CURSOR_API_KEY",
+  "CURSOR_API_KEY",
+] as const;
+
+const CURSOR_HOME_ENV_KEYS = [
+  "RIELFLOW_CURSOR_HOME",
+  "CURSOR_CLI_AGENT_CURSOR_HOME",
+] as const;
+
+export interface CursorAuthEnvironment
+  extends Readonly<Record<string, string | undefined>> {
+  readonly CURSOR_API_KEY?: string;
+  readonly CURSOR_CLI_AGENT_CURSOR_HOME?: string;
+}
+
+export function resolveCursorAuthEnvironment(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): CursorAuthEnvironment {
+  let apiKey: string | undefined;
+  for (const key of CURSOR_API_KEY_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0) {
+      apiKey = value;
+      break;
+    }
+  }
+  let cursorHome: string | undefined;
+  for (const key of CURSOR_HOME_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0) {
+      cursorHome = value;
+      break;
+    }
+  }
+  return {
+    ...(apiKey !== undefined ? { CURSOR_API_KEY: apiKey } : {}),
+    ...(cursorHome !== undefined
+      ? { CURSOR_CLI_AGENT_CURSOR_HOME: cursorHome }
+      : {}),
+  };
+}
+
+function isAuthRequiredProbeText(text: string): boolean {
+  return AUTH_REQUIRED_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 async function createDefaultRunner(
   options: CursorRunnerOptions,
 ): Promise<CursorAgentRunnerLike> {
@@ -159,10 +256,13 @@ async function createDefaultRunner(
 }
 
 function shouldRunAuthPreflight(config: CursorAdapterConfig): boolean {
-  if (config.authPreflight !== undefined) {
-    return config.authPreflight;
+  if (config.authPreflight === false) {
+    return false;
   }
-  return config.checkAuthPreflight !== undefined || config.createRunner === undefined;
+  if (config.authPreflight === true) {
+    return true;
+  }
+  return config.checkAuthPreflight !== undefined;
 }
 
 async function runCursorAuthPreflight(
@@ -172,8 +272,12 @@ async function runCursorAuthPreflight(
   if (!shouldRunAuthPreflight(config)) {
     return;
   }
+  const cursorAuthEnv = resolveCursorAuthEnvironment(
+    config.env ?? process.env,
+  );
   const env = buildAmbientProcessEnv(
     config.env,
+    Object.keys(cursorAuthEnv).length > 0 ? cursorAuthEnv : undefined,
     input.rielflowHookContext === undefined
       ? undefined
       : { ...input.rielflowHookContext.environment },
@@ -190,9 +294,15 @@ async function runCursorAuthPreflight(
     await config.checkAuthPreflight(input, options);
     return;
   }
+  const resolvedBinary = resolveCursorAgentBinary({
+    ...(config.cursorBinary !== undefined ? { cursorBinary: config.cursorBinary } : {}),
+    nodeVariables: input.node.variables,
+  });
+  const resolvedModel = resolveCursorModelSlug(input.node.model, input.node.effort);
   const availability = await checkCursorBackendModelAvailability({
-    model: input.node.model,
+    model: resolvedModel,
     ...options,
+    ...(resolvedBinary !== undefined ? { cursorBinary: resolvedBinary } : {}),
     probe: true,
   });
   if (availability.binary.status !== "available") {
@@ -207,10 +317,22 @@ async function runCursorAuthPreflight(
       `cursor-cli-agent authentication is unavailable: ${availability.auth.detail}`,
     );
   }
+  const probeText = [
+    availability.modelReachability.error,
+    availability.modelReachability.output,
+  ]
+    .filter((t): t is string => t !== undefined)
+    .join(" ");
+  if (availability.modelReachability.status !== "available" && isAuthRequiredProbeText(probeText)) {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `cursor-cli-agent authentication is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "authentication required"}`,
+    );
+  }
   if (availability.modelReachability.status === "unavailable") {
     throw new AdapterExecutionError(
       "policy_blocked",
-      `cursor-cli-agent model '${input.node.model}' is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "model probe failed"}`,
+      `cursor-cli-agent model '${resolvedModel}' is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "model probe failed"}`,
     );
   }
 }
@@ -234,6 +356,93 @@ function extractAssistantMessageText(event: CursorAgentEvent): string | null {
   return text.length === 0 ? null : text;
 }
 
+const COMPOSER_MODEL_PREFIX = "composer-";
+const GPT55_MODEL_PREFIX = "gpt-5.5";
+const FAST_MODEL_SUFFIX = "-fast";
+const GPT55_EFFORT_TOKENS = new Set(["extra-high", "high", "medium", "low"]);
+
+function isGpt55Model(model: string): boolean {
+  return model === GPT55_MODEL_PREFIX || model.startsWith(`${GPT55_MODEL_PREFIX}-`);
+}
+
+function cursorEffortSlug(effort: string): string {
+  return effort === "xhigh" ? "extra-high" : effort;
+}
+
+function stripGpt55EffortToken(model: string): {
+  readonly base: string;
+  readonly fastSuffix: string;
+} {
+  const hasFastSuffix = model.endsWith(FAST_MODEL_SUFFIX);
+  const withoutFast = hasFastSuffix
+    ? model.slice(0, -FAST_MODEL_SUFFIX.length)
+    : model;
+  const effortSuffix = withoutFast.slice(GPT55_MODEL_PREFIX.length + 1);
+  const base = GPT55_EFFORT_TOKENS.has(effortSuffix)
+    ? GPT55_MODEL_PREFIX
+    : withoutFast;
+  return {
+    base,
+    fastSuffix: hasFastSuffix ? FAST_MODEL_SUFFIX : "",
+  };
+}
+
+export function resolveCursorModelSlug(
+  model: string,
+  effort: string | undefined,
+): string {
+  if (effort === undefined || model.startsWith(COMPOSER_MODEL_PREFIX)) {
+    return model;
+  }
+  if (!isGpt55Model(model)) {
+    return model;
+  }
+  const { base, fastSuffix } = stripGpt55EffortToken(model);
+  return `${base}-${cursorEffortSlug(effort)}${fastSuffix}`;
+}
+
+function modelSupportsCursorEffortSuffix(model: string): boolean {
+  return !model.startsWith(COMPOSER_MODEL_PREFIX) && !isGpt55Model(model);
+}
+
+function resolveCursorAgentEffort(
+  model: string,
+  effort: string | undefined,
+): string | undefined {
+  if (effort === undefined || !modelSupportsCursorEffortSuffix(model)) {
+    return undefined;
+  }
+  return effort;
+}
+
+function summarizeCursorAgentFailure(stderr: string): string | undefined {
+  const line = stderr
+    .split(/\r?\n/u)
+    .map((entry) => entry.trim())
+    .find((entry) => entry.length > 0);
+  return line;
+}
+
+interface CursorPermissionOptions {
+  readonly trust: boolean;
+  readonly force: boolean;
+  readonly yolo: boolean;
+  readonly sandbox: "enabled" | "disabled";
+  readonly approveMcps: boolean;
+}
+
+function resolveCursorPermissionOptions(
+  config: CursorAdapterConfig,
+): CursorPermissionOptions {
+  return {
+    trust: config.trust !== undefined ? config.trust : true,
+    force: config.force !== undefined ? config.force : true,
+    yolo: config.yolo !== undefined ? config.yolo : true,
+    sandbox: config.sandbox !== undefined ? config.sandbox : "disabled",
+    approveMcps: config.approveMcps !== undefined ? config.approveMcps : true,
+  };
+}
+
 function resolveLocalSessionConfig(
   config: CursorAdapterConfig,
   input: AdapterExecutionInput,
@@ -246,16 +455,20 @@ function resolveLocalSessionConfig(
   const cwd = config.cwd ?? input.workingDirectory;
   const streamMode: CursorAgentStreamMode = config.streamMode ?? "event";
   const images = resolveAdapterImagePaths(input);
+  const model = resolveCursorModelSlug(input.node.model, input.node.effort);
+  const effort = resolveCursorAgentEffort(input.node.model, input.node.effort);
+  const permissionOptions = resolveCursorPermissionOptions(config);
   const baseRequest: Omit<CursorAgentRequest, "prompt" | "sessionId"> = {
     cwd,
     ...(input.systemPromptText === undefined
       ? {}
       : { systemPrompt: input.systemPromptText }),
-    model: input.node.model,
-    ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
+    model,
+    ...(effort === undefined ? {} : { effort }),
     ...(config.mode === undefined ? {} : { mode: config.mode }),
     ...(images.length === 0 ? {} : { images }),
     streamMode,
+    ...permissionOptions,
   };
   return {
     promptText,
@@ -271,16 +484,22 @@ async function executeLocalCursorAgent(
 ): Promise<AdapterExecutionOutput> {
   throwIfAborted(context.signal, "cursor adapter aborted before start");
 
+  const resolvedBinary = resolveCursorAgentBinary({
+    ...(config.cursorBinary !== undefined ? { cursorBinary: config.cursorBinary } : {}),
+    nodeVariables: input.node.variables,
+  });
   const runner = await (config.createRunner ?? createDefaultRunner)({
-    ...(config.cursorBinary === undefined
-      ? {}
-      : { cursorBinary: config.cursorBinary }),
+    ...(resolvedBinary === undefined ? {} : { cursorBinary: resolvedBinary }),
   });
 
   const { promptText, startRequest, baseResumeRequest } =
     resolveLocalSessionConfig(config, input);
+  const cursorAuthEnv = resolveCursorAuthEnvironment(
+    config.env ?? process.env,
+  );
   const ambientEnv = buildAmbientProcessEnv(
     config.env,
+    Object.keys(cursorAuthEnv).length > 0 ? cursorAuthEnv : undefined,
     input.rielflowHookContext === undefined
       ? undefined
       : { ...input.rielflowHookContext.environment },
@@ -399,9 +618,10 @@ async function executeLocalCursorAgent(
           "cursor adapter aborted by timeout",
         );
       }
+      const stderrHint = summarizeCursorAgentFailure(result.stderr);
       throw new AdapterExecutionError(
         "provider_error",
-        `cursor agent session '${sessionId}' failed with exit code ${String(result.exitCode)} signal ${result.signal ?? "null"}`,
+        `cursor agent session '${sessionId}' failed with exit code ${String(result.exitCode)} signal ${result.signal ?? "null"}${stderrHint === undefined ? "" : `: ${stderrHint}`}`,
       );
     }
 

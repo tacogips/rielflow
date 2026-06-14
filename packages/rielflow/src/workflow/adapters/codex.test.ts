@@ -357,6 +357,9 @@ describe("CodexAgentAdapter", () => {
       expect.objectContaining({
         model: "gpt-5-nano",
         systemPrompt: "system",
+        sandbox: "danger-full-access",
+        approvalMode: "never",
+        fullAuto: true,
         streamGranularity: "event",
       }),
     );
@@ -634,6 +637,43 @@ describe("CodexAgentAdapter", () => {
       }),
     );
     expect(createRunner).not.toHaveBeenCalled();
+  });
+
+  test("applies maximum permission defaults when no permission config is set", async () => {
+    const fixture = makeCodexRunnerFixture();
+    const adapter = new CodexAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(fixture.startSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandbox: "danger-full-access",
+        approvalMode: "never",
+        fullAuto: true,
+      }),
+    );
+  });
+
+  test("preserves explicit restrictive permission overrides", async () => {
+    const fixture = makeCodexRunnerFixture();
+    const adapter = new CodexAgentAdapter({
+      createRunner: fixture.createRunner,
+      sandbox: "read-only",
+      approvalMode: "always",
+      fullAuto: false,
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(fixture.startSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandbox: "read-only",
+        approvalMode: "always",
+        fullAuto: false,
+      }),
+    );
   });
 
   test("allows auth preflight to be disabled", async () => {

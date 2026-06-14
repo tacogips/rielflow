@@ -2004,7 +2004,27 @@ function normalizeNodePayload(input: {
       sessionPolicyRaw["mode"] === "new" ||
       sessionPolicyRaw["mode"] === "reuse"
     ) {
-      sessionPolicy = { mode: sessionPolicyRaw["mode"] };
+      const persistenceRaw = sessionPolicyRaw["persistence"];
+      if (
+        persistenceRaw !== undefined &&
+        persistenceRaw !== "workflow" &&
+        persistenceRaw !== "user"
+      ) {
+        input.issues.push(
+          makeIssue(
+            "error",
+            `${input.path}.sessionPolicy.persistence`,
+            "must be 'workflow' or 'user' when provided",
+          ),
+        );
+      } else {
+        sessionPolicy = {
+          mode: sessionPolicyRaw["mode"],
+          ...(persistenceRaw === "workflow" || persistenceRaw === "user"
+            ? { persistence: persistenceRaw }
+            : {}),
+        };
+      }
     } else {
       input.issues.push(
         makeIssue(

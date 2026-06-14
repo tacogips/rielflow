@@ -318,23 +318,26 @@ export async function runCliSessionScope(
         return 1;
       }
     }
-    const session = await loadSession(sessionTarget, sessionOptions);
-    if (!session.ok) {
-      io.stderr(session.error.message);
-      return 1;
-    }
     const registryRunProvenance = await readRegistryRunProvenance({
       options: sharedOptions,
-      sessionId: session.value.sessionId,
+      sessionId: sessionTarget,
     });
     const resumeSessionOptions =
       registryRunProvenance === undefined ||
       sharedOptions.workflowRoot !== undefined
         ? sessionOptions
         : {
-            ...sessionOptions,
+            // Registry package runs persist sessions with the raw CLI storage
+            // options plus the retained temporary workflow root.
+            ...sharedOptions,
             workflowRoot: registryRunWorkflowRoot(registryRunProvenance),
           };
+
+    const session = await loadSession(sessionTarget, resumeSessionOptions);
+    if (!session.ok) {
+      io.stderr(session.error.message);
+      return 1;
+    }
 
     let mockScenarioOptions: Readonly<{ mockScenario?: MockNodeScenario }> = {};
     try {
