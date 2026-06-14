@@ -157,6 +157,17 @@ export interface CursorAdapterConfig extends LlmSessionStallWatchConfig {
 
 const DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS = 30_000;
 
+const AUTH_REQUIRED_PATTERNS: readonly RegExp[] = [
+  /authentication required/iu,
+  /agent login/iu,
+  /CURSOR_API_KEY/u,
+  /not logged in/iu,
+];
+
+function isAuthRequiredProbeText(text: string): boolean {
+  return AUTH_REQUIRED_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 async function createDefaultRunner(
   options: CursorRunnerOptions,
 ): Promise<CursorAgentRunnerLike> {
@@ -200,8 +211,9 @@ async function runCursorAuthPreflight(
     await config.checkAuthPreflight(input, options);
     return;
   }
+  const resolvedModel = resolveCursorModelSlug(input.node.model, input.node.effort);
   const availability = await checkCursorBackendModelAvailability({
-    model: input.node.model,
+    model: resolvedModel,
     ...options,
     probe: true,
   });
@@ -217,10 +229,22 @@ async function runCursorAuthPreflight(
       `cursor-cli-agent authentication is unavailable: ${availability.auth.detail}`,
     );
   }
+  const probeText = [
+    availability.modelReachability.error,
+    availability.modelReachability.output,
+  ]
+    .filter((t): t is string => t !== undefined)
+    .join(" ");
+  if (availability.modelReachability.status !== "available" && isAuthRequiredProbeText(probeText)) {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `cursor-cli-agent authentication is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "authentication required"}`,
+    );
+  }
   if (availability.modelReachability.status === "unavailable") {
     throw new AdapterExecutionError(
       "policy_blocked",
-      `cursor-cli-agent model '${input.node.model}' is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "model probe failed"}`,
+      `cursor-cli-agent model '${resolvedModel}' is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "model probe failed"}`,
     );
   }
 }

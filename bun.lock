@@ -28,7 +28,7 @@
     },
     "packages/rielflow": {
       "name": "rielflow",
-      "version": "0.1.20",
+      "version": "0.1.21",
       "bin": {
         "rielflow": "dist/main.js",
       },
@@ -43,7 +43,7 @@
     },
     "packages/rielflow-adapters": {
       "name": "rielflow-adapters",
-      "version": "0.1.20",
+      "version": "0.1.21",
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
         "@cursor/sdk": "1.0.17",
@@ -56,39 +56,39 @@
     },
     "packages/rielflow-addons": {
       "name": "rielflow-addons",
-      "version": "0.1.20",
+      "version": "0.1.21",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-core": {
       "name": "rielflow-core",
-      "version": "0.1.20",
+      "version": "0.1.21",
     },
     "packages/rielflow-events": {
       "name": "rielflow-events",
-      "version": "0.1.20",
+      "version": "0.1.21",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-graphql": {
       "name": "rielflow-graphql",
-      "version": "0.1.20",
+      "version": "0.1.21",
       "dependencies": {
         "graphql": "16.13.1",
       },
     },
     "packages/rielflow-hook": {
       "name": "rielflow-hook",
-      "version": "0.1.20",
+      "version": "0.1.21",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-server": {
       "name": "rielflow-server",
-      "version": "0.1.20",
+      "version": "0.1.21",
     },
   },
   "packages": {

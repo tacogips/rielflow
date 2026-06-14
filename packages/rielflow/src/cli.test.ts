@@ -7796,6 +7796,75 @@ describe("runCli", () => {
     ).resolves.toBeDefined();
   });
 
+  test("session resume --scope user preserves user scope when project .rielflow is present in env", async () => {
+    const root = await makeTempDir();
+    // Project directory that would normally hijack session storage
+    const projectRielflowDir = path.join(root, "repo", ".rielflow");
+    await mkdir(path.join(projectRielflowDir, "workflows"), {
+      recursive: true,
+    });
+    // User-scope root where the session is actually stored
+    const userRoot = path.join(root, "user-scope");
+    const userSessionStoreRoot = path.join(userRoot, "artifacts", "sessions");
+    await mkdir(userSessionStoreRoot, { recursive: true });
+
+    const session = createSessionState({
+      sessionId: "sess-user-scope-resume",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot: userSessionStoreRoot });
+
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: { ...session, status: "completed" },
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "resume",
+        session.sessionId,
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        ...createCliDeps(),
+        // Inject RIEL_PROJECT_ROOT so project-scope detection would fire without the fix
+        env: { ...process.env, RIEL_PROJECT_ROOT: projectRielflowDir },
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        workflowScope: "user",
+        resumeSessionId: session.sessionId,
+      }),
+    );
+    // rootDataDir must not be derived from the project scope root
+    const callOptions = runWorkflowSpy.mock.calls[0]?.[1] as
+      | Record<string, unknown>
+      | undefined;
+    const rootDataDir = callOptions?.["rootDataDir"];
+    if (typeof rootDataDir === "string") {
+      expect(rootDataDir).not.toContain("repo");
+    }
+  });
+
   test("local session rerun forwards normalized workflow run overrides", async () => {
     const root = await makeTempDir();
     const sessionStoreRoot = path.join(root, "sessions");

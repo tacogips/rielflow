@@ -11,6 +11,8 @@ import {
 } from "codex-agent/sdk";
 import { createCursorAgentSdk } from "cursor-cli-agent/sdk";
 import type {
+  ModelAvailabilityOptions as CursorModelAvailabilityOptions,
+  ModelAvailabilityReport as CursorModelAvailabilityReport,
   ToolCommandRunOptions as CursorToolCommandRunOptions,
   ToolCommandRunResult as CursorToolCommandRunResult,
 } from "cursor-cli-agent/sdk";
@@ -142,6 +144,27 @@ export function setCodexBackendSdkOperationsForTest(
     operations === undefined
       ? defaultCodexBackendSdkOperations
       : { ...defaultCodexBackendSdkOperations, ...operations };
+}
+
+type CursorSdkCheckModelFn = (
+  commandRunner: ReturnType<typeof createCursorCommandRunner>,
+  options: CursorModelAvailabilityOptions,
+) => Promise<CursorModelAvailabilityReport>;
+
+const defaultCursorSdkCheckModel: CursorSdkCheckModelFn = async (
+  commandRunner,
+  options,
+) => {
+  const sdk = createCursorAgentSdk({ commandRunner });
+  return await sdk.tools.checkModel(options);
+};
+
+let cursorSdkCheckModelImpl: CursorSdkCheckModelFn = defaultCursorSdkCheckModel;
+
+export function setCursorSdkCheckModelForTest(
+  impl: CursorSdkCheckModelFn | undefined,
+): void {
+  cursorSdkCheckModelImpl = impl ?? defaultCursorSdkCheckModel;
 }
 
 interface ProbeCommandResult {
@@ -697,16 +720,14 @@ export async function checkCursorBackendModelAvailability(input: {
   readonly probe?: boolean;
 }): Promise<CursorBackendModelAvailability> {
   try {
-    const sdk = createCursorAgentSdk({
-      commandRunner: createCursorCommandRunner(
-        buildProbeOptions({
-          cwd: input.cwd,
-          env: input.env,
-          timeoutMs: input.timeoutMs,
-        }),
-      ),
-    });
-    const report = await sdk.tools.checkModel({
+    const commandRunner = createCursorCommandRunner(
+      buildProbeOptions({
+        cwd: input.cwd,
+        env: input.env,
+        timeoutMs: input.timeoutMs,
+      }),
+    );
+    const report = await cursorSdkCheckModelImpl(commandRunner, {
       model: input.model,
       probe: input.probe ?? true,
       timeoutMs: normalizeTimeout(input.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),

@@ -5,6 +5,7 @@ import type {
   AdapterExecutionInput,
 } from "../adapter";
 import { CursorCliAgentAdapter, resolveCursorModelSlug } from "./cursor";
+import { setCursorSdkCheckModelForTest } from "./readiness";
 
 const baseInput: AdapterExecutionInput = {
   workflowId: "wf",
@@ -66,6 +67,7 @@ const baseContext: AdapterExecutionContext = {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  setCursorSdkCheckModelForTest(undefined);
 });
 
 interface MockCursorRunResult {
@@ -739,6 +741,118 @@ describe("CursorCliAgentAdapter", () => {
         approveMcps: true,
       }),
     );
+  });
+
+  test("default preflight probes resolved gpt-5.5-high slug for gpt-5.5 + effort high", async () => {
+    let capturedModel: string | undefined;
+    setCursorSdkCheckModelForTest(async (_commandRunner, options) => {
+      capturedModel = options.model;
+      return {
+        model: options.model,
+        binary: {
+          name: "cursor-agent",
+          command: "cursor-agent",
+          version: "1.0.0",
+          status: "available",
+          checkedAt: new Date().toISOString(),
+        },
+        auth: {
+          status: "available",
+          detail: "authenticated",
+          provenance: "stable_api",
+        },
+        modelReachability: {
+          status: "available",
+          probed: true,
+        },
+        checkedAt: new Date().toISOString(),
+      };
+    });
+
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      authPreflight: true,
+      createRunner: vi.fn(() => runner),
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "gpt-5.5",
+          effort: "high",
+        },
+      },
+      baseContext,
+    );
+
+    expect(capturedModel).toBe("gpt-5.5-high");
+  });
+
+  test("default preflight reports auth-required probe output as authentication unavailable", async () => {
+    setCursorSdkCheckModelForTest(async (_commandRunner, options) => ({
+      model: options.model,
+      binary: {
+        name: "cursor-agent",
+        command: "cursor-agent",
+        version: "1.0.0",
+        status: "available",
+        checkedAt: new Date().toISOString(),
+      },
+      auth: {
+        status: "unknown",
+        detail: "auth not checked via probe path",
+        provenance: "not_available",
+      },
+      modelReachability: {
+        status: "unavailable",
+        probed: true,
+        error:
+          "Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY in your environment.",
+      },
+      checkedAt: new Date().toISOString(),
+    }));
+
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      authPreflight: true,
+      createRunner: vi.fn(() => runner),
+    });
+
+    await expect(
+      adapter.execute(
+        {
+          ...baseInput,
+          node: {
+            ...baseInput.node,
+            model: "gpt-5.5",
+            effort: "high",
+          },
+        },
+        baseContext,
+      ),
+    ).rejects.toMatchObject({
+      code: "policy_blocked",
+      message: expect.stringContaining(
+        "cursor-cli-agent authentication is unavailable",
+      ),
+    });
+    await expect(
+      adapter.execute(
+        {
+          ...baseInput,
+          node: {
+            ...baseInput.node,
+            model: "gpt-5.5",
+            effort: "high",
+          },
+        },
+        baseContext,
+      ),
+    ).rejects.not.toMatchObject({
+      message: expect.stringContaining("model"),
+    });
   });
 
   test("allows auth preflight to be disabled", async () => {
