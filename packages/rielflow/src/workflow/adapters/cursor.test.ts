@@ -4,7 +4,7 @@ import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
 } from "../adapter";
-import { CursorCliAgentAdapter } from "./cursor";
+import { CursorCliAgentAdapter, resolveCursorModelSlug } from "./cursor";
 
 const baseInput: AdapterExecutionInput = {
   workflowId: "wf",
@@ -235,6 +235,70 @@ describe("CursorCliAgentAdapter", () => {
     expect(runner.start).not.toHaveBeenCalledWith(
       expect.objectContaining({
         effort: "high",
+      }),
+    );
+  });
+
+  test("resolves gpt-5.5 effort into Cursor model slug without separate effort", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "gpt-5.5",
+          effort: "high",
+        },
+      },
+      baseContext,
+    );
+
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5.5-high",
+      }),
+    );
+    expect(runner.start).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: expect.anything(),
+      }),
+    );
+  });
+
+  test("uses resolved gpt-5.5 slug when resuming cursor sessions", async () => {
+    const sessionId = "cursor-gpt55-resume";
+    const resumeSession = makeMockCursorSession({ sessionId });
+    const runner = makeMockCursorRunner({ resume: resumeSession });
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "gpt-5.5",
+          effort: "high",
+        },
+        backendSession: { mode: "reuse", sessionId },
+      },
+      baseContext,
+    );
+
+    expect(runner.resume).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5.5-high",
+        sessionId,
+      }),
+    );
+    expect(runner.resume).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: expect.anything(),
       }),
     );
   });
@@ -699,5 +763,30 @@ describe("CursorCliAgentAdapter", () => {
     });
     expect(checkAuthPreflight).not.toHaveBeenCalled();
     expect(createRunner).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resolveCursorModelSlug", () => {
+  test("maps gpt-5.5 effort into Cursor model slugs", () => {
+    expect(resolveCursorModelSlug("gpt-5.5", "high")).toBe("gpt-5.5-high");
+    expect(resolveCursorModelSlug("gpt-5.5", "xhigh")).toBe(
+      "gpt-5.5-extra-high",
+    );
+  });
+
+  test("replaces existing gpt-5.5 effort token and preserves fast suffix", () => {
+    expect(resolveCursorModelSlug("gpt-5.5-medium", "high")).toBe(
+      "gpt-5.5-high",
+    );
+    expect(resolveCursorModelSlug("gpt-5.5-medium-fast", "high")).toBe(
+      "gpt-5.5-high-fast",
+    );
+  });
+
+  test("leaves composer and non-gpt-5.5 models for existing effort handling", () => {
+    expect(resolveCursorModelSlug("composer-2.5", "high")).toBe("composer-2.5");
+    expect(resolveCursorModelSlug("claude-sonnet-4-5", "high")).toBe(
+      "claude-sonnet-4-5",
+    );
   });
 });

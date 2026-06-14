@@ -245,9 +245,52 @@ function extractAssistantMessageText(event: CursorAgentEvent): string | null {
 }
 
 const COMPOSER_MODEL_PREFIX = "composer-";
+const GPT55_MODEL_PREFIX = "gpt-5.5";
+const FAST_MODEL_SUFFIX = "-fast";
+const GPT55_EFFORT_TOKENS = new Set(["extra-high", "high", "medium", "low"]);
+
+function isGpt55Model(model: string): boolean {
+  return model === GPT55_MODEL_PREFIX || model.startsWith(`${GPT55_MODEL_PREFIX}-`);
+}
+
+function cursorEffortSlug(effort: string): string {
+  return effort === "xhigh" ? "extra-high" : effort;
+}
+
+function stripGpt55EffortToken(model: string): {
+  readonly base: string;
+  readonly fastSuffix: string;
+} {
+  const hasFastSuffix = model.endsWith(FAST_MODEL_SUFFIX);
+  const withoutFast = hasFastSuffix
+    ? model.slice(0, -FAST_MODEL_SUFFIX.length)
+    : model;
+  const effortSuffix = withoutFast.slice(GPT55_MODEL_PREFIX.length + 1);
+  const base = GPT55_EFFORT_TOKENS.has(effortSuffix)
+    ? GPT55_MODEL_PREFIX
+    : withoutFast;
+  return {
+    base,
+    fastSuffix: hasFastSuffix ? FAST_MODEL_SUFFIX : "",
+  };
+}
+
+export function resolveCursorModelSlug(
+  model: string,
+  effort: string | undefined,
+): string {
+  if (effort === undefined || model.startsWith(COMPOSER_MODEL_PREFIX)) {
+    return model;
+  }
+  if (!isGpt55Model(model)) {
+    return model;
+  }
+  const { base, fastSuffix } = stripGpt55EffortToken(model);
+  return `${base}-${cursorEffortSlug(effort)}${fastSuffix}`;
+}
 
 function modelSupportsCursorEffortSuffix(model: string): boolean {
-  return !model.startsWith(COMPOSER_MODEL_PREFIX);
+  return !model.startsWith(COMPOSER_MODEL_PREFIX) && !isGpt55Model(model);
 }
 
 function resolveCursorAgentEffort(
@@ -300,6 +343,7 @@ function resolveLocalSessionConfig(
   const cwd = config.cwd ?? input.workingDirectory;
   const streamMode: CursorAgentStreamMode = config.streamMode ?? "event";
   const images = resolveAdapterImagePaths(input);
+  const model = resolveCursorModelSlug(input.node.model, input.node.effort);
   const effort = resolveCursorAgentEffort(input.node.model, input.node.effort);
   const permissionOptions = resolveCursorPermissionOptions(config);
   const baseRequest: Omit<CursorAgentRequest, "prompt" | "sessionId"> = {
@@ -307,7 +351,7 @@ function resolveLocalSessionConfig(
     ...(input.systemPromptText === undefined
       ? {}
       : { systemPrompt: input.systemPromptText }),
-    model: input.node.model,
+    model,
     ...(effort === undefined ? {} : { effort }),
     ...(config.mode === undefined ? {} : { mode: config.mode }),
     ...(images.length === 0 ? {} : { images }),
