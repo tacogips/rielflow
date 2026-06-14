@@ -41,6 +41,11 @@ interface CursorAgentRequest {
   readonly mode?: CursorAgentMode;
   readonly streamMode?: CursorAgentStreamMode;
   readonly images?: readonly string[];
+  readonly trust?: boolean;
+  readonly force?: boolean;
+  readonly yolo?: boolean;
+  readonly sandbox?: "enabled" | "disabled";
+  readonly approveMcps?: boolean;
 }
 
 interface CursorAgentRunResult {
@@ -133,6 +138,11 @@ export interface CursorAdapterConfig extends LlmSessionStallWatchConfig {
   readonly cursorBinary?: string;
   readonly mode?: CursorAgentMode;
   readonly streamMode?: CursorAgentStreamMode;
+  readonly trust?: boolean;
+  readonly force?: boolean;
+  readonly yolo?: boolean;
+  readonly sandbox?: "enabled" | "disabled";
+  readonly approveMcps?: boolean;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly createRunner?: CursorRunnerFactory;
   readonly checkAuthPreflight?: (
@@ -258,6 +268,26 @@ function summarizeCursorAgentFailure(stderr: string): string | undefined {
   return line;
 }
 
+interface CursorPermissionOptions {
+  readonly trust: boolean;
+  readonly force: boolean;
+  readonly yolo: boolean;
+  readonly sandbox: "enabled" | "disabled";
+  readonly approveMcps: boolean;
+}
+
+function resolveCursorPermissionOptions(
+  config: CursorAdapterConfig,
+): CursorPermissionOptions {
+  return {
+    trust: config.trust !== undefined ? config.trust : true,
+    force: config.force !== undefined ? config.force : true,
+    yolo: config.yolo !== undefined ? config.yolo : true,
+    sandbox: config.sandbox !== undefined ? config.sandbox : "disabled",
+    approveMcps: config.approveMcps !== undefined ? config.approveMcps : true,
+  };
+}
+
 function resolveLocalSessionConfig(
   config: CursorAdapterConfig,
   input: AdapterExecutionInput,
@@ -271,6 +301,7 @@ function resolveLocalSessionConfig(
   const streamMode: CursorAgentStreamMode = config.streamMode ?? "event";
   const images = resolveAdapterImagePaths(input);
   const effort = resolveCursorAgentEffort(input.node.model, input.node.effort);
+  const permissionOptions = resolveCursorPermissionOptions(config);
   const baseRequest: Omit<CursorAgentRequest, "prompt" | "sessionId"> = {
     cwd,
     ...(input.systemPromptText === undefined
@@ -281,6 +312,7 @@ function resolveLocalSessionConfig(
     ...(config.mode === undefined ? {} : { mode: config.mode }),
     ...(images.length === 0 ? {} : { images }),
     streamMode,
+    ...permissionOptions,
   };
   return {
     promptText,

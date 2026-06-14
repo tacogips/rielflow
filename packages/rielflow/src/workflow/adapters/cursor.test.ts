@@ -605,6 +605,78 @@ describe("CursorCliAgentAdapter", () => {
     expect(createRunner).not.toHaveBeenCalled();
   });
 
+  test("applies maximum permission defaults when no permission config is set", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trust: true,
+        force: true,
+        yolo: true,
+        sandbox: "disabled",
+        approveMcps: true,
+      }),
+    );
+  });
+
+  test("preserves explicit false overrides for permission booleans", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+      trust: false,
+      force: false,
+      yolo: false,
+      sandbox: "enabled",
+      approveMcps: false,
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trust: false,
+        force: false,
+        yolo: false,
+        sandbox: "enabled",
+        approveMcps: false,
+      }),
+    );
+  });
+
+  test("forwards permission options through resume", async () => {
+    const sessionId = "cursor-perm-resume";
+    const resumeSession = makeMockCursorSession({ sessionId });
+    const runner = makeMockCursorRunner({ resume: resumeSession });
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+      trust: false,
+      yolo: false,
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        backendSession: { mode: "reuse", sessionId },
+      },
+      baseContext,
+    );
+
+    expect(runner.resume).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trust: false,
+        yolo: false,
+        force: true,
+        sandbox: "disabled",
+        approveMcps: true,
+      }),
+    );
+  });
+
   test("allows auth preflight to be disabled", async () => {
     const runner = makeMockCursorRunner({});
     const createRunner = vi.fn(() => runner);

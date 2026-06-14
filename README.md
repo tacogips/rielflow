@@ -152,6 +152,14 @@ nodes use `ANTHROPIC_API_KEY`, Cursor SDK-backed nodes use `CURSOR_API_KEY`,
 and local CLI-backed nodes depend on the corresponding Codex, Claude Code, or
 Cursor CLI setup.
 
+Local CLI-backed workflow nodes default to unattended, maximum-permission
+execution. `codex-agent` runs with `fullAuto: true`, `approvalMode: "never"`,
+and `sandbox: "danger-full-access"`; `claude-code-agent` runs with
+`permissionMode: "bypassPermissions"`; and `cursor-cli-agent` runs with
+`trust`, `force`, `yolo`, and `approveMcps` enabled plus
+`sandbox: "disabled"`. Embedders that construct adapters directly can still pass
+stricter adapter config values to override these defaults.
+
 Optional Nix install:
 
 ```bash
