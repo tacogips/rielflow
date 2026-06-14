@@ -421,6 +421,7 @@ export type NodeType =
 
 export interface NodeSessionPolicy {
   readonly mode: NodeSessionMode;
+  readonly persistence?: "workflow" | "user";
 }
 
 export type ContainerRunnerKind =

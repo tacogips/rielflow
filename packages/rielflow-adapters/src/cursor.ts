@@ -197,6 +197,49 @@ const AUTH_REQUIRED_PATTERNS: readonly RegExp[] = [
   /not logged in/iu,
 ];
 
+const CURSOR_API_KEY_ENV_KEYS = [
+  "RIELFLOW_CURSOR_API_KEY",
+  "CURSOR_API_KEY",
+] as const;
+
+const CURSOR_HOME_ENV_KEYS = [
+  "RIELFLOW_CURSOR_HOME",
+  "CURSOR_CLI_AGENT_CURSOR_HOME",
+] as const;
+
+export interface CursorAuthEnvironment
+  extends Readonly<Record<string, string | undefined>> {
+  readonly CURSOR_API_KEY?: string;
+  readonly CURSOR_CLI_AGENT_CURSOR_HOME?: string;
+}
+
+export function resolveCursorAuthEnvironment(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): CursorAuthEnvironment {
+  let apiKey: string | undefined;
+  for (const key of CURSOR_API_KEY_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0) {
+      apiKey = value;
+      break;
+    }
+  }
+  let cursorHome: string | undefined;
+  for (const key of CURSOR_HOME_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0) {
+      cursorHome = value;
+      break;
+    }
+  }
+  return {
+    ...(apiKey !== undefined ? { CURSOR_API_KEY: apiKey } : {}),
+    ...(cursorHome !== undefined
+      ? { CURSOR_CLI_AGENT_CURSOR_HOME: cursorHome }
+      : {}),
+  };
+}
+
 function isAuthRequiredProbeText(text: string): boolean {
   return AUTH_REQUIRED_PATTERNS.some((pattern) => pattern.test(text));
 }
@@ -229,8 +272,12 @@ async function runCursorAuthPreflight(
   if (!shouldRunAuthPreflight(config)) {
     return;
   }
+  const cursorAuthEnv = resolveCursorAuthEnvironment(
+    config.env ?? process.env,
+  );
   const env = buildAmbientProcessEnv(
     config.env,
+    Object.keys(cursorAuthEnv).length > 0 ? cursorAuthEnv : undefined,
     input.rielflowHookContext === undefined
       ? undefined
       : { ...input.rielflowHookContext.environment },
@@ -447,8 +494,12 @@ async function executeLocalCursorAgent(
 
   const { promptText, startRequest, baseResumeRequest } =
     resolveLocalSessionConfig(config, input);
+  const cursorAuthEnv = resolveCursorAuthEnvironment(
+    config.env ?? process.env,
+  );
   const ambientEnv = buildAmbientProcessEnv(
     config.env,
+    Object.keys(cursorAuthEnv).length > 0 ? cursorAuthEnv : undefined,
     input.rielflowHookContext === undefined
       ? undefined
       : { ...input.rielflowHookContext.environment },
