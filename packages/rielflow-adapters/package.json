@@ -1,6 +1,6 @@
 {
   "name": "rielflow-adapters",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "Agent backend adapters and dispatch registry for Rielflow",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
     "@cursor/sdk": "1.0.17",
     "claude-code-agent": "github:tacogips/claude-code-agent#2c3ecc17000d1b881fb05f7a27fc6399a57f1328",
     "codex-agent": "github:tacogips/codex-agent#eea2171c937749a074f47aa967d88a5dcc22e023",
-    "cursor-cli-agent": "github:tacogips/cursor-cli-agent#9edb04cd8f2f22f184d4298effec3718cbae6c04",
+    "cursor-cli-agent": "github:tacogips/cursor-cli-agent#eba59a53e9446dc37fdccf29b6f48d176ac54320",
     "openai": "6.27.0",
     "rielflow-core": "workspace:*"
   },
