@@ -42,6 +42,11 @@
   "checksumSidecar": "<archive>.sha256",
   "previewFormulaUrlBase": "file://$PWD/dist/homebrew",
   "allowsProductionCutover": true,
+  "typeScriptDeletionReadiness": {
+    "ready": false,
+    "gatePath": "packaging/swift-deletion-readiness.json",
+    "note": "Production Swift Homebrew cutover does not authorize TypeScript/Bun source deletion."
+  },
   "forbiddenTask009SideEffects": [
     "publish GitHub release assets",
     "commit or push tap formula changes",

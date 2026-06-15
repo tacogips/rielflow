@@ -98,6 +98,11 @@ final class SwiftPackagingReadinessTests: XCTestCase {
       ]
     )
     XCTAssertTrue(manifest.allowsProductionCutover)
+    XCTAssertEqual(manifest.typeScriptDeletionReadiness?.ready, false)
+    XCTAssertEqual(
+      manifest.typeScriptDeletionReadiness?.gatePath,
+      "packaging/swift-deletion-readiness.json"
+    )
     XCTAssertTrue(manifest.gates.count >= 10)
     XCTAssertTrue(manifest.gates.allSatisfy { $0.status == "passed" })
     XCTAssertEqual(manifest.gates.filter { $0.id == "task009-adversarial-review" }.map(\.status), ["passed"])
@@ -222,8 +227,14 @@ final class SwiftPackagingReadinessTests: XCTestCase {
     var swiftReadinessArchiveDirectory: String
     var swiftArchiveNames: [String]
     var allowsProductionCutover: Bool
+    var typeScriptDeletionReadiness: SwiftTypeScriptDeletionReadiness?
     var gates: [SwiftCutoverGate]
     var productionCutoverEvidence: SwiftProductionCutoverEvidence?
+  }
+
+  private struct SwiftTypeScriptDeletionReadiness: Decodable {
+    var ready: Bool
+    var gatePath: String
   }
 
   private struct SwiftCutoverGate: Decodable {

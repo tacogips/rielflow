@@ -46,6 +46,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `swift-deletion-readiness-gate` | 2026-06-16 | `design-swift-native-migration#typescript-deletion-readiness-todo-loop` |
 | `swift-homebrew-production-cutover` | 2026-06-12 | `design-swift-native-migration#branch-production-swift-homebrew-release-cutover`, `architecture`, `qa-swift-native-migration#release-cutover-threshold` |
 | `swift-native-migration` | 2026-06-12 | `design-swift-native-migration`, `architecture`, `qa-swift-native-migration` |
 | `swift-native-migration-task-009-final-cutover-gate` | 2026-06-12 | `design-swift-native-migration#task-009-final-parity-security-and-cutover-gate` |

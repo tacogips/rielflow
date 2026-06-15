@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-14T00:00:00+09:00",
+  "lastUpdated": "2026-06-16T02:29:20+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -588,6 +588,9 @@
     },
     "199": {
       "status": "IN_PROGRESS"
+    },
+    "204": {
+      "status": "COMPLETED"
     }
   },
   "plans": {
@@ -10158,6 +10161,265 @@
           "communication": "comm-000004",
           "summary": "Swift session rerun/resume CLI, file-backed session store, resumeSessionId runner support, gate evidence honesty fix."
         }
+      ]
+    },
+    "completed/swift-deletion-readiness-gate": {
+      "phase": 204,
+      "status": "Completed",
+      "path": "impl-plans/completed/swift-deletion-readiness-gate.md",
+      "designReference": "design-docs/specs/design-swift-native-migration.md#typescript-deletion-readiness-todo-loop",
+      "workflowMode": "issue-resolution",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "issueReference": "workflow input issue title: Swift migration TODO loop until TypeScript can be deleted; no issueUrl or issueNumber supplied",
+      "reviewMode": "adversarial",
+      "riskLevel": "high",
+      "codexAgentReference": "../../codex-agent unavailable; external-reference:codex-agent is reference-only. Rielflow TypeScript adapters and pinned package contracts remain authoritative for deletion-readiness parity.",
+      "claimsFullSwiftMigrationComplete": false,
+      "claimsTypeScriptDeletionReady": false,
+      "allowsTypeScriptDeletion": false,
+      "deletionGatePath": "packaging/swift-deletion-readiness.json",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [],
+          "summary": "Create blocked deletion-readiness gate artifact with all required package, CLI, server, GraphQL, event, workflow package, persistence, release, documentation, test, and agent domains"
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ],
+          "summary": "Add deterministic Swift gate model and validator for required fields, required domains, duplicate ids, and unsafe aggregate deletion-ready claims"
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ],
+          "summary": "Expose gate status through packaging readiness metadata and tests without changing production cutover behavior or adding a new CLI command surface"
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ],
+          "summary": "Update completed plan index and progress metadata while keeping full Swift migration and TypeScript deletion readiness false"
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004"
+          ],
+          "summary": "Run JSON, blocked-state, focused Swift, TypeScript baseline, workflow validation, and diff verification before review handoff"
+        }
+      },
+      "verificationCommands": [
+        "jq empty packaging/swift-deletion-readiness.json impl-plans/PROGRESS.json packaging/homebrew/swift-cutover-gates.json",
+        "jq -e '.allowsTypeScriptDeletion == false and .typeScriptSourceDeletionReady == false' packaging/swift-deletion-readiness.json",
+        "jq -e '[.domains[] | select(.requiredBeforeTypeScriptDeletion == true)] | length >= 13' packaging/swift-deletion-readiness.json",
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter SwiftDeletionReadinessTests",
+        "bun run typecheck:server",
+        "bun run lint:biome",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+        "git diff --check -- packaging/swift-deletion-readiness.json Sources/RielflowCore/SwiftDeletionReadiness.swift Tests/RielflowCoreTests/SwiftDeletionReadinessTests.swift Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift impl-plans/completed/swift-deletion-readiness-gate.md impl-plans/README.md impl-plans/PROGRESS.json packaging/homebrew/swift-cutover-gates.json"
+      ],
+      "parallelization": [
+        "TASK-001 is the only task parallelizable at plan start.",
+        "TASK-002 is sequential after TASK-001 because it validates the actual gate schema.",
+        "TASK-003 is sequential after TASK-002 because CLI or packaging visibility must consume validator results rather than duplicate validation.",
+        "TASK-004 is sequential after TASK-001 so progress metadata does not claim implemented evidence before the gate exists.",
+        "TASK-005 is sequential because review handoff depends on actual verification evidence."
+      ],
+      "residualRisks": [
+        "This plan creates the first bounded gate slice only; it does not complete Swift migration or authorize TypeScript deletion.",
+        "Full deletion readiness remains blocked until every required domain has current accepted evidence with no high or mid review findings.",
+        "Agent parity for codex-agent, claude-code-agent, and cursor-cli-agent must remain mapped to authoritative TypeScript adapters and pinned package contracts until approved Swift references exist.",
+        "CLI or packaging visibility should be skipped or narrowed if no existing local pattern fits without inventing new user-facing architecture."
+      ],
+      "addressedFeedback": [
+        {
+          "nodeId": "step3-design-review",
+          "severity": "accepted",
+          "finding": "Step 3 accepted the TypeScript deletion-readiness design with no high or mid findings.",
+          "resolution": "Created a focused active implementation plan that creates and validates a blocked deletion-readiness gate instead of deleting TypeScript."
+        },
+        {
+          "nodeId": "step4-impl-plan-self-review",
+          "severity": "plan-only-fixed",
+          "finding": "PROGRESS.json task metadata and README indexing drifted from the current implementation plan.",
+          "resolution": "Aligned PROGRESS.json to the current five-task plan, removed duplicate README entry, and corrected TASK-004 parallelization/status notes."
+        },
+        {
+          "nodeId": "step6-implement",
+          "severity": "implemented",
+          "finding": "Accepted implementation plan required the first bounded TypeScript deletion-readiness TODO-loop slice rather than TypeScript deletion.",
+          "resolution": "Created a tracked deletion gate, deterministic Swift validator/tests, separate Homebrew metadata reference, progress updates, and verification evidence while preserving TypeScript/Bun source, tests, commands, and fallback documentation."
+        },
+        {
+          "nodeId": "step6-implement-self-review",
+          "severity": "self-review-fixed",
+          "finding": "validate(_:) reported blocked domains but did not mark nil evidenceCommands or evidenceArtifacts as invalid for directly constructed gate models.",
+          "resolution": "Added deterministic missing evidenceCommands/evidenceArtifacts diagnostics in SwiftDeletionReadinessValidator.validate(_:) and a focused Swift regression; SwiftDeletionReadinessTests now pass 7 tests."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid-fixed",
+          "finding": "The deletion-readiness gate stored host-local codex-agent evidence artifact paths.",
+          "resolution": "Replaced host-local paths in packaging/swift-deletion-readiness.json, impl-plans/completed/swift-deletion-readiness-gate.md, and PROGRESS.json with portable external-reference:codex-agent/... references."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid-fixed",
+          "finding": "TASK-003 claimed CLI WorkflowCommands.swift and WorkflowCommandTests.swift deliverables were completed although those files were unchanged.",
+          "resolution": "Revised the implementation plan and PROGRESS task metadata to state TASK-003 is packaging/test visibility only and updated diff-check verification paths accordingly."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Validator could report TypeScript deletion ready from self-attested status/review labels, placeholder evidence arrays, and any lastVerifiedAt value.",
+          "resolution": "Added SwiftDeletionReadinessValidationContext and require matching verifiedBranch/verifiedCommit, acceptedReviewWorkflowId, acceptedReviewNodeId, and no high/mid acceptedReviewFindingSeverities before allowsTypeScriptDeletion can validate true; added stale-commit and high/mid-review regressions."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Tracked gate test decoded JSON and called validate(_:) directly, bypassing structural key-presence checks from decodeAndValidate(_:).",
+          "resolution": "Changed the primary tracked gate test to validate raw JSON through decodeAndValidate(_:) and added missing lastVerifiedAt/notes regressions."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid-fixed",
+          "finding": "SwiftDeletionReadinessValidationResult.allowsTypeScriptDeletion could be true even when diagnostics made the gate invalid, including duplicate domains or missing required structural fields.",
+          "resolution": "Made decodeAndValidate(_:, context:) and validate(_:, context:) require diagnostics.isEmpty before allowsTypeScriptDeletion can be true; added duplicate-domain and missing-notes deletion-ready regressions."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid-fixed",
+          "finding": "Repository diff still contained out-of-scope deleted skill files and unrelated Swift session-indexing, GraphQL, CLI, design, flake, script, and test changes.",
+          "resolution": "Restored tracked out-of-scope files to HEAD, removed untracked out-of-scope session-indexing files, and cleaned impl-plans/README.md plus impl-plans/PROGRESS.json so Step 6 diff is scoped to deletion-readiness gate files only."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Deletion-ready validation context only bound branch and commit while acceptedReviewWorkflowId and acceptedReviewNodeId were accepted as any non-empty strings.",
+          "resolution": "Extended SwiftDeletionReadinessValidationContext with expected acceptedReviewWorkflowId and expectedAcceptedReviewNodeId, require exact matches in diagnostics and blocking checks, and added bogus workflow/node regressions."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Deletion-ready validation only blocked severities normalized exactly to high or mid, so medium, critical, blocker, unknown, or blank severity labels could be treated as non-blocking accepted review evidence.",
+          "resolution": "Added explicit accepted-review severity classification: low/info/informational/none are non-blocking, high/mid/medium/critical/blocker block deletion readiness, and unknown or blank labels are invalid and blocking; added regressions for medium, critical, blocker, unknown, and blank labels."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Deletion-ready validation treated any non-empty evidenceCommands/evidenceArtifacts and any non-empty lastVerifiedAt as sufficient, allowing placeholder commands, source-only artifacts, malformed timestamps, or empty acceptedReviewFindingSeverities to unlock deletion readiness.",
+          "resolution": "Require parseable ISO-8601 lastVerifiedAt, reject placeholder evidence commands, require durable evidence artifact references such as workflow-artifact:, verification-result:, or /tmp/rielflow-artifact-dev/ paths, and require explicit non-empty non-blocking accepted-review severity evidence; added focused regressions for each bypass."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Deletion-ready validation accepted syntactically durable artifact references without resolving command-result metadata or binding evidence contents to the current commit and accepted review.",
+          "resolution": "Added SwiftDeletionReadinessEvidenceArtifact metadata and require every deletion-ready evidence artifact to resolve with exitCode 0, matching domain id, listed command, branch, commit, workflow id, and review node id; added unresolved and failed-command regressions."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Validator required migrationStatus to remain incomplete even when allowsTypeScriptDeletion validated true, creating contradictory deletion-ready state.",
+          "resolution": "Require migrationStatus=deletion_ready when allowsTypeScriptDeletion and typeScriptSourceDeletionReady are both true, while tracked blocked gates remain migrationStatus=incomplete; added contradictory-status regression."
+        },
+        {
+          "nodeId": "step7-review",
+          "severity": "mid-fixed",
+          "finding": "Implementation plan referenced design-docs/specs/design-swift-native-migration.md#typescript-deletion-readiness-todo-loop, but the design document did not contain that accepted deletion-readiness TODO-loop anchor or gate terms.",
+          "resolution": "Added the TypeScript Deletion-Readiness TODO Loop section to design-docs/specs/design-swift-native-migration.md with swift-deletion-readiness.json, blocked deletion flags, required parity domains, codex-agent reference rules, and durable accepted-evidence requirements."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Deletion-ready validation could accept a domain when every resolved artifact was valid but not every listed evidence command had a matching successful artifact.",
+          "resolution": "Require every deletion-ready evidence command to have at least one resolved successful evidence artifact bound to the same domain id, branch, commit, workflow id, and review node id; added a multi-command missing-artifact regression."
+        },
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid-fixed",
+          "finding": "Deletion-ready validation could accept irrelevant non-placeholder commands as parity evidence for package, CLI, server, GraphQL, event, workflow package, persistence, release, documentation, test, and agent domains.",
+          "resolution": "Added domain-specific required evidence command groups and updated deletion-ready fixtures to require matching Swift parity plus TypeScript/Bun, release, or documentation commands; added a validator-only command regression."
+        }
+      ],
+      "verifiedEvidence": {
+        "scope": "first bounded TypeScript deletion-readiness TODO-loop slice",
+        "claimsFullSwiftMigrationComplete": false,
+        "claimsTypeScriptDeletionReady": false,
+        "allowsTypeScriptDeletion": false,
+        "typeScriptSourceDeletionReady": false,
+        "productionSwiftPackagingReady": true,
+        "deletionGatePath": "packaging/swift-deletion-readiness.json",
+        "requiredDomains": [
+          "package-build",
+          "cli",
+          "server",
+          "graphql",
+          "event",
+          "workflow-package",
+          "persistence",
+          "release",
+          "documentation",
+          "test",
+          "agent-codex",
+          "agent-claude-code",
+          "agent-cursor-cli"
+        ],
+        "blockedDomains": [
+          "package-build",
+          "cli",
+          "server",
+          "graphql",
+          "event",
+          "workflow-package",
+          "persistence",
+          "release",
+          "documentation",
+          "test",
+          "agent-codex",
+          "agent-claude-code",
+          "agent-cursor-cli"
+        ],
+        "commands": [
+          "jq empty packaging/swift-deletion-readiness.json impl-plans/PROGRESS.json packaging/homebrew/swift-cutover-gates.json",
+          "jq -e '.allowsTypeScriptDeletion == false and .typeScriptSourceDeletionReady == false' packaging/swift-deletion-readiness.json",
+          "jq -e '[.domains[] | select(.requiredBeforeTypeScriptDeletion == true)] | length >= 13' packaging/swift-deletion-readiness.json",
+          "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter SwiftDeletionReadinessTests",
+          "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter SwiftPackagingReadinessTests/testCutoverGateManifestRecordsProductionCutover",
+          "bun run typecheck:server",
+          "bun run lint:biome",
+          "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project",
+          "git diff --check -- packaging/swift-deletion-readiness.json Sources/RielflowCore/SwiftDeletionReadiness.swift Tests/RielflowCoreTests/SwiftDeletionReadinessTests.swift Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift impl-plans/completed/swift-deletion-readiness-gate.md impl-plans/README.md impl-plans/PROGRESS.json packaging/homebrew/swift-cutover-gates.json"
+        ],
+        "verifiedAt": "2026-06-16T02:17:41+09:00",
+        "focusedSwiftDeletionReadinessTests": "25 tests, 0 failures",
+        "step7RevisionVerification": "Design reference rg check, jq JSON checks, bun lint:biome, bun typecheck:server, workflow validate, and scoped git diff --check passed after Step 7 design-reference fix; prior focused SwiftDeletionReadinessTests 23 tests and SwiftPackagingReadiness cutover test 1 test passed after code changes.",
+        "adversarialRevisionVerification": "Deletion-ready domains require resolved successful command-result metadata bound to artifact ref, domain id, listed command, branch, commit, workflow id, and review node id; every listed evidence command must have matching resolved successful artifact coverage; every domain must include required Swift parity plus TypeScript/Bun, release, or documentation command groups; migrationStatus must be deletion_ready when both deletion flags are true.",
+        "designReferenceVerification": "rg -n \"^## TypeScript Deletion-Readiness TODO Loop|swift-deletion-readiness\\.json|allowsTypeScriptDeletion=false|typeScriptSourceDeletionReady=false|claude-code-agent|codex-agent|cursor-cli-agent\" design-docs/specs/design-swift-native-migration.md passed; design-docs/specs/design-swift-native-migration.md#typescript-deletion-readiness-todo-loop exists."
+      },
+      "changedFiles": [
+        "packaging/swift-deletion-readiness.json",
+        "Sources/RielflowCore/SwiftDeletionReadiness.swift",
+        "Tests/RielflowCoreTests/SwiftDeletionReadinessTests.swift",
+        "Tests/RielflowCoreTests/SwiftPackagingReadinessTests.swift",
+        "packaging/homebrew/swift-cutover-gates.json",
+        "impl-plans/completed/swift-deletion-readiness-gate.md",
+        "impl-plans/README.md",
+        "impl-plans/PROGRESS.json",
+        "design-docs/specs/design-swift-native-migration.md"
       ]
     }
   }

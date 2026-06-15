@@ -871,6 +871,53 @@ Cutover constraints:
 - Swift target names can use Swift-style PascalCase, but public backend strings, workflow JSON fields, package identifiers, and documented CLI behavior must remain stable.
 - The migration should not include a native macOS UI in the runtime parity milestone. UI design can begin after CLI/runtime parity is testable.
 
+## TypeScript Deletion-Readiness TODO Loop
+
+Swift production packaging readiness is not TypeScript source deletion
+readiness. The migration must keep TypeScript/Bun source, tests, package
+metadata, CLI entrypoints, server surfaces, GraphQL contracts, event sources,
+workflow package behavior, persistence, release tooling, documentation, and
+fallback verification in place until a tracked deletion-readiness gate proves
+full Swift parity.
+
+The tracked gate is `packaging/swift-deletion-readiness.json`. The first
+bounded implementation slice must keep `allowsTypeScriptDeletion=false`,
+`typeScriptSourceDeletionReady=false`, and `migrationStatus=incomplete`. A later
+deletion-ready state may only set both deletion flags true when
+`migrationStatus=deletion_ready` and every required domain has durable accepted
+evidence:
+
+- package build and package metadata parity
+- CLI validate, inspect, run, resume, rerun, status, and package command parity
+- server runtime and HTTP contract parity
+- GraphQL manager-control, session, and DTO parity
+- event source validation, dry-run, emit, serve, replay, and chat gateway parity
+- workflow package install, checkout, registry, skill projection, and add-on
+  contract parity
+- persistence, workflow session, message store, and resume/rerun parity
+- release, Homebrew, archive, checksum, and rollback parity
+- documentation and user-facing migration guidance parity
+- test parity across Swift package tests, TypeScript baseline checks, workflow
+  validation, release gates, and fixture compatibility
+- `claude-code-agent`, `codex-agent`, and `cursor-cli-agent` behavior parity
+  against the current TypeScript adapters and pinned package contracts
+
+Deletion-ready evidence must be current and review-bound, not self-attested.
+Each required domain must include commands that actually ran, durable command
+result artifact references, parseable ISO-8601 `lastVerifiedAt`, matching branch
+and commit evidence, accepted review workflow/node ids, and explicit
+non-blocking accepted-review severity evidence. Durable evidence artifacts must
+resolve to successful command-result metadata bound to the domain id, listed
+command, branch, commit, workflow id, and review node id. Unknown, blank,
+blocking, stale, unresolved, source-only, or placeholder evidence keeps TypeScript
+deletion blocked.
+
+The local `codex-agent` checkout is reference-only for this deletion-readiness
+loop. Until dedicated Swift references are accepted, `CodexAgent`,
+`ClaudeCodeAgent`, and `CursorCLIAgent` parity is measured against the current
+Rielflow TypeScript adapters and pinned package contracts, with
+`external-reference:codex-agent` used only for structural comparison evidence.
+
 ## Verification Gates
 
 Each migrated package needs:

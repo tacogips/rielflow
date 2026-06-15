@@ -151,3 +151,13 @@ dedicated release cutover marked `productionRuntime` as `swift-native`,
 `allowsProductionCutover` as `true` after both macOS targets had archive,
 checksum, formula, Homebrew smoke, deterministic workflow, and leakage
 evidence.
+
+Production Swift Homebrew packaging is separate from TypeScript/Bun source
+deletion readiness. The deletion gate is tracked in
+`packaging/swift-deletion-readiness.json` and referenced from
+`packaging/homebrew/swift-cutover-gates.json` as
+`typeScriptDeletionReadiness.ready=false`. Do not remove TypeScript/Bun release
+tooling, fallback validation, package metadata, CLI/server/GraphQL/event
+surfaces, workflow package behavior, persistence code, documentation, tests, or
+`codex-agent`, `claude-code-agent`, and `cursor-cli-agent` parity references
+until that deletion gate is accepted by a later review.
