@@ -4,7 +4,11 @@ import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
 } from "../adapter";
-import { CursorCliAgentAdapter } from "./cursor";
+import {
+  CursorCliAgentAdapter,
+  resolveCursorModelSlug,
+  type CursorAdapterConfig,
+} from "./cursor";
 
 const baseInput: AdapterExecutionInput = {
   workflowId: "wf",
@@ -63,6 +67,34 @@ const baseContext: AdapterExecutionContext = {
   timeoutMs: 1000,
   signal: new AbortController().signal,
 };
+
+function createPassingBackendProbe() {
+  return vi.fn(async (input: { model: string }) => ({
+    model: input.model,
+    binary: {
+      name: "cursor-agent",
+      command: "cursor-agent",
+      version: "1.0.0",
+      status: "available" as const,
+    },
+    auth: {
+      status: "available" as const,
+      detail: "authenticated",
+    },
+    modelReachability: {
+      status: "available" as const,
+      probed: true,
+    },
+  }));
+}
+
+function createTestAdapter(config: CursorAdapterConfig = {}) {
+  return new CursorCliAgentAdapter({
+    ...config,
+    checkBackendModelAvailability:
+      config.checkBackendModelAvailability ?? createPassingBackendProbe(),
+  });
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -148,7 +180,7 @@ describe("CursorCliAgentAdapter", () => {
     const runner = makeMockCursorRunner({ start: startSession });
     const createRunner = vi.fn(() => runner);
 
-    const adapter = new CursorCliAgentAdapter({ createRunner });
+    const adapter = createTestAdapter({ createRunner });
 
     const output = await adapter.execute(
       { ...baseInput, systemPromptText: "system" },
@@ -183,7 +215,7 @@ describe("CursorCliAgentAdapter", () => {
 
   test("forwards node effort to the Cursor runner", async () => {
     const runner = makeMockCursorRunner({});
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -204,6 +236,101 @@ describe("CursorCliAgentAdapter", () => {
       expect.objectContaining({
         model: "gpt-5.3-codex",
         effort: "high",
+      }),
+    );
+  });
+
+  test("does not forward effort for composer models", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = createTestAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "composer-2.5",
+          effort: "high",
+        },
+      },
+      baseContext,
+    );
+
+    expect(output.effort).toBe("high");
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "composer-2.5",
+      }),
+    );
+    expect(runner.start).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: "high",
+      }),
+    );
+  });
+
+  test("resolves gpt-5.5 effort into Cursor model slug without separate effort", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = createTestAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "gpt-5.5",
+          effort: "high",
+        },
+      },
+      baseContext,
+    );
+
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5.5-high",
+      }),
+    );
+    expect(runner.start).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: expect.anything(),
+      }),
+    );
+  });
+
+  test("uses resolved gpt-5.5 slug when resuming cursor sessions", async () => {
+    const sessionId = "cursor-gpt55-resume";
+    const resumeSession = makeMockCursorSession({ sessionId });
+    const runner = makeMockCursorRunner({ resume: resumeSession });
+    const adapter = createTestAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "gpt-5.5",
+          effort: "high",
+        },
+        backendSession: { mode: "reuse", sessionId },
+      },
+      baseContext,
+    );
+
+    expect(runner.resume).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5.5-high",
+        sessionId,
+      }),
+    );
+    expect(runner.resume).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: expect.anything(),
       }),
     );
   });
@@ -236,7 +363,7 @@ describe("CursorCliAgentAdapter", () => {
       observedMailboxDir = process.env["RIEL_MAILBOX_DIR"];
       return startSession;
     });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -286,7 +413,7 @@ describe("CursorCliAgentAdapter", () => {
 
   test("forwards image attachments discovered in workflow input", async () => {
     const runner = makeMockCursorRunner({});
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -332,7 +459,7 @@ describe("CursorCliAgentAdapter", () => {
       ],
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -359,7 +486,7 @@ describe("CursorCliAgentAdapter", () => {
       ],
     });
     const runner = makeMockCursorRunner({ resume: resumeSession });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -428,7 +555,7 @@ describe("CursorCliAgentAdapter", () => {
       },
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -464,7 +591,7 @@ describe("CursorCliAgentAdapter", () => {
       ],
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -488,7 +615,7 @@ describe("CursorCliAgentAdapter", () => {
       },
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -514,7 +641,7 @@ describe("CursorCliAgentAdapter", () => {
       ],
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -550,7 +677,7 @@ describe("CursorCliAgentAdapter", () => {
         "cursor-cli-agent authentication is unavailable: login required",
       );
     });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner,
       checkAuthPreflight,
     });
@@ -571,6 +698,97 @@ describe("CursorCliAgentAdapter", () => {
     expect(createRunner).not.toHaveBeenCalled();
   });
 
+  test("default preflight probes resolved gpt-5.5 slug before execution", async () => {
+    const checkBackendModelAvailability = vi.fn(async () => ({
+      model: "gpt-5.5-high",
+      binary: {
+        name: "cursor-agent",
+        command: "cursor-agent",
+        version: "1.0.0",
+        status: "available" as const,
+      },
+      auth: {
+        status: "available" as const,
+        detail: "authenticated",
+      },
+      modelReachability: {
+        status: "unavailable" as const,
+        probed: true,
+        error: "model probe failed",
+      },
+    }));
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = createTestAdapter({
+      createRunner,
+      checkBackendModelAvailability,
+    });
+    const input: AdapterExecutionInput = {
+      ...baseInput,
+      node: {
+        ...baseInput.node,
+        model: "gpt-5.5",
+        effort: "high",
+      },
+    };
+
+    await expect(adapter.execute(input, baseContext)).rejects.toMatchObject({
+      code: "policy_blocked",
+      message: expect.stringContaining("model 'gpt-5.5-high' is unavailable"),
+    });
+    expect(checkBackendModelAvailability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5.5-high",
+        probe: true,
+        cwd: "/tmp/project",
+      }),
+    );
+    expect(createRunner).not.toHaveBeenCalled();
+  });
+
+  test("default preflight classifies auth failures before model reachability", async () => {
+    const checkBackendModelAvailability = vi.fn(async () => ({
+      model: "gpt-5.5-high",
+      binary: {
+        name: "cursor-agent",
+        command: "cursor-agent",
+        version: "1.0.0",
+        status: "available" as const,
+      },
+      auth: {
+        status: "unavailable" as const,
+        detail: "login required",
+      },
+      modelReachability: {
+        status: "unavailable" as const,
+        probed: true,
+        error: "model probe failed",
+      },
+    }));
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = createTestAdapter({
+      createRunner,
+      checkBackendModelAvailability,
+    });
+    const input: AdapterExecutionInput = {
+      ...baseInput,
+      node: {
+        ...baseInput.node,
+        model: "gpt-5.5",
+        effort: "high",
+      },
+    };
+
+    await expect(adapter.execute(input, baseContext)).rejects.toMatchObject({
+      code: "policy_blocked",
+      message: expect.stringContaining(
+        "cursor-cli-agent authentication is unavailable: login required",
+      ),
+    });
+    expect(createRunner).not.toHaveBeenCalled();
+  });
+
   test("allows auth preflight to be disabled", async () => {
     const runner = makeMockCursorRunner({});
     const createRunner = vi.fn(() => runner);
@@ -580,7 +798,7 @@ describe("CursorCliAgentAdapter", () => {
         "cursor-cli-agent authentication is unavailable",
       );
     });
-    const adapter = new CursorCliAgentAdapter({
+    const adapter = createTestAdapter({
       createRunner,
       checkAuthPreflight,
       authPreflight: false,
@@ -593,5 +811,36 @@ describe("CursorCliAgentAdapter", () => {
     });
     expect(checkAuthPreflight).not.toHaveBeenCalled();
     expect(createRunner).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resolveCursorModelSlug", () => {
+  test("maps gpt-5.5 effort into Cursor model slugs", () => {
+    expect(resolveCursorModelSlug("gpt-5.5", "high")).toBe("gpt-5.5-high");
+    expect(resolveCursorModelSlug("gpt-5.5", "xhigh")).toBe(
+      "gpt-5.5-extra-high",
+    );
+  });
+
+  test("replaces existing gpt-5.5 effort token and preserves fast suffix", () => {
+    expect(resolveCursorModelSlug("gpt-5.5-medium", "high")).toBe(
+      "gpt-5.5-high",
+    );
+    expect(resolveCursorModelSlug("gpt-5.5-medium-fast", "high")).toBe(
+      "gpt-5.5-high-fast",
+    );
+    expect(resolveCursorModelSlug("gpt-5.5-extra-high", "low")).toBe(
+      "gpt-5.5-low",
+    );
+    expect(resolveCursorModelSlug("gpt-5.5-extra-high-fast", "low")).toBe(
+      "gpt-5.5-low-fast",
+    );
+  });
+
+  test("leaves composer and non-gpt-5.5 models for existing effort handling", () => {
+    expect(resolveCursorModelSlug("composer-2.5", "high")).toBe("composer-2.5");
+    expect(resolveCursorModelSlug("claude-sonnet-4-5", "high")).toBe(
+      "claude-sonnet-4-5",
+    );
   });
 });

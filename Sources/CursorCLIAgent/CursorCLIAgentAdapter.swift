@@ -31,7 +31,11 @@ public struct CursorCLIAgentCommandBuilder: LocalAgentCommandBuilding {
   }
 
   public func buildCommand(for input: AdapterExecutionInput) throws -> LocalAgentCommand {
-    var arguments = [executableName, "--print", "--output-format", "stream-json", "--model", input.node.model]
+    let cliModel = CursorCLIAgentEffortResolution.resolveModelForEffort(
+      model: input.node.model,
+      effort: input.node.effort
+    )
+    var arguments = [executableName, "--print", "--output-format", "stream-json", "--model", cliModel]
     let resolvedMode = mode ?? stringValue(input.node.variables["cursorMode"]).flatMap(CursorCLIMode.init(rawValue:))
     if let resolvedMode, resolvedMode != .default {
       arguments.append(contentsOf: ["--mode", resolvedMode.rawValue])
@@ -149,12 +153,16 @@ private func runCursorDefaultAuthPreflight(
   }
 
   let modelDeadline = defaultAgentPreflightDeadline(existingDeadline: deadline, timeout: defaultCursorAuthPreflightTimeout)
+  let preflightModel = CursorCLIAgentEffortResolution.resolveModelForEffort(
+    model: input.node.model,
+    effort: input.node.effort
+  )
   let model: LocalAgentProcessResult
   do {
     model = try await runner.run(
       configuration: LocalAgentProcessConfiguration(
         executableURL: URL(fileURLWithPath: "/usr/bin/env"),
-        arguments: [executableName, "--print", "--output-format", "text", "--model", input.node.model, "--", "Reply with exactly OK."],
+        arguments: [executableName, "--print", "--output-format", "text", "--model", preflightModel, "--", "Reply with exactly OK."],
         environment: preflightEnvironment,
         workingDirectoryURL: input.node.workingDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
       ),
@@ -164,14 +172,14 @@ private func runCursorDefaultAuthPreflight(
   } catch {
     throw AdapterExecutionError(
       .policyBlocked,
-      "cursor-cli-agent model '\(input.node.model)' is unavailable: \(agentPreflightErrorDetail(error, fallback: "model probe timed out", additionalSensitiveValues: sensitiveValues))"
+      "cursor-cli-agent model '\(preflightModel)' is unavailable: \(agentPreflightErrorDetail(error, fallback: "model probe timed out", additionalSensitiveValues: sensitiveValues))"
     )
   }
   let combined = [model.stderr, model.stdout].joined(separator: "\n")
   if model.terminationStatus != 0 {
     let authPrefix = hasCursorAuthFailureText(combined)
       ? "cursor-cli-agent authentication is unavailable"
-      : "cursor-cli-agent model '\(input.node.model)' is unavailable"
+      : "cursor-cli-agent model '\(preflightModel)' is unavailable"
     throw AdapterExecutionError(
       .policyBlocked,
       "\(authPrefix): \(preflightFailureDetail(model, fallback: "model probe failed", additionalSensitiveValues: sensitiveValues))"

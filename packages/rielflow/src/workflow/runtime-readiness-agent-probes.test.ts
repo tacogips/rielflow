@@ -34,6 +34,27 @@ const cursorCandidate = {
   stepIds: ["cursor-worker"],
 };
 
+const cursorGpt55HighCandidate = {
+  backend: "cursor-cli-agent" as const,
+  models: new Set(["gpt-5.5-high"]),
+  nodeIds: ["cursor-gpt-worker"],
+  stepIds: ["cursor-gpt-worker"],
+};
+
+function availableCursorToolVersions() {
+  return {
+    packageVersion: "0.1.0",
+    tools: [
+      {
+        name: "cursor-agent",
+        command: "cursor-agent",
+        version: "0.45.0",
+        status: "available" as const,
+      },
+    ],
+  };
+}
+
 function successfulCodexModelAvailability(model: string) {
   return {
     ok: true,
@@ -272,5 +293,104 @@ describe("probeAgentBackendAuthReadiness", () => {
     expect(results.map((entry) => entry.message).join("\n")).not.toContain(
       "cursor-cli-agent tool",
     );
+  });
+
+  test("cursor executable preflight probes resolved gpt-5.5 effort slug", async () => {
+    const probeCalls: Array<{ model: string; probe?: boolean }> = [];
+    mocks.push(
+      mockAgentBackendReadinessOperations({
+        getCursorBackendToolVersions: async () => availableCursorToolVersions(),
+        checkCursorBackendModelAvailability: async (input) => {
+          probeCalls.push({
+            model: input.model,
+            ...(input.probe === undefined ? {} : { probe: input.probe }),
+          });
+          return {
+            model: input.model,
+            binary: {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: "0.45.0",
+              status: "available",
+            },
+            auth: {
+              status: "available",
+              detail: "cursor-agent authentication is usable",
+            },
+            modelReachability: {
+              status: "available",
+              probed: true,
+              output: "OK",
+            },
+          };
+        },
+      }),
+    );
+
+    const results = await probeAgentBackendNodeExecutability(
+      cursorGpt55HighCandidate,
+      {},
+    );
+
+    expect(
+      probeCalls.some(
+        (entry) => entry.model === "gpt-5.5-high" && entry.probe === true,
+      ),
+    ).toBe(true);
+    expect(
+      results.some(
+        (entry) =>
+          entry.status === "valid" &&
+          entry.message.includes("gpt-5.5-high") &&
+          entry.message.includes("reachable"),
+      ),
+    ).toBe(true);
+  });
+
+  test("cursor executable preflight reports unknown when model probe is skipped", async () => {
+    mocks.push(
+      mockAgentBackendReadinessOperations({
+        getCursorBackendToolVersions: async () => availableCursorToolVersions(),
+        checkCursorBackendModelAvailability: async (input) => ({
+          model: input.model,
+          binary: {
+            name: "cursor-agent",
+            command: "cursor-agent",
+            version: "0.45.0",
+            status: "available",
+          },
+          auth: {
+            status: "available",
+            detail: "cursor-agent authentication is usable",
+          },
+          modelReachability: {
+            status: "unknown",
+            probed: false,
+          },
+        }),
+      }),
+    );
+
+    const results = await probeAgentBackendNodeExecutability(
+      cursorGpt55HighCandidate,
+      {},
+    );
+
+    expect(
+      results.some(
+        (entry) =>
+          entry.status === "unknown" &&
+          entry.message.includes("gpt-5.5-high") &&
+          entry.message.includes("model probe did not run"),
+      ),
+    ).toBe(true);
+    expect(
+      results.some(
+        (entry) =>
+          entry.status === "valid" &&
+          entry.message.includes("gpt-5.5-high") &&
+          entry.message.includes("reachable"),
+      ),
+    ).toBe(false);
   });
 });

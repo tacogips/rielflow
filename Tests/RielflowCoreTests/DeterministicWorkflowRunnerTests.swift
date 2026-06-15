@@ -614,6 +614,62 @@ final class DeterministicWorkflowRunnerTests: XCTestCase {
     XCTAssertEqual(messages, [])
   }
 
+  func testRerunCreatesNewSessionStartingAtRequestedStep() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let workflow = twoStepWorkflow()
+    let runner = DeterministicWorkflowRunner(
+      store: store,
+      adapter: StepCapturingAdapter(outputsByStep: [
+        "step-a": output(payload: ["status": .string("first")]),
+        "step-b": output(payload: ["status": .string("second")]),
+      ])
+    )
+
+    let first = try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: workflow,
+      nodePayloads: nodePayloads(for: workflow)
+    ))
+    XCTAssertEqual(first.status, .completed)
+    XCTAssertEqual(first.session.executions.map(\.stepId), ["step-a", "step-b"])
+
+    let rerun = try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: workflow,
+      nodePayloads: nodePayloads(for: workflow),
+      rerunFromSessionId: first.session.sessionId,
+      rerunFromStepId: "step-b"
+    ))
+
+    XCTAssertNotEqual(rerun.session.sessionId, first.session.sessionId)
+    XCTAssertEqual(rerun.status, .completed)
+    XCTAssertEqual(rerun.session.executions.map(\.stepId), ["step-b"])
+    XCTAssertEqual(rerun.rootOutput?["status"], .string("second"))
+  }
+
+  func testRerunRejectsUnknownStepWithStepOrientedMessage() async throws {
+    let store = InMemoryWorkflowRuntimeStore()
+    let workflow = twoStepWorkflow()
+    let runner = DeterministicWorkflowRunner(store: store, adapter: StaticAdapter(output: output()))
+    let first = try await runner.run(DeterministicWorkflowRunRequest(
+      workflow: workflow,
+      nodePayloads: nodePayloads(for: workflow)
+    ))
+
+    do {
+      _ = try await runner.run(DeterministicWorkflowRunRequest(
+        workflow: workflow,
+        nodePayloads: nodePayloads(for: workflow),
+        rerunFromSessionId: first.session.sessionId,
+        rerunFromStepId: "missing-step"
+      ))
+      XCTFail("expected rerun validation failure")
+    } catch let error as DeterministicWorkflowRunnerError {
+      guard case let .rerunValidation(message) = error else {
+        return XCTFail("expected rerunValidation error")
+      }
+      XCTAssertEqual(message, "unknown rerun step 'missing-step'")
+    }
+  }
+
   private func request(
     workflow: WorkflowDefinition? = nil,
     nodePayload: AgentNodePayload? = nil,
@@ -641,6 +697,32 @@ final class DeterministicWorkflowRunnerTests: XCTestCase {
       steps: [WorkflowStepRef(id: "step", nodeId: "node", transitions: transitions)],
       nodes: [WorkflowNodeRef(id: "step", nodeFile: "nodes/node.json")]
     )
+  }
+
+  private func twoStepWorkflow() -> WorkflowDefinition {
+    WorkflowDefinition(
+      workflowId: "rerun-runner",
+      defaults: WorkflowDefaults(nodeTimeoutMs: 120_000, maxLoopIterations: 3),
+      entryStepId: "step-a",
+      nodeRegistry: [
+        WorkflowNodeRegistryRef(id: "node-a", nodeFile: "nodes/a.json"),
+        WorkflowNodeRegistryRef(id: "node-b", nodeFile: "nodes/b.json"),
+      ],
+      steps: [
+        WorkflowStepRef(id: "step-a", nodeId: "node-a", transitions: [WorkflowStepTransition(toStepId: "step-b")]),
+        WorkflowStepRef(id: "step-b", nodeId: "node-b"),
+      ],
+      nodes: [
+        WorkflowNodeRef(id: "step-a", nodeFile: "nodes/a.json"),
+        WorkflowNodeRef(id: "step-b", nodeFile: "nodes/b.json"),
+      ]
+    )
+  }
+
+  private func nodePayloads(for workflow: WorkflowDefinition) -> [String: AgentNodePayload] {
+    Dictionary(uniqueKeysWithValues: workflow.nodeRegistry.map { ref in
+      (ref.id, AgentNodePayload(id: ref.id, executionBackend: .codexAgent, model: "gpt-5-nano"))
+    })
   }
 
   private func addonWorkflow() -> WorkflowDefinition {
@@ -705,6 +787,20 @@ private struct StaticAdapter: NodeAdapter {
 
   func execute(_ input: AdapterExecutionInput, context: AdapterExecutionContext) async throws -> AdapterExecutionOutput {
     output
+  }
+}
+
+private struct StepCapturingAdapter: NodeAdapter {
+  var outputsByStep: [String: AdapterExecutionOutput]
+
+  func execute(_ input: AdapterExecutionInput, context: AdapterExecutionContext) async throws -> AdapterExecutionOutput {
+    outputsByStep[input.node.id] ?? AdapterExecutionOutput(
+      provider: "test",
+      model: input.node.model,
+      promptText: input.promptText,
+      completionPassed: true,
+      payload: ["status": .string("ok")]
+    )
   }
 }
 

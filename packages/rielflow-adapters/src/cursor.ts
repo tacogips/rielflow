@@ -143,9 +143,15 @@ export interface CursorAdapterConfig extends LlmSessionStallWatchConfig {
       readonly timeoutMs?: number;
     },
   ) => Promise<void>;
+  readonly checkBackendModelAvailability?: typeof checkCursorBackendModelAvailability;
 }
 
 const DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS = 30_000;
+const CURSOR_BINARY_ENV_KEYS = [
+  "RIELFLOW_CURSOR_AGENT_BINARY",
+  "CURSOR_AGENT_BINARY",
+  "CURSOR_CLI_AGENT_BINARY",
+] as const;
 
 async function createDefaultRunner(
   options: CursorRunnerOptions,
@@ -162,7 +168,42 @@ function shouldRunAuthPreflight(config: CursorAdapterConfig): boolean {
   if (config.authPreflight !== undefined) {
     return config.authPreflight;
   }
-  return config.checkAuthPreflight !== undefined || config.createRunner === undefined;
+  return true;
+}
+
+function readStringVariable(
+  variables: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const value = variables[key];
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : undefined;
+}
+
+function firstConfiguredEnvValue(
+  env: Readonly<Record<string, string | undefined>> | undefined,
+): string | undefined {
+  for (const key of CURSOR_BINARY_ENV_KEYS) {
+    const value = env?.[key] ?? process.env[key];
+    if (value !== undefined && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function resolveCursorBinary(
+  config: CursorAdapterConfig,
+  input: AdapterExecutionInput,
+  env: Readonly<Record<string, string | undefined>> | undefined,
+): string | undefined {
+  return (
+    config.cursorBinary ??
+    readStringVariable(input.node.variables, "cursorBinary") ??
+    readStringVariable(input.node.variables, "cursorExecutable") ??
+    firstConfiguredEnvValue(env)
+  );
 }
 
 async function runCursorAuthPreflight(
@@ -190,8 +231,13 @@ async function runCursorAuthPreflight(
     await config.checkAuthPreflight(input, options);
     return;
   }
-  const availability = await checkCursorBackendModelAvailability({
-    model: input.node.model,
+  const resolvedModel = resolveCursorModelSlug(input.node.model, input.node.effort);
+  const cursorBinary = resolveCursorBinary(config, input, env);
+  const probeBackendModelAvailability =
+    config.checkBackendModelAvailability ?? checkCursorBackendModelAvailability;
+  const availability = await probeBackendModelAvailability({
+    model: resolvedModel,
+    ...(cursorBinary === undefined ? {} : { cursorBinary }),
     ...options,
     probe: true,
   });
@@ -210,7 +256,7 @@ async function runCursorAuthPreflight(
   if (availability.modelReachability.status === "unavailable") {
     throw new AdapterExecutionError(
       "policy_blocked",
-      `cursor-cli-agent model '${input.node.model}' is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "model probe failed"}`,
+      `cursor-cli-agent model '${resolvedModel}' is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "model probe failed"}`,
     );
   }
 }
@@ -234,6 +280,73 @@ function extractAssistantMessageText(event: CursorAgentEvent): string | null {
   return text.length === 0 ? null : text;
 }
 
+const COMPOSER_MODEL_PREFIX = "composer-";
+const GPT55_MODEL_PREFIX = "gpt-5.5";
+const FAST_MODEL_SUFFIX = "-fast";
+const GPT55_EFFORT_TOKENS = new Set(["extra-high", "high", "medium", "low"]);
+
+function isGpt55Model(model: string): boolean {
+  return model === GPT55_MODEL_PREFIX || model.startsWith(`${GPT55_MODEL_PREFIX}-`);
+}
+
+function cursorEffortSlug(effort: string): string {
+  return effort === "xhigh" ? "extra-high" : effort;
+}
+
+function stripGpt55EffortToken(model: string): {
+  readonly base: string;
+  readonly fastSuffix: string;
+} {
+  const hasFastSuffix = model.endsWith(FAST_MODEL_SUFFIX);
+  const withoutFast = hasFastSuffix
+    ? model.slice(0, -FAST_MODEL_SUFFIX.length)
+    : model;
+  const effortSuffix = withoutFast.slice(GPT55_MODEL_PREFIX.length + 1);
+  const base = GPT55_EFFORT_TOKENS.has(effortSuffix)
+    ? GPT55_MODEL_PREFIX
+    : withoutFast;
+  return {
+    base,
+    fastSuffix: hasFastSuffix ? FAST_MODEL_SUFFIX : "",
+  };
+}
+
+export function resolveCursorModelSlug(
+  model: string,
+  effort: string | undefined,
+): string {
+  if (effort === undefined || model.startsWith(COMPOSER_MODEL_PREFIX)) {
+    return model;
+  }
+  if (!isGpt55Model(model)) {
+    return model;
+  }
+  const { base, fastSuffix } = stripGpt55EffortToken(model);
+  return `${base}-${cursorEffortSlug(effort)}${fastSuffix}`;
+}
+
+function modelSupportsCursorEffortSuffix(model: string): boolean {
+  return !model.startsWith(COMPOSER_MODEL_PREFIX) && !isGpt55Model(model);
+}
+
+function resolveCursorAgentEffort(
+  model: string,
+  effort: string | undefined,
+): string | undefined {
+  if (effort === undefined || !modelSupportsCursorEffortSuffix(model)) {
+    return undefined;
+  }
+  return effort;
+}
+
+function summarizeCursorAgentFailure(stderr: string): string | undefined {
+  const line = stderr
+    .split(/\r?\n/u)
+    .map((entry) => entry.trim())
+    .find((entry) => entry.length > 0);
+  return line;
+}
+
 function resolveLocalSessionConfig(
   config: CursorAdapterConfig,
   input: AdapterExecutionInput,
@@ -246,13 +359,15 @@ function resolveLocalSessionConfig(
   const cwd = config.cwd ?? input.workingDirectory;
   const streamMode: CursorAgentStreamMode = config.streamMode ?? "event";
   const images = resolveAdapterImagePaths(input);
+  const model = resolveCursorModelSlug(input.node.model, input.node.effort);
+  const effort = resolveCursorAgentEffort(input.node.model, input.node.effort);
   const baseRequest: Omit<CursorAgentRequest, "prompt" | "sessionId"> = {
     cwd,
     ...(input.systemPromptText === undefined
       ? {}
       : { systemPrompt: input.systemPromptText }),
-    model: input.node.model,
-    ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
+    model,
+    ...(effort === undefined ? {} : { effort }),
     ...(config.mode === undefined ? {} : { mode: config.mode }),
     ...(images.length === 0 ? {} : { images }),
     streamMode,
@@ -271,14 +386,6 @@ async function executeLocalCursorAgent(
 ): Promise<AdapterExecutionOutput> {
   throwIfAborted(context.signal, "cursor adapter aborted before start");
 
-  const runner = await (config.createRunner ?? createDefaultRunner)({
-    ...(config.cursorBinary === undefined
-      ? {}
-      : { cursorBinary: config.cursorBinary }),
-  });
-
-  const { promptText, startRequest, baseResumeRequest } =
-    resolveLocalSessionConfig(config, input);
   const ambientEnv = buildAmbientProcessEnv(
     config.env,
     input.rielflowHookContext === undefined
@@ -288,6 +395,15 @@ async function executeLocalCursorAgent(
       ? undefined
       : { ...input.ambientManagerContext.environment },
   );
+  const cursorBinary = resolveCursorBinary(config, input, ambientEnv);
+  const runner = await (config.createRunner ?? createDefaultRunner)({
+    ...(cursorBinary === undefined
+      ? {}
+      : { cursorBinary }),
+  });
+
+  const { promptText, startRequest, baseResumeRequest } =
+    resolveLocalSessionConfig(config, input);
 
   const session = await withProcessEnvOverride(ambientEnv, async () => {
     if (
@@ -399,9 +515,10 @@ async function executeLocalCursorAgent(
           "cursor adapter aborted by timeout",
         );
       }
+      const stderrHint = summarizeCursorAgentFailure(result.stderr);
       throw new AdapterExecutionError(
         "provider_error",
-        `cursor agent session '${sessionId}' failed with exit code ${String(result.exitCode)} signal ${result.signal ?? "null"}`,
+        `cursor agent session '${sessionId}' failed with exit code ${String(result.exitCode)} signal ${result.signal ?? "null"}${stderrHint === undefined ? "" : `: ${stderrHint}`}`,
       );
     }
 

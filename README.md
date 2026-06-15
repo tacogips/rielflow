@@ -126,6 +126,16 @@ stable as workflow `executionBackend` strings:
 that currently map them are `CodexAgent`, `ClaudeCodeAgent`, and
 `CursorCLIAgent`.
 
+To verify the current v0.1.17 additive parity slice on `swift-migration`, run:
+
+```bash
+bash scripts/verify-and-update-v017-parity.sh
+```
+
+That script runs the targeted Swift and Bun checks in `.verify-run.sh` and
+updates `impl-plans/PROGRESS.json` plus
+`packaging/homebrew/swift-cutover-gates.json` only when every check passes.
+
 The Swift adapter scaffold also preserves the public official SDK backend
 strings `official/openai-sdk`, `official/anthropic-sdk`, and
 `official/cursor-sdk`. The local-agent Swift targets now own backend-faithful
@@ -368,6 +378,14 @@ Claude Code:
 
 ```bash
 rielflow package install claude-code-design-and-implement-review-loop \
+  --user-scope \
+  --pre-install-check
+```
+
+Cursor CLI:
+
+```bash
+rielflow package install cursor-cli-developer-workflows \
   --user-scope \
   --pre-install-check
 ```
@@ -742,7 +760,13 @@ removal.
 Package-installed agent skills are projected only through safe project or user
 skill roots. Checkout rejects symlink ancestors and file ancestors before
 copying skill files, so an existing file such as `.codex` is preserved instead
-of being replaced by a skill directory.
+of being replaced by a skill directory. User-scope package installs keep agent
+surfaces separated: Claude skills project to `~/.claude/skills/<name>`, Codex
+skills project to `$CODEX_HOME/skills/<name>` or `~/.codex/skills/<name>`, and
+Cursor skills project to `$CURSOR_HOME/skills/<name>/SKILL.md` or
+`~/.cursor/skills/<name>/SKILL.md`. Project-scope Cursor skills remain Cursor
+rules under `.cursor/rules/<name>.mdc`. Dependency package installs keep managed
+skill copies but only project skills for vendors present on the root package.
 
 Remove a package:
 

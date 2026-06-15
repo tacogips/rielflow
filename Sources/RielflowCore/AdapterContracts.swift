@@ -166,12 +166,93 @@ public func normalizeOutputContractEnvelope(
     completionPassed = defaults.completionPassed
   }
 
+  let reconciled = reconcileCompletionReviewRouting(when: when, payload: payload)
   return OutputContractEnvelopeNormalization(
     completionPassed: completionPassed,
-    when: when,
+    when: reconciled.when,
     payload: payload,
     usedEnvelope: true
   )
+}
+
+public struct CompletionReviewRoutingReconciliation: Equatable, Sendable {
+  public var when: [String: Bool]
+  public var reconciled: Bool
+
+  public init(when: [String: Bool], reconciled: Bool) {
+    self.when = when
+    self.reconciled = reconciled
+  }
+}
+
+public func reconcileCompletionReviewRouting(
+  when: [String: Bool],
+  payload: JSONObject
+) -> CompletionReviewRoutingReconciliation {
+  guard isCompletionReviewPayload(payload) else {
+    return CompletionReviewRoutingReconciliation(when: when, reconciled: false)
+  }
+
+  let expected = expectedGoalCompletionRouting(from: payload)
+  let expectedWhen: [String: Bool] = [
+    "needs_replan": expected.needsReplan,
+    "needs_work": expected.needsWork,
+  ]
+  if when == expectedWhen {
+    return CompletionReviewRoutingReconciliation(when: when, reconciled: false)
+  }
+
+  let alwaysOverridesRouting = when["always"] == true && (expected.needsReplan || expected.needsWork)
+  let contradictsPayload =
+    when["needs_replan"] != expected.needsReplan || when["needs_work"] != expected.needsWork
+  guard alwaysOverridesRouting || contradictsPayload else {
+    return CompletionReviewRoutingReconciliation(when: when, reconciled: false)
+  }
+
+  return CompletionReviewRoutingReconciliation(when: expectedWhen, reconciled: true)
+}
+
+private func isCompletionReviewPayload(_ payload: JSONObject) -> Bool {
+  if payload["goalAchieved"] != nil {
+    return true
+  }
+  if case let .string(decision)? = payload["decision"] {
+    return ["needs_work", "needs_replan", "accepted"].contains(decision)
+  }
+  return false
+}
+
+private func expectedGoalCompletionRouting(from payload: JSONObject) -> (needsReplan: Bool, needsWork: Bool) {
+  let decision: String?
+  if case let .string(value)? = payload["decision"] {
+    decision = value
+  } else {
+    decision = nil
+  }
+
+  let goalAchieved: Bool?
+  if case let .bool(value)? = payload["goalAchieved"] {
+    goalAchieved = value
+  } else {
+    goalAchieved = nil
+  }
+
+  switch decision {
+  case "needs_replan":
+    return (true, false)
+  case "needs_work":
+    return (false, true)
+  case "accepted":
+    if goalAchieved == false {
+      return (false, true)
+    }
+    return (false, false)
+  default:
+    if goalAchieved == false {
+      return (false, true)
+    }
+    return (false, false)
+  }
 }
 
 private func booleanMap(from value: JSONValue) -> [String: Bool]? {

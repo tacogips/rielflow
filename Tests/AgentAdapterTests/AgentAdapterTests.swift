@@ -446,6 +446,99 @@ final class AgentAdapterTests: XCTestCase {
     XCTAssertEqual(run.stdin, "")
   }
 
+  func testCursorCLIAgentEffortResolutionMatchesTypeScriptComposerRule() {
+    XCTAssertFalse(CursorCLIAgentEffortResolution.modelSupportsCursorEffortSuffix(model: "composer-2.5"))
+    XCTAssertTrue(CursorCLIAgentEffortResolution.modelSupportsCursorEffortSuffix(model: "gpt-5.5"))
+    XCTAssertNil(CursorCLIAgentEffortResolution.resolveCursorAgentEffort(model: "composer-2.5", effort: .high))
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveCursorAgentEffort(model: "gpt-5.5", effort: .high),
+      .high
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "gpt-5.3-codex", effort: .high),
+      "gpt-5.3-codex-high"
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "gpt-5.3-codex-low-fast", effort: .high),
+      "gpt-5.3-codex-high-fast"
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "gpt-5.5", effort: .high),
+      "gpt-5.5-high"
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "gpt-5.5", effort: .medium),
+      "gpt-5.5-medium"
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "gpt-5.5-fast", effort: .medium),
+      "gpt-5.5-medium-fast"
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "gpt-5.5", effort: .xhigh),
+      "gpt-5.5-extra-high"
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "gpt-5.5-extra-high", effort: .low),
+      "gpt-5.5-low"
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "gpt-5.5-extra-high-fast", effort: .low),
+      "gpt-5.5-low-fast"
+    )
+    XCTAssertEqual(
+      CursorCLIAgentEffortResolution.resolveModelForEffort(model: "composer-2.5", effort: .high),
+      "composer-2.5"
+    )
+  }
+
+  func testCursorForwardsEffortForNonComposerModels() async throws {
+    let runner = RecordingRunner(output: "done")
+    let adapter = CursorCLIAgentAdapter(
+      executableName: "cursor-dev",
+      runner: runner,
+      authPreflight: false
+    )
+
+    _ = try await adapter.execute(
+      input(
+        backend: .cursorCliAgent,
+        model: "gpt-5.3-codex",
+        effort: .high
+      ),
+      context: AdapterExecutionContext()
+    )
+
+    let runs = await runner.runs()
+    let run = try XCTUnwrap(runs.last)
+    XCTAssertTrue(run.configuration.arguments.contains("gpt-5.3-codex-high"))
+    XCTAssertFalse(run.configuration.arguments.contains("composer-2.5"))
+  }
+
+  func testCursorDoesNotForwardEffortForComposerModels() async throws {
+    let runner = RecordingRunner(output: "done")
+    let adapter = CursorCLIAgentAdapter(
+      executableName: "cursor-dev",
+      runner: runner,
+      authPreflight: false
+    )
+
+    _ = try await adapter.execute(
+      input(
+        backend: .cursorCliAgent,
+        model: "composer-2.5",
+        effort: .high
+      ),
+      context: AdapterExecutionContext()
+    )
+
+    let runs = await runner.runs()
+    let run = try XCTUnwrap(runs.last)
+    XCTAssertTrue(run.configuration.arguments.contains("composer-2.5"))
+    XCTAssertFalse(run.configuration.arguments.contains("--effort"))
+    XCTAssertFalse(run.configuration.arguments.contains("high"))
+  }
+
   func testResolveAdapterImagePathsUsesRuntimeInputsDescriptorsDedupeAndForwardPolicy() {
     let resolved = resolveAdapterImagePaths(
       input(
@@ -675,6 +768,35 @@ final class AgentAdapterTests: XCTestCase {
       ]
     )
     XCTAssertEqual(runs.map { $0.configuration.environment["CURSOR_CONFIG_DIR"] }, ["/tmp/cursor-home", "/tmp/cursor-home"])
+  }
+
+  func testCursorDefaultPreflightUsesResolvedGpt55ModelInProbeAndDiagnostics() async throws {
+    let modelFailureRunner = SequencedRunner([
+      LocalAgentProcessResult(stdout: "0.45.0", stderr: "", terminationStatus: 0),
+      LocalAgentProcessResult(stdout: "", stderr: "model is not enabled", terminationStatus: 1),
+    ])
+    let modelFailureAdapter = CursorCLIAgentAdapter(runner: modelFailureRunner)
+
+    do {
+      _ = try await modelFailureAdapter.execute(
+        input(backend: .cursorCliAgent, model: "gpt-5.5", effort: .high),
+        context: AdapterExecutionContext()
+      )
+      XCTFail("Expected policy-blocked cursor model preflight failure")
+    } catch let error as AdapterExecutionError {
+      XCTAssertEqual(error.code, .policyBlocked)
+      XCTAssertTrue(error.message.contains("model 'gpt-5.5-high' is unavailable"))
+      XCTAssertFalse(error.message.contains("model 'gpt-5.5' is unavailable"))
+    }
+
+    let runs = await modelFailureRunner.runs()
+    XCTAssertEqual(
+      runs.map(\.configuration.arguments),
+      [
+        ["cursor-agent", "--version"],
+        ["cursor-agent", "--print", "--output-format", "text", "--model", "gpt-5.5-high", "--", "Reply with exactly OK."],
+      ]
+    )
   }
 
   func testDefaultAuthPreflightsUseBoundedDeadlineWhenContextDeadlineIsNil() async throws {
@@ -1290,6 +1412,7 @@ final class AgentAdapterTests: XCTestCase {
     backend: NodeExecutionBackend,
     promptText: String = "hello",
     output: NodeOutputContract? = nil,
+    model: String = "model",
     effort: NodeReasoningEffort? = nil,
     workingDirectory: String? = nil,
     systemPromptText: String? = nil,
@@ -1301,7 +1424,7 @@ final class AgentAdapterTests: XCTestCase {
       node: AgentNodePayload(
         id: "worker",
         executionBackend: backend,
-        model: "model",
+        model: model,
         effort: effort,
         workingDirectory: workingDirectory,
         variables: variables,

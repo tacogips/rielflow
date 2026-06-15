@@ -1,7 +1,7 @@
 import Foundation
 import RielflowCore
 
-public let rielflowSwiftMigrationVersion = "0.1.15"
+public let rielflowSwiftMigrationVersion = "0.1.17"
 
 public enum CLIExitCode: Int32, Codable, Equatable, Sendable {
   case success = 0
@@ -25,6 +25,12 @@ public enum RielflowCommand: Equatable, Sendable {
   case help
   case version
   case workflow(WorkflowCommand)
+  case session(SessionCommand)
+}
+
+public enum SessionCommand: Equatable, Sendable {
+  case rerun(SessionRerunOptions)
+  case resume(SessionResumeOptions)
 }
 
 public enum WorkflowCommand: Equatable, Sendable {
@@ -165,8 +171,11 @@ public struct RielflowArgumentParser: CLIArgumentParsing {
     if arguments.isEmpty || arguments == ["--version"] || arguments == ["version"] {
       return .version
     }
+    if arguments.first == "session" {
+      return try parseSession(Array(arguments.dropFirst()))
+    }
     guard arguments.first == "workflow" else {
-      throw CLIUsageError("expected 'workflow validate', 'workflow inspect', or 'workflow run'")
+      throw CLIUsageError("expected 'workflow' or 'session' command")
     }
     guard arguments.count >= 3 else {
       throw CLIUsageError("workflow command requires a subcommand and workflow name")
@@ -188,6 +197,50 @@ public struct RielflowArgumentParser: CLIArgumentParsing {
       return .workflow(.run(try parseRun(target: target, tokens: optionTokens)))
     default:
       throw CLIUsageError("unsupported workflow subcommand '\(subcommand)'")
+    }
+  }
+
+  private func parseSession(_ arguments: [String]) throws -> RielflowCommand {
+    guard let subcommand = arguments.first else {
+      throw CLIUsageError("session command requires a subcommand")
+    }
+    let optionTokens = Array(arguments.dropFirst(subcommand == "rerun" ? 3 : 2))
+    let parsed = try ParsedWorkflowOptions(optionTokens, allowRunOptions: true)
+    if parsed.endpoint != nil || parsed.fromRegistry {
+      throw CLIUsageError("Swift TASK-007 supports local session commands only")
+    }
+    let workingDirectory = parsed.workingDirectory ?? FileManager.default.currentDirectoryPath
+    switch subcommand {
+    case "rerun":
+      guard arguments.count >= 3, !arguments[1].hasPrefix("--"), !arguments[2].hasPrefix("--") else {
+        throw CLIUsageError("usage: rielflow session rerun <session-id> <step-id> [options]")
+      }
+      return .session(.rerun(SessionRerunOptions(
+        sessionId: arguments[1],
+        stepId: arguments[2],
+        output: parsed.output,
+        scope: parsed.scope,
+        workflowDefinitionDir: parsed.workflowDefinitionDir,
+        workingDirectory: workingDirectory,
+        mockScenarioPath: parsed.mockScenarioPath,
+        sessionStore: parsed.sessionStore,
+        nestedSuperviser: parsed.nestedSuperviser
+      )))
+    case "resume":
+      guard arguments.count >= 2, !arguments[1].hasPrefix("--") else {
+        throw CLIUsageError("usage: rielflow session resume <session-id> [options]")
+      }
+      return .session(.resume(SessionResumeOptions(
+        sessionId: arguments[1],
+        output: parsed.output,
+        scope: parsed.scope,
+        workflowDefinitionDir: parsed.workflowDefinitionDir,
+        workingDirectory: workingDirectory,
+        mockScenarioPath: parsed.mockScenarioPath,
+        sessionStore: parsed.sessionStore
+      )))
+    default:
+      throw CLIUsageError("unsupported session subcommand '\(subcommand)'")
     }
   }
 
@@ -307,6 +360,7 @@ private struct ParsedWorkflowOptions {
   var workingDirectory: String?
   var endpoint: String?
   var fromRegistry = false
+  var nestedSuperviser = false
 
   init(_ tokens: [String], allowRunOptions: Bool = false) throws {
     var index = 0
@@ -376,6 +430,8 @@ private struct ParsedWorkflowOptions {
         endpoint = try readValue()
       case "--from-registry":
         fromRegistry = true
+      case "--nested-superviser", "--nested-supervisor":
+        nestedSuperviser = true
       default:
         throw CLIUsageError("unknown option '\(token)'")
       }

@@ -90,6 +90,7 @@ public struct WorkflowSession: Codable, Equatable, Sendable {
   public var createdAt: Date
   public var updatedAt: Date
   public var executions: [WorkflowStepExecution]
+  public var fanoutGroups: [WorkflowFanoutGroupRecord]?
 
   public init(
     workflowId: String,
@@ -99,7 +100,8 @@ public struct WorkflowSession: Codable, Equatable, Sendable {
     currentStepId: String? = nil,
     createdAt: Date,
     updatedAt: Date,
-    executions: [WorkflowStepExecution] = []
+    executions: [WorkflowStepExecution] = [],
+    fanoutGroups: [WorkflowFanoutGroupRecord]? = nil
   ) {
     self.workflowId = workflowId
     self.sessionId = sessionId
@@ -109,6 +111,7 @@ public struct WorkflowSession: Codable, Equatable, Sendable {
     self.createdAt = createdAt
     self.updatedAt = updatedAt
     self.executions = executions
+    self.fanoutGroups = fanoutGroups
   }
 }
 

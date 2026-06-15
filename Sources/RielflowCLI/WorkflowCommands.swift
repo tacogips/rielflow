@@ -614,6 +614,13 @@ public struct WorkflowRunCommand: Sendable {
           timeoutMs: options.timeoutMs
         )
       )
+      try persistSessionRecord(
+        workflowName: resolution.workflowName,
+        resolution: resolution,
+        resolvedSourceScope: bundle.sourceScope,
+        result: result,
+        options: options
+      )
       return CLICommandResult(
         exitCode: CLIExitCode(rawValue: result.exitCode) ?? .failure,
         stdout: try renderRunResult(result, output: options.output)
@@ -636,12 +643,35 @@ public struct WorkflowRunCommand: Sendable {
     if options.artifactRoot != nil {
       throw CLIUsageError("--artifact-root is not supported by the Swift TASK-007 in-memory runner")
     }
-    if options.sessionStore != nil {
-      throw CLIUsageError("--session-store is not supported by the Swift TASK-007 in-memory runner")
-    }
     if options.maxConcurrency != nil {
       throw CLIUsageError("--max-concurrency is not supported by the Swift TASK-007 sequential runner")
     }
+  }
+
+  private func persistSessionRecord(
+    workflowName: String,
+    resolution: WorkflowResolutionOptions,
+    resolvedSourceScope: WorkflowScope,
+    result: WorkflowRunResult,
+    options: WorkflowRunOptions
+  ) throws {
+    let persistedResolution = CLIWorkflowSessionResolution.resolutionForPersistence(
+      resolution: resolution,
+      resolvedSourceScope: resolvedSourceScope
+    )
+    let storeRoot = CLIWorkflowSessionStore.resolveRootDirectory(
+      sessionStore: options.sessionStore,
+      scope: persistedResolution.scope,
+      workingDirectory: options.workingDirectory
+    )
+    try CLIWorkflowSessionStore(rootDirectory: storeRoot).save(
+      PersistedCLIWorkflowSession(
+        workflowName: workflowName,
+        session: result.session,
+        resolution: persistedResolution,
+        mockScenarioPath: options.mockScenarioPath
+      )
+    )
   }
 
   private func resolveRunBundle(options: WorkflowRunOptions, resolution: WorkflowResolutionOptions) throws -> ResolvedWorkflowBundle {
@@ -739,20 +769,39 @@ public struct RielflowCLIApplication: Sendable {
   public var validateCommand: WorkflowValidateCommand
   public var inspectCommand: WorkflowInspectCommand
   public var runCommand: WorkflowRunCommand
+  public var sessionRerunCommand: SessionRerunCommand
+  public var sessionResumeCommand: SessionResumeCommand
 
   public init(
     parser: any CLIArgumentParsing = RielflowArgumentParser(),
     validateCommand: WorkflowValidateCommand = WorkflowValidateCommand(),
     inspectCommand: WorkflowInspectCommand = WorkflowInspectCommand(),
-    runCommand: WorkflowRunCommand = WorkflowRunCommand()
+    runCommand: WorkflowRunCommand = WorkflowRunCommand(),
+    sessionRerunCommand: SessionRerunCommand = SessionRerunCommand(),
+    sessionResumeCommand: SessionResumeCommand = SessionResumeCommand()
   ) {
     self.parser = parser
     self.validateCommand = validateCommand
     self.inspectCommand = inspectCommand
     self.runCommand = runCommand
+    self.sessionRerunCommand = sessionRerunCommand
+    self.sessionResumeCommand = sessionResumeCommand
   }
 
   public func run(_ arguments: [String]) async -> CLICommandResult {
+    await run(arguments, environment: nil)
+  }
+
+  public func run(_ arguments: [String], environment: [String: String]?) async -> CLICommandResult {
+    if let environment {
+      return await CLIRuntimeEnvironment.$overrides.withValue(environment) {
+        await runParsed(arguments)
+      }
+    }
+    return await runParsed(arguments)
+  }
+
+  private func runParsed(_ arguments: [String]) async -> CLICommandResult {
     do {
       switch try parser.parse(arguments) {
       case .help:
@@ -767,6 +816,10 @@ public struct RielflowCLIApplication: Sendable {
         return inspectCommand.run(options)
       case let .workflow(.run(options)):
         return await runCommand.run(options)
+      case let .session(.rerun(options)):
+        return await sessionRerunCommand.run(options)
+      case let .session(.resume(options)):
+        return await sessionResumeCommand.run(options)
       }
     } catch let error as CLIUsageError {
       return renderParserFailure(arguments: arguments, error: error)
@@ -844,6 +897,8 @@ Usage:
   rielflow workflow inspect <workflow> [--scope project|user|auto] [--output json]
   rielflow workflow usage <workflow> [--scope project|user|auto] [--output json]
   rielflow workflow run <workflow> --mock-scenario <path> [--output json]
+  rielflow session rerun <session-id> <step-id> [--scope project|user|auto] [--output json]
+  rielflow session resume <session-id> [--scope project|user|auto] [--output json]
 
 The Swift CLI is the production Homebrew runtime. Linux Homebrew archives remain unsupported until a reviewed Swift Linux build contract exists.
 

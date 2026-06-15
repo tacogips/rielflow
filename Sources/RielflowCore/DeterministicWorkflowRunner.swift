@@ -11,6 +11,9 @@ public struct DeterministicWorkflowRunRequest: Sendable {
   public var timeoutMs: Int?
   public var addonAttachments: [String: WorkflowAddonAttachmentValue]
   public var addonAttachmentDescriptors: [String: WorkflowAddonAttachmentDescriptor]
+  public var rerunFromSessionId: String?
+  public var rerunFromStepId: String?
+  public var resumeSessionId: String?
 
   public init(
     workflow: WorkflowDefinition,
@@ -22,7 +25,10 @@ public struct DeterministicWorkflowRunRequest: Sendable {
     defaultTimeoutMs: Int? = nil,
     timeoutMs: Int? = nil,
     addonAttachments: [String: WorkflowAddonAttachmentValue] = [:],
-    addonAttachmentDescriptors: [String: WorkflowAddonAttachmentDescriptor] = [:]
+    addonAttachmentDescriptors: [String: WorkflowAddonAttachmentDescriptor] = [:],
+    rerunFromSessionId: String? = nil,
+    rerunFromStepId: String? = nil,
+    resumeSessionId: String? = nil
   ) {
     self.workflow = workflow
     self.nodePayloads = nodePayloads
@@ -34,6 +40,9 @@ public struct DeterministicWorkflowRunRequest: Sendable {
     self.timeoutMs = timeoutMs
     self.addonAttachments = addonAttachments
     self.addonAttachmentDescriptors = addonAttachmentDescriptors
+    self.rerunFromSessionId = rerunFromSessionId
+    self.rerunFromStepId = rerunFromStepId
+    self.resumeSessionId = resumeSessionId
   }
 }
 
@@ -101,10 +110,66 @@ public struct DeterministicWorkflowRunner: DeterministicWorkflowRunning {
       throw DeterministicWorkflowRunnerError.invalidWorkflow("\(diagnostic.path): \(diagnostic.message)")
     }
 
-    var session = try await store.createSession(
-      WorkflowSessionCreateInput(workflowId: request.workflow.workflowId, entryStepId: request.workflow.entryStepId)
-    )
-    var currentStepId: String? = request.workflow.entryStepId
+    do {
+      try WorkflowSessionEntryValidation.validateMutuallyExclusiveSessionEntryModes(
+        resumeSessionId: request.resumeSessionId,
+        rerunFromSessionId: request.rerunFromSessionId,
+        continueFromWorkflowExecutionId: nil
+      )
+    } catch let error as WorkflowSessionEntryValidationError {
+      throw DeterministicWorkflowRunnerError.resumeValidation(errorMessage(error))
+    }
+
+    let entryStepId: String
+    var session: WorkflowSession
+    var currentStepId: String?
+    if let resumeSessionId = request.resumeSessionId {
+      guard let existing = try await store.loadSession(id: resumeSessionId) else {
+        throw DeterministicWorkflowRunnerError.resumeValidation("resume session not found: \(resumeSessionId)")
+      }
+      guard existing.workflowId == request.workflow.workflowId else {
+        throw DeterministicWorkflowRunnerError.resumeValidation("session workflow does not match command workflow")
+      }
+      if existing.status == .completed || existing.status == .failed {
+        return WorkflowRunResult(
+          workflowId: request.workflow.workflowId,
+          session: existing,
+          rootOutput: existing.executions.last(where: { $0.acceptedOutput?.isRootOutput == true })?.acceptedOutput?.payload,
+          exitCode: existing.status == .completed ? 0 : 1,
+          transitions: 0
+        )
+      }
+      session = existing
+      currentStepId = existing.currentStepId ?? existing.entryStepId
+      entryStepId = existing.entryStepId
+    } else if let rerunFromSessionId = request.rerunFromSessionId {
+      guard let sourceSession = try await store.loadSession(id: rerunFromSessionId) else {
+        throw DeterministicWorkflowRunnerError.rerunValidation("source session not found: \(rerunFromSessionId)")
+      }
+      guard sourceSession.workflowId == request.workflow.workflowId else {
+        throw DeterministicWorkflowRunnerError.rerunValidation("source session workflow does not match command workflow")
+      }
+      do {
+        entryStepId = try WorkflowSessionEntryValidation.validateRerunTarget(
+          workflow: request.workflow,
+          sourceSession: sourceSession,
+          rerunStepId: request.rerunFromStepId
+        )
+      } catch let error as WorkflowSessionEntryValidationError {
+        throw DeterministicWorkflowRunnerError.rerunValidation(errorMessage(error))
+      }
+      session = try await store.createSession(
+        WorkflowSessionCreateInput(workflowId: request.workflow.workflowId, entryStepId: entryStepId)
+      )
+      currentStepId = entryStepId
+    } else {
+      entryStepId = request.workflow.entryStepId
+      session = try await store.createSession(
+        WorkflowSessionCreateInput(workflowId: request.workflow.workflowId, entryStepId: entryStepId)
+      )
+      currentStepId = entryStepId
+    }
+
     var visitedSteps = 0
     var publishedTransitions = 0
     var rootOutput: JSONObject?
@@ -685,6 +750,15 @@ public enum DeterministicWorkflowRunnerError: Error, Equatable, Sendable {
   case missingNodePayload(String)
   case missingPromptVariant(String, String)
   case maxStepsExceeded(Int)
+  case rerunValidation(String)
+  case resumeValidation(String)
+}
+
+private func errorMessage(_ error: WorkflowSessionEntryValidationError) -> String {
+  switch error {
+  case let .usage(message), let .validation(message):
+    message
+  }
 }
 
 public struct DeterministicLocalNodeAdapter: NodeAdapter {

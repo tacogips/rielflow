@@ -48,7 +48,7 @@ The migration must keep the Swift package additive until parity gates pass. The 
 
 Step 1 intake selected a single-path workflow because this migration is dependency-coupled across core models, adapter contracts, agent targets, package behavior, and CLI/runtime parity. It also marked the change high risk and requiring adversarial review because it touches runtime migration, external command execution, package behavior, and release cutover.
 
-The preferred `codex-agent` local reference root is `../../codex-agent`, but it is not available in this checkout. Until that reference is supplied, the authoritative references are the current TypeScript adapters and pinned package dependencies:
+Step 1 intake established `/Users/taco/gits/tacogips/codex-agent` as the local `codex-agent` reference root for this workflow pass. The default `../../codex-agent` root remains unavailable from this repository path. The current TypeScript adapters, pinned package dependencies, and the Step 1 Codex reference files are the authoritative references:
 
 - `packages/rielflow-adapters/src/codex.ts` and `packages/rielflow-adapters/src/readiness.ts` define current `codex-agent` adapter execution, auth/readiness probes, output normalization, and failure mapping.
 - `packages/rielflow-adapters/src/claude.ts` and `packages/rielflow-adapters/src/readiness.ts` define current `claude-code-agent` execution, auth/readiness probes, session handling, and failure mapping.
@@ -57,6 +57,8 @@ The preferred `codex-agent` local reference root is `../../codex-agent`, but it 
 - `packages/rielflow-core/src/render.ts`, `packages/rielflow-core/src/prompt-template-context.ts`, `packages/rielflow-core/src/prompt-template-file.ts`, `packages/rielflow-core/src/node-template-fields.ts`, `packages/rielflow/src/workflow/load.ts`, and `packages/rielflow/src/workflow/prompt-composition.ts` define current prompt rendering, prompt variable roots, template-file safety, asset loading, and composed prompt behavior.
 - `packages/rielflow/src/workflow/adapter.ts`, `packages/rielflow/src/workflow/output-attempt-runner.ts`, and `packages/rielflow/src/workflow/engine/step-result-finalization.ts` define current JSON candidate extraction, output-contract retry/finalization, and runtime-owned publication behavior.
 - `packages/rielflow-adapters/package.json` pins repository-owned references for `codex-agent`, `claude-code-agent`, and `cursor-cli-agent`; Swift target behavior should be mapped from those package contracts, not copied blindly.
+- `/Users/taco/gits/tacogips/codex-agent/src/sdk/model-availability.ts` is a behavioral reference for keeping auth status and active model-probe results separate.
+- `/Users/taco/gits/tacogips/codex-agent/impl-plans/completed/model-auth-availability-preflight.md` is a structural reference for preflight acceptance criteria and verification framing.
 
 Swift target mapping:
 
@@ -135,6 +137,43 @@ The Swift migration should preserve these Cursor contracts:
 
 The `official/cursor-sdk` backend is a separate official SDK adapter and must not be conflated with `cursor-cli-agent`. Any Swift port of `official/cursor-sdk` should be a later, separately gated adapter slice unless implementation parity requires a minimal compatibility shim.
 
+## v0.1.17 Cursor CLI Goal Parity Slice
+
+This slice closes accepted adversarial-review gaps for GitHub issue #63 only where they fit the additive Swift migration parity boundary. It does not declare the Swift migration complete, does not change backend strings, and does not move Cursor-specific behavior outside `CursorCLIAgent` or the TypeScript Cursor adapter.
+
+Reference inputs:
+
+- GitHub issue #63: `cursor-cli-goal` auth preflight probes unresolved `gpt-5.5`, auth failures are reported as model failures, and user-scope session resume can miss the extended `codex-goal` base workflow.
+- Step 1 Codex reference root is `/Users/taco/gits/tacogips/codex-agent`; use `src/sdk/model-availability.ts` only as a behavioral reference for separated auth/model probe results and `impl-plans/completed/model-auth-availability-preflight.md` only as a reference for preflight acceptance framing.
+- The inspected local Cursor CLI agent reference is `/Users/taco/gits/tacogips/worktrees/cursor-cli-agent/sdk-run-everything-options`, specifically `src/cursor/process-runner.ts`, `src/cursor/model-availability.ts`, and `src/sdk/agent-runner.ts`. It shows Cursor's own generic effort suffix handling and explicit unknown local auth status.
+- Rielflow parity sources are `packages/rielflow-adapters/src/cursor.ts`, `packages/rielflow/src/workflow/adapters/cursor.test.ts`, `packages/rielflow/src/workflow/adapter.ts`, `Sources/CursorCLIAgent/`, `Sources/RielflowCore/AdapterContracts.swift`, `scripts/verify-and-update-v017-parity.sh`, `impl-plans/PROGRESS.json`, and `packaging/homebrew/swift-cutover-gates.json`.
+
+Issue-to-design mapping:
+
+- The unresolved `gpt-5.5` preflight gap maps to shared TypeScript and Swift Cursor model resolution, with execution and preflight using the same resolved slug.
+- The auth-versus-model diagnostic gap maps to Cursor-specific probe classification that reports auth-like failures before generic model reachability failures.
+- The goal-review routing gap maps to provider-neutral output-envelope reconciliation before transition selection.
+- The feasible session-resume gap maps only to preserving the original user workflow scope for user-scope `cursor-cli-goal` sessions that extend user-scope `codex-goal`.
+- The verification-metadata gap maps to `scripts/verify-and-update-v017-parity.sh` treating `.verify-results.txt` with `OVERALL_EXIT_CODE: 0` as the metadata update gate.
+
+Cursor model and effort decisions:
+
+- TypeScript execution, TypeScript auth/model preflight, Swift command construction, and Swift auth/model preflight must resolve the Cursor model through the same `gpt-5.5` effort rule before invoking or probing Cursor CLI.
+- For `gpt-5.5` family models, Rielflow resolves `effort` into the Cursor model id itself: `low` -> `gpt-5.5-low`, `medium` -> `gpt-5.5-medium`, `high` -> `gpt-5.5-high`, and `xhigh` -> `gpt-5.5-extra-high`, preserving a trailing `-fast` suffix when present. This is an intentional adapter-level divergence from the dependency-owned generic effort helper because issue #63 shows the Cursor model availability surface can reject the unresolved bare workflow model.
+- Composer-family models continue to suppress Cursor effort forwarding and model suffix mutation. Other non-Composer models may continue using the Cursor SDK-owned `effort` field when the adapter supports it.
+- User-visible diagnostics for this slice should report the resolved model slug that was actually probed or executed. Auth-like probe output must be classified as `cursor-cli-agent authentication is unavailable` before falling back to a model reachability message.
+
+Goal-review and session decisions:
+
+- `goal-review` output routing must reconcile business payloads with transition conditions. A payload declaring `goalAchieved: false`, `decision: "needs_work"`, or equivalent `needs_work` state routes to the work path even if the envelope emitted `when.always`.
+- The feasible issue #63 session-resume fix is scoped to preserving the original workflow resolution scope for user-scope sessions whose workflow extends another user-scope workflow, such as `cursor-cli-goal` extending `codex-goal`. Broader cross-scope migration behavior remains outside this parity slice.
+
+Verification and rollout decisions:
+
+- `scripts/verify-and-update-v017-parity.sh` is the authoritative green gate for this slice. It must run the Xcode-SDK Swift checks, targeted TypeScript tests, JSON validity checks, and write `.verify-results.txt` with `OVERALL_EXIT_CODE: 0` before metadata in `impl-plans/PROGRESS.json` or `packaging/homebrew/swift-cutover-gates.json` is treated as current.
+- `packaging/homebrew/swift-cutover-gates.json` and `impl-plans/PROGRESS.json` must describe the verified parity slice honestly. They must not imply every Swift migration gate or every issue #63 behavior is complete unless the corresponding command output is present.
+- Verification commands for this slice are `bash scripts/verify-and-update-v017-parity.sh`, `bash .verify-run.sh`, targeted `bun test packages/rielflow/src/workflow/adapters/cursor.test.ts`, targeted `bun test packages/rielflow/src/workflow/adapter.test.ts`, and `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk swift test`.
+
 ## TASK-002/TASK-003 Prompt, JSON, And Envelope Prerequisite Closure
 
 This prerequisite slice closes the remaining Swift migration blockers before
@@ -198,10 +237,10 @@ Current verification evidence:
 - Current result: Apple Swift 6.3.2, target `arm64-apple-macosx26.0`.
 - Swift test command:
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test`
-- Current result: 197 tests passed with 0 failures on 2026-06-12. This is the
-  TASK-002 evidence to mirror into the active implementation plan; TASK-003
-  must stay in progress until the prompt and envelope test gaps above are
-  implemented and rerun.
+- Current parity evidence: `.verify-results.txt` from 2026-06-14 records full
+  `swift test` with 289 tests passed, 0 failures, and `OVERALL_EXIT_CODE: 0`.
+  TASK-003 must still stay in progress until the prompt and envelope test gaps
+  above are implemented and rerun.
 
 ## TASK-005 Runtime Session, Message Store, And Publication Boundary
 

@@ -50,6 +50,22 @@ final class AdapterUtilitiesTests: XCTestCase {
     XCTAssertEqual(businessPayload.payload, ["status": .string("ok")])
   }
 
+  func testOutputContractEnvelopeReconcilesGoalReviewAlwaysAgainstPayloadRouting() throws {
+    let envelope = try normalizeOutputContractEnvelope(
+      [
+        "when": .object(["always": .bool(true)]),
+        "payload": .object([
+          "accepted": .bool(false),
+          "goalAchieved": .bool(false),
+          "decision": .string("needs_work"),
+        ]),
+      ],
+      source: "goal-review"
+    )
+
+    XCTAssertEqual(envelope.when, ["needs_replan": false, "needs_work": true])
+  }
+
   func testOutputContractEnvelopeRequiresBooleanWhenObjectPayloadAndBooleanCompletionPassed() {
     XCTAssertThrowsError(
       try normalizeOutputContractEnvelope(

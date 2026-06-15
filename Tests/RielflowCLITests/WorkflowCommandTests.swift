@@ -179,11 +179,10 @@ final class WorkflowCommandTests: XCTestCase {
     XCTAssertEqual(run.nodeExecutions, 1)
   }
 
-  func testRunRejectsUnsupportedPersistenceAndConcurrencyOptions() async throws {
+  func testRunRejectsUnsupportedArtifactRootAndConcurrencyOptions() async throws {
     let root = repositoryRoot()
     let unsupportedOptions = [
       ["--artifact-root", "\(root)/.tmp-artifacts"],
-      ["--session-store", "\(root)/.tmp-session-store"],
       ["--max-concurrency", "2"],
     ]
 
@@ -196,6 +195,93 @@ final class WorkflowCommandTests: XCTestCase {
       XCTAssertEqual(result.exitCode, .usage, "expected usage rejection for \(option)")
       XCTAssertTrue(result.stderr.contains("not supported by the Swift TASK-007"))
     }
+  }
+
+  func testSessionRerunUsesPersistedSessionStore() async throws {
+    let root = repositoryRoot()
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("rielflow-cli-session-rerun-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+    let sessionStore = tempDir.appendingPathComponent("sessions", isDirectory: true).path
+    let app = RielflowCLIApplication()
+
+    let firstRun = await app.run([
+      "workflow", "run", "worker-only-single-step",
+      "--workflow-definition-dir", "\(root)/examples",
+      "--mock-scenario", "\(root)/examples/worker-only-single-step/mock-scenario.json",
+      "--session-store", sessionStore,
+      "--output", "json",
+    ])
+    XCTAssertEqual(firstRun.exitCode, .success, firstRun.stderr)
+    let first = try decodeJSON(WorkflowRunResult.self, from: firstRun.stdout)
+
+    let rerun = await app.run([
+      "session", "rerun", first.session.sessionId, "main-worker",
+      "--workflow-definition-dir", "\(root)/examples",
+      "--mock-scenario", "\(root)/examples/worker-only-single-step/mock-scenario.json",
+      "--session-store", sessionStore,
+      "--output", "json",
+    ])
+    XCTAssertEqual(rerun.exitCode, .success, rerun.stderr)
+    let payload = try decodeJSON(SessionRerunCommandResult.self, from: rerun.stdout)
+    XCTAssertEqual(payload.sourceSessionId, first.session.sessionId)
+    XCTAssertEqual(payload.rerunFromStepId, "main-worker")
+    XCTAssertNotEqual(payload.sessionId, first.session.sessionId)
+    XCTAssertEqual(payload.status, .completed)
+  }
+
+  func testSessionRerunRejectsNestedSuperviserFlag() async throws {
+    let result = await RielflowCLIApplication().run([
+      "session", "rerun", "sess-1", "step-1", "--nested-superviser",
+    ])
+    XCTAssertEqual(result.exitCode, .usage)
+    XCTAssertTrue(result.stderr.contains("not supported for session rerun"))
+  }
+
+  func testUserScopeWorkflowRunSupportsDefaultAutoScopeSessionRerunAndResume() async throws {
+    let root = repositoryRoot()
+    let layout = try makeIsolatedUserScopeWorkflowLayout(
+      repositoryRoot: root,
+      workflowName: "worker-only-single-step"
+    )
+    defer { try? FileManager.default.removeItem(at: layout.base) }
+
+    let mockScenario = "\(root)/examples/worker-only-single-step/mock-scenario.json"
+    let app = RielflowCLIApplication()
+    let environment = ["HOME": layout.homeRoot.path]
+
+    let firstRun = await app.run([
+      "workflow", "run", "worker-only-single-step",
+      "--scope", "user",
+      "--working-dir", layout.projectRoot.path,
+      "--mock-scenario", mockScenario,
+      "--output", "json",
+    ], environment: environment)
+    XCTAssertEqual(firstRun.exitCode, .success, firstRun.stderr)
+    let first = try decodeJSON(WorkflowRunResult.self, from: firstRun.stdout)
+
+    let rerun = await app.run([
+      "session", "rerun", first.session.sessionId, "main-worker",
+      "--working-dir", layout.projectRoot.path,
+      "--mock-scenario", mockScenario,
+      "--output", "json",
+    ], environment: environment)
+    XCTAssertEqual(rerun.exitCode, .success, rerun.stderr)
+    let rerunPayload = try decodeJSON(SessionRerunCommandResult.self, from: rerun.stdout)
+    XCTAssertEqual(rerunPayload.sourceSessionId, first.session.sessionId)
+    XCTAssertEqual(rerunPayload.rerunFromStepId, "main-worker")
+
+    let resume = await app.run([
+      "session", "resume", rerunPayload.sessionId,
+      "--working-dir", layout.projectRoot.path,
+      "--mock-scenario", mockScenario,
+      "--output", "json",
+    ], environment: environment)
+    XCTAssertEqual(resume.exitCode, .success, resume.stderr)
+    let resumePayload = try decodeJSON(SessionResumeCommandResult.self, from: resume.stdout)
+    XCTAssertEqual(resumePayload.sessionId, rerunPayload.sessionId)
+    XCTAssertEqual(resumePayload.status, .completed)
   }
 
   func testValidateAndInspectRejectRemoteResolutionFlagsWithUsageExit() async throws {
@@ -909,5 +995,34 @@ final class WorkflowCommandTests: XCTestCase {
       url.deleteLastPathComponent()
     }
     return FileManager.default.currentDirectoryPath
+  }
+
+  private struct IsolatedUserScopeWorkflowLayout {
+    let base: URL
+    let homeRoot: URL
+    let projectRoot: URL
+  }
+
+  private func makeIsolatedUserScopeWorkflowLayout(
+    repositoryRoot: String,
+    workflowName: String
+  ) throws -> IsolatedUserScopeWorkflowLayout {
+    let base = FileManager.default.temporaryDirectory
+      .appendingPathComponent("rielflow-cli-user-scope-\(UUID().uuidString)", isDirectory: true)
+    let homeRoot = base.appendingPathComponent("home", isDirectory: true)
+    let projectRoot = base.appendingPathComponent("project", isDirectory: true)
+    let userWorkflows = homeRoot
+      .appendingPathComponent(".rielflow/workflows", isDirectory: true)
+      .appendingPathComponent(workflowName, isDirectory: true)
+    try FileManager.default.createDirectory(at: userWorkflows.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+
+    let sourceWorkflow = URL(fileURLWithPath: repositoryRoot)
+      .appendingPathComponent("examples/\(workflowName)", isDirectory: true)
+    if FileManager.default.fileExists(atPath: userWorkflows.path) {
+      try FileManager.default.removeItem(at: userWorkflows)
+    }
+    try FileManager.default.copyItem(at: sourceWorkflow, to: userWorkflows)
+    return IsolatedUserScopeWorkflowLayout(base: base, homeRoot: homeRoot, projectRoot: projectRoot)
   }
 }

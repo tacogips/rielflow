@@ -461,22 +461,34 @@ async function checkCursorModel(input: {
   ]
     .filter((value): value is string => value !== undefined)
     .join("\n");
-  if (
-    result.auth.status === "unavailable" ||
-    (result.modelReachability.status !== "available" &&
-      hasAuthLikeFailure(combined))
-  ) {
+  if (!toolIsAvailable(result.binary)) {
+    return resultForCandidate({
+      candidate: input.candidate,
+      status: "invalid",
+      message: `cursor-cli-agent model '${input.model}' is not reachable: ${result.binary.name} is unavailable: ${compactAgentCliMessage(result.binary.error, "tool unavailable")}`,
+    });
+  }
+  if (result.auth.status === "unavailable") {
     return resultForCandidate({
       candidate: input.candidate,
       status: "invalid",
       message: `cursor-cli-agent model '${input.model}' probe reported an authentication failure: ${compactAgentCliMessage(combined, "auth failure")}`,
     });
   }
-  if (!toolIsAvailable(result.binary)) {
+  if (!result.modelReachability.probed) {
+    return unknownResult(
+      input.candidate,
+      `cursor-cli-agent model '${input.model}' reachability is unknown because the model probe did not run`,
+    );
+  }
+  if (
+    result.modelReachability.status !== "available" &&
+    hasAuthLikeFailure(combined)
+  ) {
     return resultForCandidate({
       candidate: input.candidate,
       status: "invalid",
-      message: `cursor-cli-agent model '${input.model}' is not reachable: ${result.binary.name} is unavailable: ${compactAgentCliMessage(result.binary.error, "tool unavailable")}`,
+      message: `cursor-cli-agent model '${input.model}' probe reported an authentication failure: ${compactAgentCliMessage(combined, "auth failure")}`,
     });
   }
   if (result.modelReachability.status !== "available") {

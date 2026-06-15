@@ -37,6 +37,7 @@
     "check:source-filenames": "bun run scripts/check-source-filenames.ts",
     "lint:biome": "biome check . --diagnostic-level=warn && bun run check:source-filenames",
     "lint": "bun run lint:biome && bun run typecheck",
+    "v017:heal": "node scripts/v017-heal-evidence.mjs .",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "clean": "rm -rf dist"

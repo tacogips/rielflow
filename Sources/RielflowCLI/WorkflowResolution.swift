@@ -77,7 +77,7 @@ public struct FileSystemWorkflowBundleResolver: WorkflowBundleResolving {
       .appendingPathComponent(".rielflow")
       .appendingPathComponent("workflows")
       .standardizedFileURL
-    let user = URL(fileURLWithPath: NSHomeDirectory())
+    let user = URL(fileURLWithPath: CLIRuntimeEnvironment.homeDirectory())
       .appendingPathComponent(".rielflow")
       .appendingPathComponent("workflows")
       .standardizedFileURL

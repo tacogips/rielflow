@@ -301,6 +301,27 @@ describe("normalizeOutputContractEnvelope", () => {
       ),
     ).toThrowError(AdapterExecutionError);
   });
+
+  test("reconciles goal-review when.always against payload.needs_work routing", () => {
+    const normalized = normalizeOutputContractEnvelope(
+      {
+        when: { always: true },
+        payload: {
+          accepted: false,
+          goalAchieved: false,
+          decision: "needs_work",
+          findings: ["swift test still failing"],
+        },
+      },
+      "goal-review",
+    );
+
+    expect(normalized.when).toEqual({
+      needs_replan: false,
+      needs_work: true,
+    });
+    expect(normalized.payload["goalAchieved"]).toBe(false);
+  });
 });
 
 function makeExecutionInput(

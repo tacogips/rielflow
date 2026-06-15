@@ -691,6 +691,7 @@ export async function getCursorBackendToolVersions(
 
 export async function checkCursorBackendModelAvailability(input: {
   readonly model: string;
+  readonly cursorBinary?: string;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs?: number;
@@ -710,6 +711,9 @@ export async function checkCursorBackendModelAvailability(input: {
       model: input.model,
       probe: input.probe ?? true,
       timeoutMs: normalizeTimeout(input.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),
+      ...(input.cursorBinary === undefined
+        ? {}
+        : { cursorAgentBinary: input.cursorBinary }),
       ...(input.cwd === undefined ? {} : { workspace: input.cwd }),
     });
     return {

@@ -28,6 +28,11 @@ public protocol WorkflowRuntimeIDGenerating: Sendable {
   func nextSessionId(workflowId: String) throws -> String
   func nextStepExecutionId(stepId: String, attempt: Int) throws -> String
   func nextCommunicationId() throws -> String
+  func noteExistingSessionId(_ sessionId: String, workflowId: String)
+}
+
+extension WorkflowRuntimeIDGenerating {
+  public func noteExistingSessionId(_ sessionId: String, workflowId: String) {}
 }
 
 public final class MonotonicWorkflowRuntimeIDGenerator: WorkflowRuntimeIDGenerating, @unchecked Sendable {
@@ -57,6 +62,20 @@ public final class MonotonicWorkflowRuntimeIDGenerator: WorkflowRuntimeIDGenerat
     defer { lock.unlock() }
     communicationCounter += 1
     return "comm-\(String(format: "%06d", communicationCounter))"
+  }
+
+  public func noteExistingSessionId(_ sessionId: String, workflowId: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    let prefix = "\(workflowId)-session-"
+    guard sessionId.hasPrefix(prefix) else {
+      return
+    }
+    let suffix = sessionId.dropFirst(prefix.count)
+    guard let parsed = Int(suffix) else {
+      return
+    }
+    sessionCounter = max(sessionCounter, parsed)
   }
 }
 
@@ -260,6 +279,14 @@ public actor InMemoryWorkflowRuntimeStore: WorkflowRuntimeStore {
     self.clock = clock
     self.idGenerator = idGenerator
     self.appendFailurePredicate = appendFailurePredicate
+  }
+
+  public func seedSession(_ session: WorkflowSession) {
+    idGenerator.noteExistingSessionId(session.sessionId, workflowId: session.workflowId)
+    sessions[session.sessionId] = session
+    if messagesBySession[session.sessionId] == nil {
+      messagesBySession[session.sessionId] = []
+    }
   }
 
   public func createSession(_ input: WorkflowSessionCreateInput) async throws -> WorkflowSession {

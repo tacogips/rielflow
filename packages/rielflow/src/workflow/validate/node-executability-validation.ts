@@ -1,4 +1,5 @@
 import { resolveNodeExecutionBackend } from "../adapters/dispatch";
+import { resolveCursorModelSlug } from "../adapters/cursor";
 import {
   asAgentNodePayload,
   getNormalizedNodePayload,
@@ -128,7 +129,11 @@ function buildAgentBackendCandidates(
       nodeIds: new Set<string>(),
       stepIds: new Set<string>(),
     };
-    entry.models.add(agentNode.model);
+    entry.models.add(
+      backend === "cursor-cli-agent" && agentNode.effort !== undefined
+        ? resolveCursorModelSlug(agentNode.model, agentNode.effort)
+        : agentNode.model,
+    );
     entry.nodeIds.add(candidate.nodeId);
     for (const stepId of candidate.stepIds) {
       entry.stepIds.add(stepId);
