@@ -491,6 +491,37 @@ describe("ClaudeCodeAgentAdapter", () => {
     expect(createRunner).not.toHaveBeenCalled();
   });
 
+  test("defaults permissionMode to bypassPermissions when not configured", async () => {
+    const fixture = makeClaudeRunnerFixture();
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(fixture.createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permissionMode: "bypassPermissions",
+      }),
+    );
+  });
+
+  test("preserves explicit permissionMode override", async () => {
+    const fixture = makeClaudeRunnerFixture();
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+      permissionMode: "default",
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(fixture.createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permissionMode: "default",
+      }),
+    );
+  });
+
   test("allows auth preflight to be disabled", async () => {
     const fixture = makeClaudeRunnerFixture();
     const checkAuthPreflight = vi.fn(async () => {
@@ -587,6 +618,8 @@ describe("ClaudeCodeAgentAdapter", () => {
         "text",
         "--model",
         "claude-opus-4-1",
+        "--permission-mode",
+        "bypassPermissions",
         "--add-dir",
         root,
         "--add-dir",

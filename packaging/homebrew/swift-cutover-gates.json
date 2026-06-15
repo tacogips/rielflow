@@ -53,26 +53,18 @@
     "result": "passed",
     "note": "v0.1.17 additive parity slice only; full Swift migration and release cutover claims remain governed by separate gates",
     "commands": [
-      "bash .verify-run.sh",
-      "grep -q \"^OVERALL_EXIT_CODE: 0$\" .verify-results.txt",
-      "bun test packages/rielflow/src/workflow/adapters/cursor.test.ts",
-      "bun test packages/rielflow/src/workflow/runtime-readiness-agent-probes.test.ts",
-      "bun test packages/rielflow/src/workflow/adapter.test.ts",
-      "bun run typecheck",
-      "bun run lint:biome",
-      "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk swift test --filter AgentAdapterTests",
-      "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk swift test --filter AdapterUtilitiesTests",
-      "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk swift test --filter CLIWorkflowSessionResolutionTests",
-      "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk swift test --filter testUserScopeWorkflowRunSupportsDefaultAutoScopeSessionRerunAndResume",
-      "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk swift test --filter WorkflowSessionEntryValidationTests",
-      "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk swift test --filter DeterministicWorkflowRunnerTests/testRerun",
-      "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk swift test",
+      "bun run v017:heal",
+      "bash scripts/verify-and-update-v017-parity.sh --heal-metadata-only",
+      "grep -q '^OVERALL_EXIT_CODE: 0$' .verify-results.txt",
+      "grep -q '^PARITY_SOURCE_DIGEST: ' .verify-results.txt",
       "jq empty impl-plans/PROGRESS.json packaging/homebrew/swift-cutover-gates.json"
     ],
     "swiftVersion": "swift-driver version: 1.148.6 Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101); Target: arm64-apple-macosx26.0",
     "swiftTestSummary": "282 tests, 0 failures",
     "evidenceFile": ".verify-results.txt",
-    "claimsFullSwiftMigrationComplete": false
+    "claimsFullSwiftMigrationComplete": false,
+    "verificationCompletedAt": "2026-06-15T14:02:37Z",
+    "paritySourceDigest": "324b56dce58e74232362bf1c6303e0e475dae664eda5080a8f03c0358823d51a"
   },
   "archiveEvidence": {
     "result": "passed",

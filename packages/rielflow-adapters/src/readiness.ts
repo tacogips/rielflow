@@ -11,6 +11,8 @@ import {
 } from "codex-agent/sdk";
 import { createCursorAgentSdk } from "cursor-cli-agent/sdk";
 import type {
+  ModelAvailabilityOptions as CursorModelAvailabilityOptions,
+  ModelAvailabilityReport as CursorModelAvailabilityReport,
   ToolCommandRunOptions as CursorToolCommandRunOptions,
   ToolCommandRunResult as CursorToolCommandRunResult,
 } from "cursor-cli-agent/sdk";
@@ -20,6 +22,7 @@ const DEFAULT_MODEL_TIMEOUT_MS = 30_000;
 
 export interface AgentBackendProbeOptions {
   readonly codexBinary?: string;
+  readonly cursorBinary?: string;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs?: number;
@@ -142,6 +145,32 @@ export function setCodexBackendSdkOperationsForTest(
     operations === undefined
       ? defaultCodexBackendSdkOperations
       : { ...defaultCodexBackendSdkOperations, ...operations };
+}
+
+type CursorSdkCheckModelFn = (
+  commandRunner: ReturnType<typeof createCursorCommandRunner>,
+  options: CursorModelAvailabilityOptions,
+  cursorBinary?: string,
+) => Promise<CursorModelAvailabilityReport>;
+
+const defaultCursorSdkCheckModel: CursorSdkCheckModelFn = async (
+  commandRunner,
+  options,
+  cursorBinary,
+) => {
+  const sdk = createCursorAgentSdk({
+    commandRunner,
+    ...(cursorBinary !== undefined ? { cursorBinary } : {}),
+  });
+  return await sdk.tools.checkModel(options);
+};
+
+let cursorSdkCheckModelImpl: CursorSdkCheckModelFn = defaultCursorSdkCheckModel;
+
+export function setCursorSdkCheckModelForTest(
+  impl: CursorSdkCheckModelFn | undefined,
+): void {
+  cursorSdkCheckModelImpl = impl ?? defaultCursorSdkCheckModel;
 }
 
 interface ProbeCommandResult {
@@ -671,6 +700,9 @@ export async function getCursorBackendToolVersions(
   try {
     const sdk = createCursorAgentSdk({
       commandRunner: createCursorCommandRunner(options),
+      ...(options.cursorBinary !== undefined
+        ? { cursorBinary: options.cursorBinary }
+        : {}),
     });
     const report = await sdk.tools.versions({
       timeoutMs: normalizeTimeout(options.timeoutMs, DEFAULT_TOOL_TIMEOUT_MS),
@@ -698,24 +730,22 @@ export async function checkCursorBackendModelAvailability(input: {
   readonly probe?: boolean;
 }): Promise<CursorBackendModelAvailability> {
   try {
-    const sdk = createCursorAgentSdk({
-      commandRunner: createCursorCommandRunner(
-        buildProbeOptions({
-          cwd: input.cwd,
-          env: input.env,
-          timeoutMs: input.timeoutMs,
-        }),
-      ),
-    });
-    const report = await sdk.tools.checkModel({
+    const commandRunner = createCursorCommandRunner(
+      buildProbeOptions({
+        cwd: input.cwd,
+        env: input.env,
+        timeoutMs: input.timeoutMs,
+      }),
+    );
+    const report = await cursorSdkCheckModelImpl(commandRunner, {
       model: input.model,
-      probe: input.probe ?? true,
+      probe: input.probe ?? false,
       timeoutMs: normalizeTimeout(input.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),
       ...(input.cursorBinary === undefined
         ? {}
         : { cursorAgentBinary: input.cursorBinary }),
       ...(input.cwd === undefined ? {} : { workspace: input.cwd }),
-    });
+    }, input.cursorBinary);
     return {
       model: report.model,
       binary: normalizeCursorToolInfo(report.binary),

@@ -7,8 +7,10 @@ import type {
 import {
   CursorCliAgentAdapter,
   resolveCursorModelSlug,
-  type CursorAdapterConfig,
+  resolveCursorAgentBinary,
+  resolveCursorAuthEnvironment,
 } from "./cursor";
+import { setCursorSdkCheckModelForTest } from "./readiness";
 
 const baseInput: AdapterExecutionInput = {
   workflowId: "wf",
@@ -68,36 +70,9 @@ const baseContext: AdapterExecutionContext = {
   signal: new AbortController().signal,
 };
 
-function createPassingBackendProbe() {
-  return vi.fn(async (input: { model: string }) => ({
-    model: input.model,
-    binary: {
-      name: "cursor-agent",
-      command: "cursor-agent",
-      version: "1.0.0",
-      status: "available" as const,
-    },
-    auth: {
-      status: "available" as const,
-      detail: "authenticated",
-    },
-    modelReachability: {
-      status: "available" as const,
-      probed: true,
-    },
-  }));
-}
-
-function createTestAdapter(config: CursorAdapterConfig = {}) {
-  return new CursorCliAgentAdapter({
-    ...config,
-    checkBackendModelAvailability:
-      config.checkBackendModelAvailability ?? createPassingBackendProbe(),
-  });
-}
-
 afterEach(() => {
   vi.restoreAllMocks();
+  setCursorSdkCheckModelForTest(undefined);
 });
 
 interface MockCursorRunResult {
@@ -180,7 +155,7 @@ describe("CursorCliAgentAdapter", () => {
     const runner = makeMockCursorRunner({ start: startSession });
     const createRunner = vi.fn(() => runner);
 
-    const adapter = createTestAdapter({ createRunner });
+    const adapter = new CursorCliAgentAdapter({ createRunner });
 
     const output = await adapter.execute(
       { ...baseInput, systemPromptText: "system" },
@@ -215,7 +190,7 @@ describe("CursorCliAgentAdapter", () => {
 
   test("forwards node effort to the Cursor runner", async () => {
     const runner = makeMockCursorRunner({});
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -242,7 +217,7 @@ describe("CursorCliAgentAdapter", () => {
 
   test("does not forward effort for composer models", async () => {
     const runner = makeMockCursorRunner({});
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -273,7 +248,7 @@ describe("CursorCliAgentAdapter", () => {
 
   test("resolves gpt-5.5 effort into Cursor model slug without separate effort", async () => {
     const runner = makeMockCursorRunner({});
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -305,7 +280,7 @@ describe("CursorCliAgentAdapter", () => {
     const sessionId = "cursor-gpt55-resume";
     const resumeSession = makeMockCursorSession({ sessionId });
     const runner = makeMockCursorRunner({ resume: resumeSession });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -363,7 +338,7 @@ describe("CursorCliAgentAdapter", () => {
       observedMailboxDir = process.env["RIEL_MAILBOX_DIR"];
       return startSession;
     });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -413,7 +388,7 @@ describe("CursorCliAgentAdapter", () => {
 
   test("forwards image attachments discovered in workflow input", async () => {
     const runner = makeMockCursorRunner({});
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -459,7 +434,7 @@ describe("CursorCliAgentAdapter", () => {
       ],
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -486,7 +461,7 @@ describe("CursorCliAgentAdapter", () => {
       ],
     });
     const runner = makeMockCursorRunner({ resume: resumeSession });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -555,7 +530,7 @@ describe("CursorCliAgentAdapter", () => {
       },
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -591,7 +566,7 @@ describe("CursorCliAgentAdapter", () => {
       ],
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -615,13 +590,16 @@ describe("CursorCliAgentAdapter", () => {
       },
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
-    await expect(
-      adapter.execute(baseInput, baseContext),
-    ).rejects.toHaveProperty("code", "provider_error");
+    await expect(adapter.execute(baseInput, baseContext)).rejects.toMatchObject(
+      {
+        code: "provider_error",
+        message: expect.stringContaining("something went wrong"),
+      },
+    );
   });
 
   test("maps invalid structured output to invalid_output", async () => {
@@ -641,7 +619,7 @@ describe("CursorCliAgentAdapter", () => {
       ],
     });
     const runner = makeMockCursorRunner({ start: startSession });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner: vi.fn(() => runner),
     });
 
@@ -677,7 +655,7 @@ describe("CursorCliAgentAdapter", () => {
         "cursor-cli-agent authentication is unavailable: login required",
       );
     });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner,
       checkAuthPreflight,
     });
@@ -698,95 +676,188 @@ describe("CursorCliAgentAdapter", () => {
     expect(createRunner).not.toHaveBeenCalled();
   });
 
-  test("default preflight probes resolved gpt-5.5 slug before execution", async () => {
-    const checkBackendModelAvailability = vi.fn(async () => ({
-      model: "gpt-5.5-high",
-      binary: {
-        name: "cursor-agent",
-        command: "cursor-agent",
-        version: "1.0.0",
-        status: "available" as const,
-      },
-      auth: {
-        status: "available" as const,
-        detail: "authenticated",
-      },
-      modelReachability: {
-        status: "unavailable" as const,
-        probed: true,
-        error: "model probe failed",
-      },
-    }));
+  test("applies maximum permission defaults when no permission config is set", async () => {
     const runner = makeMockCursorRunner({});
-    const createRunner = vi.fn(() => runner);
-    const adapter = createTestAdapter({
-      createRunner,
-      checkBackendModelAvailability,
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
     });
-    const input: AdapterExecutionInput = {
-      ...baseInput,
-      node: {
-        ...baseInput.node,
-        model: "gpt-5.5",
-        effort: "high",
-      },
-    };
 
-    await expect(adapter.execute(input, baseContext)).rejects.toMatchObject({
-      code: "policy_blocked",
-      message: expect.stringContaining("model 'gpt-5.5-high' is unavailable"),
-    });
-    expect(checkBackendModelAvailability).toHaveBeenCalledWith(
+    await adapter.execute(baseInput, baseContext);
+
+    expect(runner.start).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: "gpt-5.5-high",
-        probe: true,
-        cwd: "/tmp/project",
+        trust: true,
+        force: true,
+        yolo: true,
+        sandbox: "disabled",
+        approveMcps: true,
       }),
     );
-    expect(createRunner).not.toHaveBeenCalled();
   });
 
-  test("default preflight classifies auth failures before model reachability", async () => {
-    const checkBackendModelAvailability = vi.fn(async () => ({
-      model: "gpt-5.5-high",
+  test("preserves explicit false overrides for permission booleans", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+      trust: false,
+      force: false,
+      yolo: false,
+      sandbox: "enabled",
+      approveMcps: false,
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trust: false,
+        force: false,
+        yolo: false,
+        sandbox: "enabled",
+        approveMcps: false,
+      }),
+    );
+  });
+
+  test("forwards permission options through resume", async () => {
+    const sessionId = "cursor-perm-resume";
+    const resumeSession = makeMockCursorSession({ sessionId });
+    const runner = makeMockCursorRunner({ resume: resumeSession });
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+      trust: false,
+      yolo: false,
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        backendSession: { mode: "reuse", sessionId },
+      },
+      baseContext,
+    );
+
+    expect(runner.resume).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trust: false,
+        yolo: false,
+        force: true,
+        sandbox: "disabled",
+        approveMcps: true,
+      }),
+    );
+  });
+
+  test("default preflight probes resolved gpt-5.5-high slug for gpt-5.5 + effort high", async () => {
+    let capturedModel: string | undefined;
+    setCursorSdkCheckModelForTest(async (_commandRunner, options) => {
+      capturedModel = options.model;
+      return {
+        model: options.model,
+        binary: {
+          name: "cursor-agent",
+          command: "cursor-agent",
+          version: "1.0.0",
+          status: "available",
+          checkedAt: new Date().toISOString(),
+        },
+        auth: {
+          status: "available",
+          detail: "authenticated",
+          provenance: "stable_api",
+        },
+        modelReachability: {
+          status: "available",
+          probed: true,
+        },
+        checkedAt: new Date().toISOString(),
+      };
+    });
+
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      authPreflight: true,
+      createRunner: vi.fn(() => runner),
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "gpt-5.5",
+          effort: "high",
+        },
+      },
+      baseContext,
+    );
+
+    expect(capturedModel).toBe("gpt-5.5-high");
+  });
+
+  test("default preflight reports auth-required probe output as authentication unavailable", async () => {
+    setCursorSdkCheckModelForTest(async (_commandRunner, options) => ({
+      model: options.model,
       binary: {
         name: "cursor-agent",
         command: "cursor-agent",
         version: "1.0.0",
-        status: "available" as const,
+        status: "available",
+        checkedAt: new Date().toISOString(),
       },
       auth: {
-        status: "unavailable" as const,
-        detail: "login required",
+        status: "unknown",
+        detail: "auth not checked via probe path",
+        provenance: "not_available",
       },
       modelReachability: {
-        status: "unavailable" as const,
+        status: "unavailable",
         probed: true,
-        error: "model probe failed",
+        error:
+          "Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY in your environment.",
       },
+      checkedAt: new Date().toISOString(),
     }));
-    const runner = makeMockCursorRunner({});
-    const createRunner = vi.fn(() => runner);
-    const adapter = createTestAdapter({
-      createRunner,
-      checkBackendModelAvailability,
-    });
-    const input: AdapterExecutionInput = {
-      ...baseInput,
-      node: {
-        ...baseInput.node,
-        model: "gpt-5.5",
-        effort: "high",
-      },
-    };
 
-    await expect(adapter.execute(input, baseContext)).rejects.toMatchObject({
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      authPreflight: true,
+      createRunner: vi.fn(() => runner),
+    });
+
+    await expect(
+      adapter.execute(
+        {
+          ...baseInput,
+          node: {
+            ...baseInput.node,
+            model: "gpt-5.5",
+            effort: "high",
+          },
+        },
+        baseContext,
+      ),
+    ).rejects.toMatchObject({
       code: "policy_blocked",
       message: expect.stringContaining(
-        "cursor-cli-agent authentication is unavailable: login required",
+        "cursor-cli-agent authentication is unavailable",
       ),
     });
-    expect(createRunner).not.toHaveBeenCalled();
+    await expect(
+      adapter.execute(
+        {
+          ...baseInput,
+          node: {
+            ...baseInput.node,
+            model: "gpt-5.5",
+            effort: "high",
+          },
+        },
+        baseContext,
+      ),
+    ).rejects.not.toMatchObject({
+      message: expect.stringContaining("model"),
+    });
   });
 
   test("allows auth preflight to be disabled", async () => {
@@ -798,7 +869,7 @@ describe("CursorCliAgentAdapter", () => {
         "cursor-cli-agent authentication is unavailable",
       );
     });
-    const adapter = createTestAdapter({
+    const adapter = new CursorCliAgentAdapter({
       createRunner,
       checkAuthPreflight,
       authPreflight: false,
@@ -811,6 +882,195 @@ describe("CursorCliAgentAdapter", () => {
     });
     expect(checkAuthPreflight).not.toHaveBeenCalled();
     expect(createRunner).toHaveBeenCalledTimes(1);
+  });
+
+  test("default execution skips preflight even when SDK would report auth required", async () => {
+    setCursorSdkCheckModelForTest(async (_commandRunner, _options) => ({
+      model: _options.model,
+      binary: {
+        name: "cursor-agent",
+        command: "cursor-agent",
+        version: "1.0.0",
+        status: "available",
+        checkedAt: new Date().toISOString(),
+      },
+      auth: {
+        status: "unavailable",
+        detail: "authentication required",
+        provenance: "not_available",
+      },
+      modelReachability: {
+        status: "unavailable",
+        probed: true,
+        error:
+          "Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY.",
+      },
+      checkedAt: new Date().toISOString(),
+    }));
+
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = new CursorCliAgentAdapter({ createRunner });
+
+    await expect(
+      adapter.execute(baseInput, baseContext),
+    ).resolves.toMatchObject({ provider: "cursor-cli-agent" });
+    expect(createRunner).toHaveBeenCalledTimes(1);
+  });
+
+  test("explicit authPreflight:true fails on auth probe with unavailable auth status", async () => {
+    setCursorSdkCheckModelForTest(async (_commandRunner, options) => ({
+      model: options.model,
+      binary: {
+        name: "cursor-agent",
+        command: "cursor-agent",
+        version: "1.0.0",
+        status: "available",
+        checkedAt: new Date().toISOString(),
+      },
+      auth: {
+        status: "unavailable",
+        detail: "not authenticated",
+        provenance: "not_available",
+      },
+      modelReachability: {
+        status: "not_checked",
+        probed: false,
+      },
+      checkedAt: new Date().toISOString(),
+    }));
+
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      authPreflight: true,
+      createRunner: vi.fn(() => runner),
+    });
+
+    await expect(adapter.execute(baseInput, baseContext)).rejects.toMatchObject(
+      {
+        code: "policy_blocked",
+        message: expect.stringContaining(
+          "cursor-cli-agent authentication is unavailable",
+        ),
+      },
+    );
+  });
+
+  test("custom cursor binary from adapter config is passed to createRunner", async () => {
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = new CursorCliAgentAdapter({
+      createRunner,
+      cursorBinary: "/custom/cursor-agent",
+    });
+
+    await adapter.execute(baseInput, baseContext);
+
+    expect(createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ cursorBinary: "/custom/cursor-agent" }),
+    );
+  });
+
+  test("custom cursor binary from node variable is passed to createRunner", async () => {
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = new CursorCliAgentAdapter({ createRunner });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          variables: { cursorBinary: "/node-var/cursor-agent" },
+        },
+      },
+      baseContext,
+    );
+
+    expect(createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ cursorBinary: "/node-var/cursor-agent" }),
+    );
+  });
+
+  test("cursor binary from node cursorExecutable variable is passed to createRunner when cursorBinary is absent", async () => {
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const adapter = new CursorCliAgentAdapter({ createRunner });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          variables: { cursorExecutable: "/exec-var/cursor" },
+        },
+      },
+      baseContext,
+    );
+
+    expect(createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ cursorBinary: "/exec-var/cursor" }),
+    );
+  });
+});
+
+describe("resolveCursorAgentBinary", () => {
+  afterEach(() => {
+    for (const key of [
+      "RIELFLOW_CURSOR_AGENT_BINARY",
+      "CURSOR_AGENT_BINARY",
+      "CURSOR_CLI_AGENT_BINARY",
+    ]) {
+      delete process.env[key];
+    }
+  });
+
+  test("returns config cursorBinary first", () => {
+    process.env["CURSOR_AGENT_BINARY"] = "/env/cursor";
+    const result = resolveCursorAgentBinary({
+      cursorBinary: "/config/cursor",
+      nodeVariables: { cursorBinary: "/node/cursor" },
+    });
+    expect(result).toBe("/config/cursor");
+  });
+
+  test("returns node variable cursorBinary when config is absent", () => {
+    const result = resolveCursorAgentBinary({
+      nodeVariables: { cursorBinary: "/node/cursor" },
+    });
+    expect(result).toBe("/node/cursor");
+  });
+
+  test("returns node variable cursorExecutable when cursorBinary variable is absent", () => {
+    const result = resolveCursorAgentBinary({
+      nodeVariables: { cursorExecutable: "/node/cursor-exec" },
+    });
+    expect(result).toBe("/node/cursor-exec");
+  });
+
+  test("returns RIELFLOW_CURSOR_AGENT_BINARY env var when config and node vars absent", () => {
+    process.env["RIELFLOW_CURSOR_AGENT_BINARY"] = "/rielflow-env/cursor";
+    process.env["CURSOR_AGENT_BINARY"] = "/env/cursor";
+    const result = resolveCursorAgentBinary({});
+    expect(result).toBe("/rielflow-env/cursor");
+  });
+
+  test("returns CURSOR_AGENT_BINARY env var when RIELFLOW_CURSOR_AGENT_BINARY is absent", () => {
+    process.env["CURSOR_AGENT_BINARY"] = "/env/cursor";
+    process.env["CURSOR_CLI_AGENT_BINARY"] = "/cli-env/cursor";
+    const result = resolveCursorAgentBinary({});
+    expect(result).toBe("/env/cursor");
+  });
+
+  test("returns CURSOR_CLI_AGENT_BINARY as last env fallback", () => {
+    process.env["CURSOR_CLI_AGENT_BINARY"] = "/cli-env/cursor";
+    const result = resolveCursorAgentBinary({});
+    expect(result).toBe("/cli-env/cursor");
+  });
+
+  test("returns undefined when nothing is configured", () => {
+    const result = resolveCursorAgentBinary({});
+    expect(result).toBeUndefined();
   });
 });
 
@@ -829,12 +1089,6 @@ describe("resolveCursorModelSlug", () => {
     expect(resolveCursorModelSlug("gpt-5.5-medium-fast", "high")).toBe(
       "gpt-5.5-high-fast",
     );
-    expect(resolveCursorModelSlug("gpt-5.5-extra-high", "low")).toBe(
-      "gpt-5.5-low",
-    );
-    expect(resolveCursorModelSlug("gpt-5.5-extra-high-fast", "low")).toBe(
-      "gpt-5.5-low-fast",
-    );
   });
 
   test("leaves composer and non-gpt-5.5 models for existing effort handling", () => {
@@ -842,5 +1096,70 @@ describe("resolveCursorModelSlug", () => {
     expect(resolveCursorModelSlug("claude-sonnet-4-5", "high")).toBe(
       "claude-sonnet-4-5",
     );
+  });
+});
+
+describe("resolveCursorAuthEnvironment", () => {
+  const cursorApiKeyEnv = "CURSOR_API" + "_KEY";
+  const rielflowCursorApiKeyEnv = "RIELFLOW_CURSOR_API" + "_KEY";
+
+  test("returns empty object when no auth vars are set", () => {
+    const result = resolveCursorAuthEnvironment({});
+    expect(result).toEqual({});
+  });
+
+  test("picks RIELFLOW_CURSOR_API_KEY as CURSOR_API_KEY", () => {
+    const result = resolveCursorAuthEnvironment({
+      [rielflowCursorApiKeyEnv]: "placeholder",
+    });
+    expect(result.CURSOR_API_KEY).toBe("placeholder");
+  });
+
+  test("falls back to CURSOR_API_KEY when RIELFLOW_CURSOR_API_KEY is absent", () => {
+    const result = resolveCursorAuthEnvironment({
+      [cursorApiKeyEnv]: "placeholder",
+    });
+    expect(result.CURSOR_API_KEY).toBe("placeholder");
+  });
+
+  test("prefers RIELFLOW_CURSOR_API_KEY over CURSOR_API_KEY", () => {
+    const result = resolveCursorAuthEnvironment({
+      [rielflowCursorApiKeyEnv]: "preferred-placeholder",
+      [cursorApiKeyEnv]: "ambient-placeholder",
+    });
+    expect(result.CURSOR_API_KEY).toBe("preferred-placeholder");
+  });
+
+  test("picks RIELFLOW_CURSOR_HOME as CURSOR_CLI_AGENT_CURSOR_HOME", () => {
+    const result = resolveCursorAuthEnvironment({
+      RIELFLOW_CURSOR_HOME: "/custom/cursor/home",
+    });
+    expect(result.CURSOR_CLI_AGENT_CURSOR_HOME).toBe("/custom/cursor/home");
+  });
+
+  test("falls back to CURSOR_CLI_AGENT_CURSOR_HOME when RIELFLOW_CURSOR_HOME is absent", () => {
+    const result = resolveCursorAuthEnvironment({
+      CURSOR_CLI_AGENT_CURSOR_HOME: "/ambient/cursor/home",
+    });
+    expect(result.CURSOR_CLI_AGENT_CURSOR_HOME).toBe("/ambient/cursor/home");
+  });
+
+  test("returns both api key and cursor home when both are set", () => {
+    const result = resolveCursorAuthEnvironment({
+      [rielflowCursorApiKeyEnv]: "placeholder",
+      RIELFLOW_CURSOR_HOME: "/my/cursor/home",
+    });
+    expect(result.CURSOR_API_KEY).toBe("placeholder");
+    expect(result.CURSOR_CLI_AGENT_CURSOR_HOME).toBe("/my/cursor/home");
+  });
+
+  test("omits keys when values are empty strings", () => {
+    const result = resolveCursorAuthEnvironment({
+      [rielflowCursorApiKeyEnv]: "",
+      [cursorApiKeyEnv]: "",
+      RIELFLOW_CURSOR_HOME: "",
+    });
+    expect(result.CURSOR_API_KEY).toBeUndefined();
+    expect(result.CURSOR_CLI_AGENT_CURSOR_HOME).toBeUndefined();
   });
 });

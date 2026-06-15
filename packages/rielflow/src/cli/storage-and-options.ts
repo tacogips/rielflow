@@ -111,6 +111,43 @@ export interface CliStorageOptions {
 export interface RunCliSharedOptions extends CliStorageOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
+
+export function buildSharedWorkflowCatalogOptions(
+  sharedOptions: CliStorageOptions,
+): Pick<
+  CliStorageOptions,
+  "workflowScope" | "workflowRoot" | "userRoot" | "projectRoot" | "addonRoot"
+> {
+  return {
+    ...(sharedOptions.workflowScope === undefined
+      ? {}
+      : { workflowScope: sharedOptions.workflowScope }),
+    ...(sharedOptions.workflowRoot === undefined
+      ? {}
+      : { workflowRoot: sharedOptions.workflowRoot }),
+    ...(sharedOptions.userRoot === undefined
+      ? {}
+      : { userRoot: sharedOptions.userRoot }),
+    ...(sharedOptions.projectRoot === undefined
+      ? {}
+      : { projectRoot: sharedOptions.projectRoot }),
+    ...(sharedOptions.addonRoot === undefined
+      ? {}
+      : { addonRoot: sharedOptions.addonRoot }),
+  };
+}
+
+export function buildSessionWorkflowLoadOptions(
+  sessionOptions: CliStorageOptions,
+  sharedOptions: RunCliSharedOptions,
+): CliStorageOptions {
+  return {
+    ...sessionOptions,
+    ...buildSharedWorkflowCatalogOptions(sharedOptions),
+    env: sharedOptions.env,
+  };
+}
+
 export interface RunCliScopeContext {
   readonly parsed: ParsedArgs;
   readonly positionals: readonly string[];
@@ -241,12 +278,6 @@ export async function resolveSessionCommandStorageOptions(
     return options;
   }
 
-  const projectScopeRoot =
-    await resolveProjectScopeRootForSessionCommand(options);
-  if (projectScopeRoot !== undefined) {
-    return storageOptionsForProjectScopeRoot(options, projectScopeRoot);
-  }
-
   const env = options.env ?? process.env;
   const configuredWorkflowRoot =
     options.workflowRoot ?? env["RIEL_WORKFLOW_DEFINITION_DIR"];
@@ -254,7 +285,23 @@ export async function resolveSessionCommandStorageOptions(
     configuredWorkflowRoot !== undefined &&
     configuredWorkflowRoot.length > 0
   ) {
-    return storageOptionsForDirectWorkflowRoot(options, configuredWorkflowRoot);
+    const projectScopeRoot = await resolveProjectScopeRootFromWorkflowRoot(
+      configuredWorkflowRoot,
+      process.cwd(),
+    );
+    return projectScopeRoot === undefined
+      ? storageOptionsForDirectWorkflowRoot(options, configuredWorkflowRoot)
+      : storageOptionsForProjectScopeRoot(options, projectScopeRoot);
+  }
+
+  if (options.workflowScope === "user") {
+    return options;
+  }
+
+  const projectScopeRoot =
+    await resolveProjectScopeRootForSessionCommand(options);
+  if (projectScopeRoot !== undefined) {
+    return storageOptionsForProjectScopeRoot(options, projectScopeRoot);
   }
 
   return options;

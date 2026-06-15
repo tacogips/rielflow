@@ -99,7 +99,12 @@ export function resolveOutputValidationAttempts(node: NodePayload): number {
   if (node.output.maxValidationAttempts !== undefined) {
     return Math.max(1, node.output.maxValidationAttempts);
   }
-  return node.output.jsonSchema === undefined ? 1 : 3;
+  // Any configured output contract still requires a top-level JSON object, so a
+  // non-object/malformed candidate (e.g. an agent returning prose) is repairable
+  // via retry feedback even without a jsonSchema. Default schema-less and
+  // schema'd outputs alike to multiple attempts so one stray non-JSON response
+  // does not terminally fail the node.
+  return 3;
 }
 
 export function buildOutputPublicationPolicy(): {

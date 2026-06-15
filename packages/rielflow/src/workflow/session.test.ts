@@ -5,6 +5,7 @@ import {
   resolveCurrentStepId,
   resolveCurrentStepIdFromWorkflow,
   resolveRequestedBackendSession,
+  usesUserScopedBackendSessionPersistence,
   type CommunicationRecord,
   type WorkflowSessionState,
 } from "./session";
@@ -381,5 +382,119 @@ describe("persistNodeBackendSession", () => {
       lastStepId: "review-step",
       sessionId: "session-2",
     });
+  });
+});
+
+describe("usesUserScopedBackendSessionPersistence", () => {
+  test("returns false when sessionPolicy is undefined", () => {
+    const node: AgentNodePayload = {
+      id: "review-step",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "review",
+      variables: {},
+    };
+    expect(usesUserScopedBackendSessionPersistence(node)).toBe(false);
+  });
+
+  test("returns false when mode is new", () => {
+    const node = makeReusableAgentNode({ sessionPolicy: { mode: "new" } });
+    expect(usesUserScopedBackendSessionPersistence(node)).toBe(false);
+  });
+
+  test("returns false when mode is reuse but persistence is workflow", () => {
+    const node = makeReusableAgentNode({
+      sessionPolicy: { mode: "reuse", persistence: "workflow" },
+    });
+    expect(usesUserScopedBackendSessionPersistence(node)).toBe(false);
+  });
+
+  test("returns true when mode is reuse and persistence is user", () => {
+    const node = makeReusableAgentNode({
+      sessionPolicy: { mode: "reuse", persistence: "user" },
+    });
+    expect(usesUserScopedBackendSessionPersistence(node)).toBe(true);
+  });
+
+  test("returns true when mode is reuse, no persistence, and backend is cursor-cli-agent", () => {
+    const node = makeReusableAgentNode({
+      executionBackend: "cursor-cli-agent",
+      sessionPolicy: { mode: "reuse" },
+    });
+    expect(usesUserScopedBackendSessionPersistence(node)).toBe(true);
+  });
+
+  test("returns false when mode is reuse, no persistence, and backend is codex-agent", () => {
+    const node = makeReusableAgentNode({
+      executionBackend: "codex-agent",
+      sessionPolicy: { mode: "reuse" },
+    });
+    expect(usesUserScopedBackendSessionPersistence(node)).toBe(false);
+  });
+
+  test("returns false when mode is reuse, no persistence, and backend is claude-code-agent", () => {
+    const node = makeReusableAgentNode({
+      executionBackend: "claude-code-agent",
+      sessionPolicy: { mode: "reuse" },
+    });
+    expect(usesUserScopedBackendSessionPersistence(node)).toBe(false);
+  });
+});
+
+describe("resolveRequestedBackendSession user persistence fallback", () => {
+  test("uses userPersistedSessionId when no workflow-local session exists", () => {
+    const session = makeSession({ nodeBackendSessions: {} });
+    const node = makeReusableAgentNode({
+      executionBackend: "cursor-cli-agent",
+      sessionPolicy: { mode: "reuse" },
+    });
+    const result = resolveRequestedBackendSession({
+      session,
+      node,
+      userPersistedSessionId: "persisted-cursor-session-xyz",
+    });
+    expect(result).toEqual({
+      mode: "reuse",
+      sessionId: "persisted-cursor-session-xyz",
+    });
+  });
+
+  test("prefers workflow-local session over userPersistedSessionId", () => {
+    const session = makeSession({
+      nodeBackendSessions: {
+        "review-step": {
+          nodeId: "review-step",
+          backend: "cursor-cli-agent",
+          provider: "cursor",
+          sessionId: "local-session-abc",
+          createdAt: "2026-06-14T00:00:00.000Z",
+          updatedAt: "2026-06-14T00:00:00.000Z",
+          lastNodeExecId: "exec-1",
+        },
+      },
+    });
+    const node = makeReusableAgentNode({
+      executionBackend: "cursor-cli-agent",
+      sessionPolicy: { mode: "reuse" },
+    });
+    const result = resolveRequestedBackendSession({
+      session,
+      node,
+      userPersistedSessionId: "persisted-cursor-session-xyz",
+    });
+    expect(result).toEqual({
+      mode: "reuse",
+      sessionId: "local-session-abc",
+    });
+  });
+
+  test("falls back to new session when no workflow-local or user-persisted session", () => {
+    const session = makeSession({ nodeBackendSessions: {} });
+    const node = makeReusableAgentNode({
+      executionBackend: "cursor-cli-agent",
+      sessionPolicy: { mode: "reuse" },
+    });
+    const result = resolveRequestedBackendSession({ session, node });
+    expect(result).toEqual({ mode: "new" });
   });
 });

@@ -17,6 +17,8 @@ import type {
   NodeExecutionRecord,
   WorkflowSessionState,
 } from "../session";
+import { usesUserScopedBackendSessionPersistence } from "../session";
+import { loadUserBackendSession } from "../user-backend-session-store";
 import type { WorkflowEdge } from "../types";
 import type { PreparedWorkflowRun } from "./run-setup";
 import type { FinalizeExecutedNodeResult } from "./step-result-finalization-types";
@@ -632,6 +634,28 @@ export async function runWorkflowQueue(
         backendSessionSelection === undefined
           ? undefined
           : toStepIdentityFields(backendSessionSelection);
+      let userPersistedSessionId: string | undefined;
+      if (
+        agentNodePayload !== null &&
+        usesUserScopedBackendSessionPersistence(agentNodePayload) &&
+        agentNodePayload.executionBackend !== undefined
+      ) {
+        const userRecord = await loadUserBackendSession(
+          {
+            workflowId: workflow.workflowId,
+            nodeId:
+              backendSessionSelection?.sessionLookupNodeId ??
+              backendSessionSelection?.nodeRegistryId ??
+              nodeId,
+            ...(backendSessionSelection?.nodeRegistryId === undefined
+              ? {}
+              : { nodeRegistryId: backendSessionSelection.nodeRegistryId }),
+            backend: agentNodePayload.executionBackend,
+          },
+          options,
+        );
+        userPersistedSessionId = userRecord?.sessionId;
+      }
       let backendSession =
         agentNodePayload === null
           ? undefined
@@ -653,6 +677,9 @@ export async function runWorkflowQueue(
                     inheritFromStepId:
                       backendSessionSelection.inheritFromStepId,
                   }),
+              ...(userPersistedSessionId === undefined
+                ? {}
+                : { userPersistedSessionId }),
             });
       const composedPrompts = composeExecutionPrompts({
         promptComposition: {

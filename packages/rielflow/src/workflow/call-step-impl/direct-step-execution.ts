@@ -49,11 +49,17 @@ import {
   isTerminalWorkflowSessionStatus,
   persistNodeBackendSession,
   resolveRequestedBackendSession,
+  usesUserScopedBackendSessionPersistence,
   type NodeExecutionRecord,
   type OutputRef,
   type WorkflowSessionState,
 } from "../session";
 import { loadSession, saveSession } from "../session-store";
+import {
+  loadUserBackendSession,
+  saveUserBackendSession,
+  deleteUserBackendSession,
+} from "../user-backend-session-store";
 import { buildSupervisionStallWatch } from "../superviser";
 import { getNormalizedNodePayload, type LoadOptions } from "../types";
 import {
@@ -326,6 +332,28 @@ export class ExecutionDispatcher {
       backendSessionSelection === undefined
         ? undefined
         : toStepIdentityFields(backendSessionSelection);
+    let userPersistedSessionId: string | undefined;
+    if (
+      agentNodePayload !== null &&
+      usesUserScopedBackendSessionPersistence(agentNodePayload) &&
+      agentNodePayload.executionBackend !== undefined
+    ) {
+      const userRecord = await loadUserBackendSession(
+        {
+          workflowId: workflow.workflowId,
+          nodeId:
+            backendSessionSelection?.sessionLookupNodeId ??
+            backendSessionSelection?.nodeRegistryId ??
+            input.stepId,
+          ...(backendSessionSelection?.nodeRegistryId === undefined
+            ? {}
+            : { nodeRegistryId: backendSessionSelection.nodeRegistryId }),
+          backend: agentNodePayload.executionBackend,
+        },
+        input,
+      );
+      userPersistedSessionId = userRecord?.sessionId;
+    }
     let backendSession =
       agentNodePayload === null
         ? undefined
@@ -344,6 +372,9 @@ export class ExecutionDispatcher {
               : {
                   inheritFromStepId: backendSessionSelection.inheritFromStepId,
                 }),
+            ...(userPersistedSessionId === undefined
+              ? {}
+              : { userPersistedSessionId }),
           });
     const composedPrompts = composeExecutionPrompts({
       promptComposition: {
@@ -646,6 +677,55 @@ export class ExecutionDispatcher {
               ? {}
               : { returnedSessionId: backendSessionId }),
           });
+    if (
+      agentNodePayload !== null &&
+      usesUserScopedBackendSessionPersistence(agentNodePayload) &&
+      agentNodePayload.executionBackend !== undefined
+    ) {
+      const userSessionKeyInput = {
+        workflowId: workflow.workflowId,
+        nodeId:
+          backendSessionSelection?.sessionLookupNodeId ??
+          backendSessionSelection?.nodeRegistryId ??
+          input.stepId,
+        ...(backendSessionSelection?.nodeRegistryId === undefined
+          ? {}
+          : { nodeRegistryId: backendSessionSelection.nodeRegistryId }),
+        backend: agentNodePayload.executionBackend,
+      };
+      if (nodeStatus === "succeeded" && backendSessionId !== undefined) {
+        try {
+          await saveUserBackendSession(
+            {
+              workflowId: workflow.workflowId,
+              nodeId: userSessionKeyInput.nodeId,
+              ...(userSessionKeyInput.nodeRegistryId === undefined
+                ? {}
+                : { nodeRegistryId: userSessionKeyInput.nodeRegistryId }),
+              backend: agentNodePayload.executionBackend,
+              provider:
+                backendSessionProvider ??
+                finalOutputPayload?.["provider"]?.toString() ??
+                "unknown-provider",
+              sessionId: backendSessionId,
+              ...(agentNodePayload.workingDirectory === undefined
+                ? {}
+                : { workingDirectory: agentNodePayload.workingDirectory }),
+              updatedAt: endedAt,
+            },
+            input,
+          );
+        } catch {
+          // Best-effort; do not fail execution on user session store write errors.
+        }
+      } else if (nodeStatus === "failed") {
+        try {
+          await deleteUserBackendSession(userSessionKeyInput, input);
+        } catch {
+          // Best-effort cleanup.
+        }
+      }
+    }
     if (managerSessionId !== undefined && ambientManagerContext !== undefined) {
       await managerSessionStore.createOrResumeSession({
         managerSessionId,

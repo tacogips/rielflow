@@ -769,6 +769,7 @@ export function resolveRequestedBackendSession(
     readonly node: AgentNodePayload;
     readonly sessionLookupNodeId?: string;
     readonly inheritFromStepId?: string;
+    readonly userPersistedSessionId?: string;
   } & StepIdentityFields,
 ): AdapterExecutionInput["backendSession"] | undefined {
   if (input.node.sessionPolicy === undefined) {
@@ -806,6 +807,9 @@ export function resolveRequestedBackendSession(
           )
           .sort(compareBackendSessionRecency)[0];
   if (selected === undefined) {
+    if (input.userPersistedSessionId !== undefined) {
+      return { mode: "reuse", sessionId: input.userPersistedSessionId };
+    }
     return { mode: "new" };
   }
 
@@ -813,6 +817,25 @@ export function resolveRequestedBackendSession(
     mode: "reuse",
     sessionId: selected.sessionId,
   };
+}
+
+export function usesUserScopedBackendSessionPersistence(
+  node: AgentNodePayload,
+): boolean {
+  if (node.sessionPolicy?.mode !== "reuse") {
+    return false;
+  }
+  const persistence = node.sessionPolicy.persistence;
+  if (persistence === "user") {
+    return true;
+  }
+  if (
+    persistence === undefined &&
+    node.executionBackend === "cursor-cli-agent"
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function persistNodeBackendSession(

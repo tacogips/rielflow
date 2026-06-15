@@ -16,6 +16,7 @@ import type {
   WorkflowPackageIndexRecord,
   WorkflowPackageRegistryConfigOptions,
   WorkflowPackageRegistryEntry,
+  WorkflowPackageSkillVendor,
 } from "./types";
 import type {
   WorkflowPackageCheckoutInput,
@@ -28,6 +29,7 @@ export interface WorkflowPackageDependencyInstallContext {
   readonly dependencyGraph: WorkflowPackageDependencyEdge[];
   readonly installedDependencies: WorkflowPackageCheckoutResult[];
   readonly dependencyMutationBackups: WorkflowPackageDependencyMutationBackup[];
+  projectedSkillVendors?: ReadonlySet<WorkflowPackageSkillVendor>;
 }
 
 export interface WorkflowPackageDependencyMutationBackup {

@@ -194,11 +194,9 @@ function resolveLocalSessionConfig(
         : { systemPrompt: input.systemPromptText }),
       cwd: config.cwd ?? input.workingDirectory,
       model: input.node.model,
-      ...(config.sandbox === undefined ? {} : { sandbox: config.sandbox }),
-      ...(config.approvalMode === undefined
-        ? {}
-        : { approvalMode: config.approvalMode }),
-      ...(config.fullAuto === undefined ? {} : { fullAuto: config.fullAuto }),
+      sandbox: config.sandbox !== undefined ? config.sandbox : "danger-full-access",
+      approvalMode: config.approvalMode !== undefined ? config.approvalMode : "never",
+      fullAuto: config.fullAuto !== undefined ? config.fullAuto : true,
       ...(additionalArgs === undefined ? {} : { additionalArgs }),
       ...(reasoningEffortOverride === undefined
         ? {}

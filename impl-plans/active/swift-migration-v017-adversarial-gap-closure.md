@@ -448,3 +448,9 @@ passed. The handoff does not claim full Swift migration completion.
 **Tasks In Progress**: None
 **Blockers**: Workflow agent runtime rejected shell/subagent execution; authoritative metadata stamp requires `bun run v017:heal` in a shell-enabled environment.
 **Notes**: exec-000011 unified digest computation in `scripts/v017-digest-lib.mjs` (shasum-pipe parity across bash, `compute-v017-digest.mjs`, and `v017-heal-evidence.mjs`); simplified `scripts/heal-v017-parity-evidence.sh` to delegate to the node heal path that also updates `packaging/homebrew/swift-cutover-gates.json`. Prior suite green (`OVERALL_EXIT_CODE: 0`); `VERIFICATION_COMPLETED_AT` and `PARITY_SOURCE_DIGEST` still pending authoritative heal run. v0.1.17 additive parity slice only.
+
+### Session: 2026-06-15 23:10
+**Tasks Completed**: TASK-005, TASK-006
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: Merged `main` Cursor fixes into `swift-migration`, including skipped default Cursor preflight, run-everything Cursor adapter options, user backend session persistence, and package skill projection updates. Updated `cursor-cli-agent` to rebuilt artifact commit `9edb04cd8f2f22f184d4298effec3718cbae6c04` via its exact codeload tarball URL because GitHub API tarball requests returned 504 while codeload succeeded. Ran `bun run v017:heal`; `.verify-results.txt`, `impl-plans/PROGRESS.json`, and `packaging/homebrew/swift-cutover-gates.json` now contain `VERIFICATION_COMPLETED_AT` and `PARITY_SOURCE_DIGEST`. v0.1.17 additive parity slice only.

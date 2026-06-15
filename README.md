@@ -13,32 +13,6 @@ Use Rielflow when one prompt is not enough: planning, delegation, review,
 retry, waiting for user input, calling tools, and handing work between agents
 can all be described as a reusable workflow.
 
-Swift native migration work is tracked on the `swift-migration` branch. The
-top-level SwiftPM package mirrors the current package boundaries, and branch
-production Homebrew packaging now builds macOS Swift executable archives after
-TASK-009 parity acceptance and the dedicated release cutover. The branch
-currently includes Swift targets for `RielflowCore`,
-`RielflowAdapters`, `RielflowAddons`, `RielflowEvents`, `RielflowGraphQL`,
-`RielflowServer`, `RielflowHook`, `CodexAgent`, `ClaudeCodeAgent`,
-`CursorCLIAgent`, and the `rielflow` executable; see
-`design-docs/specs/design-swift-native-migration.md` and
-`impl-plans/completed/swift-native-migration.md`. TASK-002 through TASK-009 now
-have accepted parity evidence for the current additive Swift migration scope,
-including the final security, persistence, macOS archive smoke, and
-adversarial-review handoff. The dedicated production cutover changed
-`packaging/homebrew/swift-cutover-gates.json` to
-`productionRuntime=swift-native`,
-`homebrewFormulaSource=swift-executable-archive`, and
-`allowsProductionCutover=true`, while GitHub release upload and Homebrew tap
-pushes remain operator actions. Completed focused migration slices are
-archived under `impl-plans/completed/`, including
-`impl-plans/completed/swift-native-migration-task-009-final-cutover-gate.md`
-for the final parity/security/cutover handoff,
-`impl-plans/completed/swift-native-migration-task-007-cli-parity.md` for the
-Swift CLI validate, inspect, and deterministic mock-run parity slice and
-`impl-plans/completed/swift-native-migration-task-008-packaging-cutover-readiness.md`
-for the local-only Swift packaging readiness slice.
-
 ## What You Can Do
 
 - Run reusable workflow bundles from a project catalog, user catalog, example
@@ -78,11 +52,8 @@ rielflow --help
 ```
 
 The installed binary is `rielflow`.
-On macOS, the current Homebrew formula installs the Swift-native executable
-archive. Built-in add-ons are bundled into the installed command; they do not
-require a separate add-on package install. Linux Homebrew archives are
-intentionally unsupported for this cutover until a reviewed Swift Linux build
-contract exists.
+Built-in add-ons are bundled into the installed command; they do not require a
+separate add-on package install.
 
 ### Run With Bun
 
@@ -113,221 +84,6 @@ bun run packages/rielflow/dist/main.js --help
 `bunx rielflow` only works when the `rielflow` npm package is available from
 the npm registry. If Bun reports that the package cannot be found, use
 Homebrew, Nix, or the source-checkout commands above.
-
-### Swift Migration Development
-
-On the `swift-migration` branch, the SwiftPM package is additive, and the
-branch-local production Homebrew path now installs the Swift-native macOS
-executable. The TypeScript/Bun source path remains available for development,
-compatibility checks, and workflows that have not yet been moved to a reviewed
-Swift production surface. The repository-owned local agent backends remain
-stable as workflow `executionBackend` strings:
-`codex-agent`, `claude-code-agent`, and `cursor-cli-agent`; the Swift targets
-that currently map them are `CodexAgent`, `ClaudeCodeAgent`, and
-`CursorCLIAgent`.
-
-To verify the current v0.1.17 additive parity slice on `swift-migration`, run:
-
-```bash
-bash scripts/verify-and-update-v017-parity.sh
-```
-
-That script runs the targeted Swift and Bun checks in `.verify-run.sh` and
-updates `impl-plans/PROGRESS.json` plus
-`packaging/homebrew/swift-cutover-gates.json` only when every check passes.
-
-The Swift adapter scaffold also preserves the public official SDK backend
-strings `official/openai-sdk`, `official/anthropic-sdk`, and
-`official/cursor-sdk`. The local-agent Swift targets now own backend-faithful
-command builders for `codex-agent`, `claude-code-agent`, and
-`cursor-cli-agent` instead of relying on a generic subprocess argv shape.
-`RielflowAdapters` provides the shared injected process runner, deadline
-handling, output-contract parsing, image-path resolution, descriptor isolation,
-and redacted failure handling; provider-specific argv, auth/model preflights,
-stream normalization, and readiness interpretation stay in `CodexAgent`,
-`ClaudeCodeAgent`, and `CursorCLIAgent`.
-
-Swift readiness APIs model tool, auth, and model states as `available`,
-`unavailable`, `unknown`, or `not_checked`, matching the practical behavior
-from the TypeScript readiness and runtime-readiness probes. Adapter preflights
-map unavailable local tools, failed auth checks, and failed model probes to
-redacted `policy_blocked` failures without requiring a workflow execution.
-
-`DispatchingNodeAdapter` also registers default Swift adapter factories for
-`official/openai-sdk` and `official/anthropic-sdk` under `RielflowAdapters`,
-including HTTP-backed request execution, configured or default API-key
-environment lookup, optional base URL propagation, bounded retry, deadline
-timeout handling, provider error normalization, credential redaction, provider
-text extraction, and output-envelope normalization. `official/cursor-sdk`
-remains recognized but intentionally unimplemented in this slice. Local-agent
-and official SDK adapter tests use injected process runners, readiness probes,
-request executors, or HTTP transports with synthetic responses; they do not
-require live local CLI tools, provider credentials, or network access.
-
-The TASK-002/TASK-003 Swift prerequisite closure adds prompt rendering, prompt
-asset loading, and output-envelope parity needed before TASK-009. Swift
-`renderPromptTemplate` now matches the TypeScript/Bun placeholder contract for
-`{{ path }}` dotted object traversal: strings render unchanged, booleans and
-numbers render as scalar text, arrays and objects render as compact JSON,
-missing or null values render as an empty string, and unsupported placeholder
-syntax stays literal. Number formatting follows the TypeScript/Bun fixed
-decimal thresholds, including `0.000001` for `1e-6`, exponential output for
-`1e-7`, and decimal output for `1e20`.
-
-Prompt template asset loading supports `systemPromptTemplateFile`,
-`promptTemplateFile`, and `sessionStartPromptTemplateFile` on top-level agent
-payloads and prompt variants. Paths are workflow-relative only; empty paths,
-absolute paths, Windows drive-letter paths, `.` or `..` segments, symlink
-escapes, `workflow.json`, and canonical `node-*.json` targets fail
-deterministically. Hydration preserves the authored file-reference fields while
-populating the inline templates used for execution.
-
-Swift adapter output normalization now covers output-contract envelopes without
-moving publication ownership into backend adapters. When no node output
-contract is present, provider text remains provider text even when it looks
-like JSON. When a contract is present, provider text must yield a JSON object
-candidate; `when` must be an object of booleans, `payload` must be an object,
-and `completionPassed` must be a boolean when supplied. Candidate extraction
-ignores braces inside quoted and escaped string content. Runtime-owned
-candidate-path handling, output validation, accepted output artifacts, workflow
-message publication, communication ids, and final root output selection remain
-outside backend adapters.
-
-The TASK-005 Swift runtime slice adds deterministic in-memory
-`RielflowCore` APIs for runtime-owned workflow sessions, step executions,
-workflow message records, message input resolution, candidate-path staging,
-output validation, and publication. Adapters still own only provider output:
-they may return inline candidate payloads or use a runtime-reserved candidate
-path, but they do not allocate communication ids, mutate session state, write
-final workflow output, or publish downstream workflow messages. Candidate-path
-publication is runtime-owned and rejects missing, stale, malformed,
-outside-staging, ambiguous, or unreserved candidate sources before accepted
-output or workflow message publication.
-
-The Swift runtime boundary intentionally avoids the legacy execution-local
-mailbox contract: do not add `RIEL_MAILBOX_DIR`, `inbox/input.json`,
-`outbox/output.json`, or worker-managed inbox/outbox message APIs to the Swift
-path. Message input resolution consumes only delivered or already consumed
-runtime message rows, excludes created, failed, and superseded rows, and
-applies the merged payload to adapter input before execution. Output-contract
-validation fails closed for malformed JSON, invalid envelopes, malformed
-schema definitions, schema failures, `completionPassed: false`, and
-unsupported transition shapes such as cross-workflow, resume-step, and fanout
-transitions. The Swift implementation remains additive inside the repository,
-but the production Homebrew packaging cutover now uses the accepted Swift
-macOS executable archives after the TASK-009 parity gates and dedicated
-release cutover evidence passed.
-
-The TASK-006 Swift contract slice adds deterministic compatibility surfaces in
-`RielflowAddons`, `RielflowEvents`, `RielflowHook`, `RielflowGraphQL`, and
-`RielflowServer`. It ports package manifest loading and validation contracts,
-declarative add-on resolve/execute boundaries, event source and dry-run
-contracts, hook context parsing with redaction-safe recording, GraphQL DTO and
-control-plane result projections, and server request/route descriptors for
-`/`, `/overview`, `/graphql`, and `/healthz`. These surfaces are additive
-contracts only: they do not install packages, execute package scripts, start
-live gateways, send replies, run workflows from event dry-runs, publish
-workflow messages, allocate communication ids, expose candidate paths to
-add-ons, or replace the TypeScript/Bun HTTP and GraphQL server.
-
-TASK-006 also keeps the package/add-on boundary deterministic. Package
-manifest loading is local-file only, package-relative paths reject traversal,
-Windows drive-letter paths, and UNC paths, built-in add-on resolution requires
-trusted built-in source metadata instead of package add-on name spoofing, event
-route validation includes effective webhook, S3, and chat-sdk HTTP routes, hook
-payload hashes are canonical, and server header normalization is
-duplicate-safe. `codex-agent` remains an execution-backend identifier; the
-preferred local reference root `../../codex-agent` was unavailable for this
-slice, so the accepted parity reference remained the repository TypeScript/Bun
-adapter and contract sources.
-
-The TASK-007 Swift CLI parity slice adds additive `RielflowCLI` parsing and
-deterministic local behavior for `workflow validate`, `workflow inspect`, and
-`workflow run` mock execution. The Swift executable can validate and inspect
-workflow bundles through direct, project, and user resolution, apply
-`--node-patch` in memory, render parseable JSON failure envelopes when
-`--output json` is requested, and run local mock scenarios through the
-TASK-005 session/message publication boundary. Deterministic runs preserve
-output-contract retry attempts, branch-expression transitions such as
-`!(needs_revision)`, fail-closed handling for unsupported or multiple direct
-transitions, scoped workflow containment with symlink checks, and the
-TypeScript/Bun mock-scenario sequence formula based on execution index and
-validation attempt. The accepted focused implementation plan is archived at
-`impl-plans/completed/swift-native-migration-task-007-cli-parity.md`. The Swift
-CLI still does not replace release packaging, registry-backed run mutation,
-remote `--endpoint` execution, live gateways, live server loops, or live agent
-credential requirements.
-
-The TASK-008 Swift packaging readiness slice defined the pre-cutover artifact
-contract. The dedicated production release packaging cutover now builds the
-Homebrew macOS archives from the same `rielflow` SwiftPM product through Xcode
-SwiftPM:
-
-```bash
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
-  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift \
-    build -c release --product rielflow --show-bin-path
-```
-
-Historical local Swift readiness archives are staged only under
-`dist/swift-homebrew/work/rielflow-<version>-darwin-<arch>/bin/rielflow` and
-archived as `dist/swift-homebrew/rielflow-swift-<version>-darwin-arm64.tar.gz`
-or `dist/swift-homebrew/rielflow-swift-<version>-darwin-x64.tar.gz`, each with a
-matching `.sha256` sidecar. Current branch production Homebrew archives are
-Swift executable archives under
-`dist/homebrew/rielflow-<version>-darwin-arm64.tar.gz` and
-`dist/homebrew/rielflow-<version>-darwin-x64.tar.gz`, each installing
-`bin/rielflow` plus `README.md`. Linux Homebrew remains fail-closed for this
-cutover. Historical readiness helpers remain:
-
-```bash
-RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh --dry-run darwin-arm64
-RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64
-```
-
-If the default `swift` lookup points at the Nix Apple SDK path, use Xcode's
-toolchain explicitly:
-
-```bash
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift --version
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
-  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test
-```
-
-The accepted workflow verification for this branch used Apple Swift 6.3.2 and
-`swift test` passed 211 tests across the current prompt rendering and prompt
-asset loading contracts, output-envelope normalization, local-agent
-command-builder, official OpenAI/Anthropic SDK scaffold, TASK-005 runtime
-publication coverage, TASK-006 package/add-on/event/hook/GraphQL/server
-contracts, TASK-007 Swift CLI validate/inspect/deterministic-run coverage,
-TASK-008 packaging readiness coverage, and TASK-009 final parity gates. The
-accepted TASK-009 run passed `git diff --check`,
-`jq empty impl-plans/PROGRESS.json`,
-`jq empty packaging/homebrew/swift-cutover-gates.json`,
-`bun run typecheck:server`, `bun run lint:biome`,
-TypeScript/Bun workflow validation, full Xcode `swift test`, focused package,
-event, GraphQL manager-control, hook, adapter, runtime-store, and publication
-tests, `RIEL_VERSION=0.0.0-task009 scripts/build-swift-homebrew-readiness.sh darwin-arm64`,
-archive listing, relocated `.sha256` verification from
-`dist/swift-homebrew`, host-path rejection for the checksum sidecar, and
-archived Swift `--help`, `workflow validate`, `workflow inspect`, and
-deterministic `workflow run` smokes. The accepted TASK-009 adversarial review
-found no high or mid findings in workflow session
-`riel-codex-design-and-implement-review-loop-1781261544-53db3135`. The
-TypeScript/Bun fallback validation from the implementation run remained
-`bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project`.
-The dedicated production packaging cutover then passed
-`RIEL_VERSION=0.0.0-cutover scripts/build-homebrew-release.sh --dry-run darwin-arm64 darwin-x64`,
-`RIEL_VERSION=0.1.15 scripts/build-homebrew-release.sh darwin-arm64 darwin-x64`,
-archive listing, checksum validation from `dist/homebrew`,
-`scripts/render-homebrew-formula.sh 0.1.15 Formula/rielflow.rb`, formula and
-checksum leakage checks, focused Swift CLI tests, archived Swift workflow
-usage smokes for arm64 and x64, and local Homebrew install/test smoke. The
-accepted review fixed `comm-000020` and `comm-000024`; no high or mid findings
-remained. Use Homebrew for the Swift-native macOS install path and Bun only
-for source-checkout development or explicit TypeScript/Bun validation.
 
 ### Optional LLM Agent Setup
 
@@ -395,6 +151,14 @@ OpenAI/Codex SDK-backed nodes use `OPENAI_API_KEY`, Anthropic/Claude SDK-backed
 nodes use `ANTHROPIC_API_KEY`, Cursor SDK-backed nodes use `CURSOR_API_KEY`,
 and local CLI-backed nodes depend on the corresponding Codex, Claude Code, or
 Cursor CLI setup.
+
+Local CLI-backed workflow nodes default to unattended, maximum-permission
+execution. `codex-agent` runs with `fullAuto: true`, `approvalMode: "never"`,
+and `sandbox: "danger-full-access"`; `claude-code-agent` runs with
+`permissionMode: "bypassPermissions"`; and `cursor-cli-agent` runs with
+`trust`, `force`, `yolo`, and `approveMcps` enabled plus
+`sandbox: "disabled"`. Embedders that construct adapters directly can still pass
+stricter adapter config values to override these defaults.
 
 Optional Nix install:
 
@@ -1009,11 +773,11 @@ excluded.
 
 Node execution no longer exposes a `RIEL_MAILBOX_DIR` inbox/outbox message
 contract. Native command, container, and add-on workers receive resolved
-structured input through runtime-managed stdin JSONL, then return JSON through
-runtime-owned output collection for publication into `workflow_messages`.
-Workers must not read `RIEL_RESOLVED_INPUT_PATH`, `inbox/input.json`, or write
-`outbox/output.json`; those paths are not compatibility fallbacks for node
-message handoff.
+structured input through runtime-managed stdin/request files and
+`RIEL_RESOLVED_INPUT_PATH`, then return JSON through runtime-owned output
+collection for publication into `workflow_messages`. Workers must not read
+`inbox/input.json` or write `outbox/output.json`; those paths are not
+compatibility fallbacks for node message handoff.
 
 Runtime JSON text columns are validated by SQLite. Required JSON values use
 `CHECK(json_valid(column))`, while nullable JSON values use

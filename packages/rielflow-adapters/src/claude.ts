@@ -114,6 +114,14 @@ export interface ClaudeAdapterConfig extends LlmSessionStallWatchConfig {
 const DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS = 5_000;
 const CLAUDE_PRINT_ABORT_KILL_GRACE_MS = 2_000;
 
+function resolveClaudePermissionMode(
+  config: ClaudeAdapterConfig,
+): PermissionMode {
+  return config.permissionMode !== undefined
+    ? config.permissionMode
+    : "bypassPermissions";
+}
+
 async function createDefaultRunner(
   options: ClaudeSessionRunnerOptions,
 ): Promise<ClaudeSessionRunnerLike> {
@@ -306,9 +314,7 @@ function resolveLocalSessionConfig(
       cwd: config.cwd ?? input.workingDirectory,
       model: input.node.model,
       ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
-      ...(config.permissionMode === undefined
-        ? {}
-        : { permissionMode: config.permissionMode }),
+      permissionMode: resolveClaudePermissionMode(config),
       ...(config.additionalArgs === undefined
         ? {}
         : { additionalArgs: [...config.additionalArgs] }),
@@ -327,9 +333,7 @@ function buildClaudePrintArgs(input: {
   if (input.effort !== undefined) {
     args.push("--effort", input.effort);
   }
-  if (input.config.permissionMode !== undefined) {
-    args.push("--permission-mode", input.config.permissionMode);
-  }
+  args.push("--permission-mode", resolveClaudePermissionMode(input.config));
   if (input.sessionConfig.attachments !== undefined) {
     const directories = new Set<string>();
     for (const attachment of input.sessionConfig.attachments) {

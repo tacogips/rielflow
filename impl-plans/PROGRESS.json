@@ -10100,7 +10100,9 @@
         "scope": "v0.1.17 additive parity slice only",
         "evidenceFile": ".verify-results.txt",
         "overallExitCode": 0,
-        "claimsFullSwiftMigrationComplete": false
+        "claimsFullSwiftMigrationComplete": false,
+        "verificationCompletedAt": "2026-06-15T14:02:37Z",
+        "paritySourceDigest": "324b56dce58e74232362bf1c6303e0e475dae664eda5080a8f03c0358823d51a"
       }
     },
     "swift-migration-v017-parity-continuation": {
