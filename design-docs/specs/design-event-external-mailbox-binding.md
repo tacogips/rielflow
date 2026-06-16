@@ -47,15 +47,15 @@ This section fixes the implementation target for the first concrete plan so the
 document can guide incremental work without implying a full mailbox rewrite.
 
 - the first implementation slice reuses the existing event receipt ledger,
-  supervised-run records, reply-dispatch persistence, and execution-scoped
-  `CommunicationRecord` artifacts instead of introducing one brand-new global
-  mailbox store
+  supervised-run records, reply-dispatch persistence, and SQLite-backed
+  execution-scoped `CommunicationRecord` / `workflow_messages` records instead
+  of introducing one brand-new global mailbox store
 - pre-execution inbound staging remains outside workflow execution artifact
   trees and is persisted as runtime-owned event-ledger records until a target
   workflow execution or supervised run is known
-- execution-scoped `external-mailbox` communications remain the canonical
-  persisted representation once a workflow execution accepts input or publishes
-  output
+- execution-scoped `external-mailbox` communications in `workflow_messages`
+  remain the canonical persisted representation once a workflow execution
+  accepts input or publishes output
 - direct workflow execution remains supported and keeps the current
   `workflowInput`, `event`, and optional `humanInput` runtime-variable contract
   while being reframed as one external-mailbox consumer
@@ -215,7 +215,7 @@ contract as the stable API and the persistence layout as an adapter over
 existing runtime storage:
 
 - pre-execution inbound staging uses event-ledger/runtime-db records plus
-  artifacts
+  non-message audit artifacts
 - accepted workflow input uses execution-scoped
   `routingScope: "external-mailbox"` communications
 - published workflow/supervisor output uses execution-scoped
@@ -223,9 +223,10 @@ existing runtime storage:
 - provider delivery attempts reuse reply-dispatch style persistence until a
   broader external-output dispatch table becomes necessary
 
-The initial implementation does not need a new standalone "external mailbox"
-top-level directory if existing event and execution artifacts preserve the same
-auditability and replay semantics.
+The implementation must not add a standalone "external mailbox" top-level
+directory or execution-scoped `external-mailbox/input/output.json` mirror.
+Auditability and replay semantics come from event/runtime-db records,
+`workflow_messages`, and runtime-owned node execution artifacts.
 
 ### Pre-Execution And Execution-Scoped Records
 

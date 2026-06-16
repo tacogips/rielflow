@@ -83,6 +83,51 @@ Current direction:
   server exposes only enabled manifest entries through browser, GraphQL catalog,
   and server-backed start paths. See
   `design-docs/specs/design-server-workflow-manifest.md`.
+- Swift native migration is an additive runtime migration on the
+  `swift-migration` branch. The top-level SwiftPM package mirrors the current
+  package/add-on split and introduces first-class `CodexAgent`,
+  `ClaudeCodeAgent`, and `CursorCLIAgent` targets while TypeScript/Bun remains
+  the production runtime until parity gates pass. See
+  `design-docs/specs/design-swift-native-migration.md`.
+- After TASK-009 acceptance, the dedicated branch production cutover may switch
+  Homebrew packaging from Bun archives to Swift executable archives only when
+  production `dist/homebrew` archives, formula rendering, checksums, local
+  smoke verification, and `packaging/homebrew/swift-cutover-gates.json` all
+  record passed evidence. Publication to GitHub releases and tap pushes remain
+  operator actions outside verification.
+- The Swift TASK-005 runtime slice keeps session mutation, candidate-path
+  handling, output validation, accepted output publication, and downstream
+  workflow message creation on the runtime side of the boundary. Swift
+  adapters remain provider-output producers and must not publish final workflow
+  messages or reintroduce execution-local inbox/outbox contracts. Runtime
+  candidate-path publication accepts only the exact reserved candidate path for
+  the attempt, rejects ambiguous candidate sources, finalizes staging after
+  candidate consumption, and adapter/provider failures update step state
+  without publishing workflow messages. Candidate-path staging rejects unsafe
+  path components before filesystem use, and Swift output-contract validation
+  mirrors the TypeScript JSON Schema subset for schema-definition checks,
+  unsupported keyword rejection, nested objects/arrays, enum/const,
+  additionalProperties, numeric/string bounds, valid patterns, and
+  combinators before publication. Until Swift implements cross-workflow and
+  fanout delivery, unsupported transition shapes fail closed before accepted
+  output or message publication. See
+  `design-docs/specs/design-swift-native-migration.md#task-005-runtime-session-message-store-and-publication-boundary`.
+- TASK-005 also exposes runtime-owned message input resolution so prior
+  `workflow_messages` rows become deterministic structured execution input
+  before adapter execution, and root output publication is explicit
+  root-scope/output-node metadata rather than implicit terminal-step detection.
+  Staging verifies existing path components before creation and resolved
+  directories after creation to reject symlink escapes, and message input
+  resolution excludes created, failed, and superseded rows.
+- The Swift TASK-006 contract slice adds additive package manifest, declarative
+  add-on, event dry-run, hook recording, GraphQL inspection, and server request
+  contracts across `RielflowAddons`, `RielflowEvents`, `RielflowHook`,
+  `RielflowGraphQL`, and `RielflowServer`. The slice is contract-first and
+  test-only: it preserves TypeScript/Bun fallback behavior, uses injected ports
+  and deterministic value projections, avoids engine-internal add-on leakage,
+  and does not introduce live gateway loops, live HTTP server loops, package
+  installation side effects, or final CLI cutover. See
+  `design-docs/specs/design-swift-native-migration.md#task-006-package-add-on-event-hook-graphql-and-server-contract-boundary`.
 
 ### Native Command Script Dispatch
 
@@ -1780,10 +1825,10 @@ That means:
   "last response"
 
 Workers return candidate payloads through their backend-specific channel such
-as prompt response, JSON stdin/stdout, an executor-private request file, or an
-in-process add-on return value. Runtime-owned candidate staging paths may exist
-for structured output validation, but they are not a stable mailbox ABI and
-must not be named `outbox/output.json`.
+as prompt response, JSON stdin/stdout, or an in-process add-on return value.
+Runtime-owned candidate staging paths may exist for structured output
+validation, but they are not a stable mailbox ABI and must not be named
+`outbox/output.json`.
 
 This is especially important for nodes that declare `output.jsonSchema`.
 

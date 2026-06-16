@@ -1,7 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { atomicWriteTextFile as writeRawTextFile } from "../../shared/fs";
 import { isAdapterExecutionOutputEnvelope } from "../adapter";
 import {
   DEFAULT_SUPERVISER_WORKFLOW_ID,
@@ -505,11 +503,6 @@ export async function persistExternalMailboxInputCommunication(input: {
     payload: normalizeExternalMailboxBusinessPayload(input.humanInput),
   };
   const outputRaw = outputArtifactJsonText(outputPayload);
-  await mkdir(externalArtifactDir, { recursive: true });
-  await writeRawTextFile(
-    path.join(externalArtifactDir, "output.json"),
-    outputRaw,
-  );
 
   return persistCommunicationArtifact({
     artifactWorkflowRoot: input.artifactWorkflowRoot,

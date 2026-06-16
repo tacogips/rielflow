@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 1,
+  "migrationStatus": "incomplete",
+  "allowsTypeScriptDeletion": false,
+  "productionSwiftPackagingReady": true,
+  "typeScriptSourceDeletionReady": false,
+  "notes": "Production Swift Homebrew packaging is separate from TypeScript source deletion readiness. TypeScript/Bun remains required until every required domain has current accepted Swift parity evidence.",
+  "domains": [
+    {
+      "id": "package-build",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "RIEL_VERSION=0.1.15 scripts/build-homebrew-release.sh darwin-arm64 darwin-x64"
+      ],
+      "evidenceArtifacts": [
+        "Package.swift",
+        "packaging/homebrew/swift-cutover-gates.json",
+        "dist/homebrew"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Swift packaging cutover evidence exists, but deletion-readiness review has not accepted package/build parity as sufficient to remove TypeScript.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "cli",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowCommandTests",
+        "bun run packages/rielflow/src/bin.ts workflow validate codex-design-and-implement-review-loop --scope project"
+      ],
+      "evidenceArtifacts": [
+        "Sources/RielflowCLI",
+        "Tests/RielflowCLITests",
+        "packages/rielflow/src"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Swift CLI parity is broad and still requires accepted coverage for all documented TypeScript command surfaces before deletion.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "server",
+      "status": "unknown",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter RielflowServerTests",
+        "bun test packages/rielflow/src/server"
+      ],
+      "evidenceArtifacts": [
+        "Sources/RielflowServer",
+        "Tests/RielflowServerTests",
+        "packages/rielflow/src/server"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "not_reviewed",
+      "notes": "Swift server contract coverage exists, but production server parity and lifecycle behavior are not accepted for TypeScript deletion.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "graphql",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter GraphQLContractsTests",
+        "bun test packages/rielflow/src/graphql/schema.test.ts"
+      ],
+      "evidenceArtifacts": [
+        "Sources/RielflowGraphQL",
+        "Tests/RielflowGraphQLTests",
+        "packages/rielflow/src/graphql"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Swift GraphQL DTO coverage is not yet accepted as full TypeScript control-plane replacement evidence.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "event",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter EventDryRunTests",
+        "bun test packages/rielflow/src/events"
+      ],
+      "evidenceArtifacts": [
+        "Sources/RielflowEvents",
+        "Tests/RielflowEventsTests",
+        "packages/rielflow/src/events"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Event dry-run coverage is not sufficient by itself to remove TypeScript event source and gateway behavior.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "workflow-package",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter WorkflowPackageManifestTests",
+        "bun test packages/rielflow/src/workflow/packages/packages.test.ts"
+      ],
+      "evidenceArtifacts": [
+        "Sources/RielflowAddons",
+        "Tests/RielflowAddonsTests",
+        "packages/rielflow/src/workflow/packages"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Swift package manifest coverage does not yet prove registry, install, update, remove, checkout, search, and skill projection parity.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "persistence",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'RuntimeStoreTests|CLIWorkflowSessionResolutionTests|GraphQLContractsTests'",
+        "bun test packages/rielflow/src/workflow/runtime-db.test.ts packages/rielflow/src/workflow/session.test.ts"
+      ],
+      "evidenceArtifacts": [
+        "Sources/RielflowCore",
+        "Sources/RielflowCLI",
+        "Sources/RielflowGraphQL",
+        "packages/rielflow/src/workflow"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Swift persistence has active slices, but deletion requires accepted SQLite/runtime message-store parity including migration and repair behavior.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "release",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "RIEL_VERSION=0.1.15 scripts/build-homebrew-release.sh darwin-arm64 darwin-x64",
+        "scripts/render-homebrew-formula.sh 0.1.15 Formula/rielflow.rb"
+      ],
+      "evidenceArtifacts": [
+        "scripts/build-homebrew-release.sh",
+        "scripts/render-homebrew-formula.sh",
+        "packaging/homebrew/swift-cutover-gates.json"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Release cutover is separate from deleting TypeScript. Rollback, tap handoff, and deletion-specific acceptance remain unproven.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "documentation",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "rg -n \"TypeScript|Bun|Swift\" README.md design-docs packaging examples .codex .agents",
+        "bun run lint:biome"
+      ],
+      "evidenceArtifacts": [
+        "README.md",
+        "design-docs",
+        "packaging/homebrew/README.md",
+        "examples"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Documentation must preserve remaining TypeScript fallback instructions until deletion is explicitly accepted.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "test",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test",
+        "bun run typecheck:server",
+        "bun run lint:biome",
+        "bun run test"
+      ],
+      "evidenceArtifacts": [
+        "Tests",
+        "packages/rielflow/src",
+        "packages/rielflow-adapters/src"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "TypeScript baseline commands remain required until Swift tests replace every behavior formerly protected by TypeScript tests.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "agent-codex",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'CodexAgent|AgentAdapterTests'",
+        "bun test packages/rielflow/src/workflow/adapters/codex.test.ts packages/rielflow/src/workflow/adapters/dispatch.test.ts"
+      ],
+      "evidenceArtifacts": [
+        "Sources/CodexAgent",
+        "packages/rielflow-adapters/src/codex.ts",
+        "packages/rielflow-adapters/src/readiness.ts",
+        "external-reference:codex-agent/src/sdk/model-availability.ts",
+        "external-reference:codex-agent/src/session/index.ts",
+        "external-reference:codex-agent/src/session/sqlite.ts"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "CodexAgent must prove command construction, readiness, auth/model diagnostics, session handling, output normalization, timeout/error mapping, credential redaction, and adapter-envelope parity before TypeScript deletion.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "agent-claude-code",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'ClaudeCodeAgent|AgentAdapterTests'",
+        "bun test packages/rielflow/src/workflow/adapters/claude.test.ts packages/rielflow/src/workflow/adapters/dispatch.test.ts"
+      ],
+      "evidenceArtifacts": [
+        "Sources/ClaudeCodeAgent",
+        "packages/rielflow-adapters/src/claude.ts",
+        "packages/rielflow-adapters/src/readiness.ts"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "ClaudeCodeAgent parity remains a separate required deletion-readiness domain.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    },
+    {
+      "id": "agent-cursor-cli",
+      "status": "blocked",
+      "requiredBeforeTypeScriptDeletion": true,
+      "evidenceCommands": [
+        "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter 'CursorCLIAgent|AgentAdapterTests'",
+        "bun test packages/rielflow/src/workflow/adapters/cursor.test.ts packages/rielflow/src/workflow/adapters/dispatch.test.ts"
+      ],
+      "evidenceArtifacts": [
+        "Sources/CursorCLIAgent",
+        "packages/rielflow-adapters/src/cursor.ts",
+        "packages/rielflow-adapters/src/readiness.ts"
+      ],
+      "lastVerifiedAt": null,
+      "reviewDecision": "blocked",
+      "notes": "Cursor CLI mode, stream, auth, model, and official/cursor-sdk behavior must remain isolated in CursorCLIAgent.",
+      "verifiedBranch": null,
+      "verifiedCommit": null,
+      "acceptedReviewWorkflowId": null,
+      "acceptedReviewNodeId": null,
+      "acceptedReviewFindingSeverities": []
+    }
+  ]
+}

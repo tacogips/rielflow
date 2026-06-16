@@ -55,6 +55,32 @@ The installed binary is `rielflow`.
 Built-in add-ons are bundled into the installed command; they do not require a
 separate add-on package install.
 
+### Swift Runtime And TypeScript Deletion Readiness
+
+Homebrew installs the Swift-native `rielflow` executable for macOS. That
+production packaging cutover does not mean the repository's TypeScript/Bun
+source can be deleted. Source-checkout Bun commands remain documented
+development and fallback validation paths until deletion readiness is accepted.
+
+The tracked deletion-readiness gate is
+`packaging/swift-deletion-readiness.json`. It currently keeps
+`migrationStatus` as `incomplete`, `allowsTypeScriptDeletion` as `false`, and
+`typeScriptSourceDeletionReady` as `false`. TypeScript deletion stays blocked
+until Swift has accepted durable parity evidence for package/build, CLI,
+server, GraphQL, event sources, workflow packages, persistence, release,
+documentation, tests, and the local agent backends `codex-agent`,
+`claude-code-agent`, and `cursor-cli-agent`.
+
+Contributor checks for the current blocked gate:
+
+```bash
+jq empty packaging/swift-deletion-readiness.json packaging/homebrew/swift-cutover-gates.json
+jq -e '.migrationStatus == "incomplete" and .allowsTypeScriptDeletion == false and .typeScriptSourceDeletionReady == false' packaging/swift-deletion-readiness.json
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift test --filter SwiftDeletionReadinessTests
+```
+
 ### Run With Bun
 
 For development, or when you want to run directly from a source checkout, use
@@ -529,7 +555,8 @@ surfaces separated: Claude skills project to `~/.claude/skills/<name>`, Codex
 skills project to `$CODEX_HOME/skills/<name>` or `~/.codex/skills/<name>`, and
 Cursor skills project to `$CURSOR_HOME/skills/<name>/SKILL.md` or
 `~/.cursor/skills/<name>/SKILL.md`. Project-scope Cursor skills remain Cursor
-rules under `.cursor/rules/<name>.mdc`.
+rules under `.cursor/rules/<name>.mdc`. Dependency package installs keep managed
+skill copies but only project skills for vendors present on the root package.
 
 Remove a package:
 

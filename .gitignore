@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 ui/dist/
+.build/
 *.tsbuildinfo
 
 # Bun (binary lockfile - we use text lockfile bun.lock instead)
@@ -46,6 +47,7 @@ tmp/
 temp/
 .cache/
 telegram-sdk/
+tmp-*
 
 # Implementation progress lock file
 impl-plans/.progress.lock
@@ -64,3 +66,11 @@ impl-plans/.progress.lock
 .rielflow-artifact/**
 .rielflow-datas/
 .rielflow-datas/**
+
+# Local temporary run/verify wrappers and swift-migration parity evidence
+# (scratch artifacts; must not be tracked in VCS)
+/.run-*
+/.verify-*
+/.compute-v017-*
+/scripts/*-input.json
+/scripts/*v017*

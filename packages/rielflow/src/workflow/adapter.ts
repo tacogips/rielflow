@@ -463,15 +463,103 @@ export function normalizeOutputContractEnvelope(
     );
   }
 
+  const reconciled = reconcileCompletionReviewRouting(when, payload);
   return {
     completionPassed:
       typeof completionPassed === "boolean"
         ? completionPassed
         : defaults.completionPassed,
-    when,
+    when: reconciled.when,
     payload,
     usedEnvelope: true,
   };
+}
+
+export interface CompletionReviewRoutingReconciliation {
+  readonly when: Readonly<Record<string, boolean>>;
+  readonly reconciled: boolean;
+}
+
+const COMPLETION_REVIEW_DECISIONS = new Set([
+  "needs_work",
+  "needs_replan",
+  "accepted",
+]);
+
+function isCompletionReviewPayload(
+  payload: Readonly<Record<string, unknown>>,
+): boolean {
+  if (typeof payload["goalAchieved"] === "boolean") {
+    return true;
+  }
+  const decision = payload["decision"];
+  return (
+    typeof decision === "string" && COMPLETION_REVIEW_DECISIONS.has(decision)
+  );
+}
+
+function expectedGoalCompletionRouting(
+  payload: Readonly<Record<string, unknown>>,
+): {
+  readonly needsReplan: boolean;
+  readonly needsWork: boolean;
+} {
+  const decision =
+    typeof payload["decision"] === "string" ? payload["decision"] : undefined;
+  const goalAchieved =
+    typeof payload["goalAchieved"] === "boolean"
+      ? payload["goalAchieved"]
+      : undefined;
+
+  if (decision === "needs_replan") {
+    return { needsReplan: true, needsWork: false };
+  }
+  if (decision === "needs_work") {
+    return { needsReplan: false, needsWork: true };
+  }
+  if (decision === "accepted") {
+    if (goalAchieved === false) {
+      return { needsReplan: false, needsWork: true };
+    }
+    return { needsReplan: false, needsWork: false };
+  }
+  if (goalAchieved === false) {
+    return { needsReplan: false, needsWork: true };
+  }
+  return { needsReplan: false, needsWork: false };
+}
+
+export function reconcileCompletionReviewRouting(
+  when: Readonly<Record<string, boolean>>,
+  payload: Readonly<Record<string, unknown>>,
+): CompletionReviewRoutingReconciliation {
+  if (!isCompletionReviewPayload(payload)) {
+    return { when, reconciled: false };
+  }
+
+  const expected = expectedGoalCompletionRouting(payload);
+  const expectedWhen = {
+    needs_replan: expected.needsReplan,
+    needs_work: expected.needsWork,
+  };
+  if (
+    when["needs_replan"] === expectedWhen.needs_replan &&
+    when["needs_work"] === expectedWhen.needs_work &&
+    when["always"] !== true
+  ) {
+    return { when, reconciled: false };
+  }
+
+  const alwaysOverridesRouting =
+    when["always"] === true && (expected.needsReplan || expected.needsWork);
+  const contradictsPayload =
+    when["needs_replan"] !== expectedWhen.needs_replan ||
+    when["needs_work"] !== expectedWhen.needs_work;
+  if (!alwaysOverridesRouting && !contradictsPayload) {
+    return { when, reconciled: false };
+  }
+
+  return { when: expectedWhen, reconciled: true };
 }
 
 export interface NodeAdapter {

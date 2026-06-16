@@ -26,25 +26,50 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
-| `active/chat-gateway-trio-review-improvements` | Completed | `design-telegram-gateway-agent-trio#review-decisions-and-issue-mapping` |
-| `active/discord-gateway-chat-history` | Ready | `design-discord-gateway-chat-history` |
-| `active/matrix-attachment-text` | Completed | `design-matrix-attachment-text`, `design-event-listener-workflow-trigger`, `architecture` |
-| `active/opentelemetry-instrumentation` | Ready | `architecture#opentelemetry-runtime-instrumentation`, `command#telemetry-and-jaeger-verification` |
-| `active/package-checkout-content-digest-metadata` | In Progress | `architecture#workflow-checkout-boundary` |
-| `active/run-log-workflow-definition-body` | Ready | `design-graphql-manager-control-plane#run-scoped-workflow-definition-body` |
-| `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
-| `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
-| `active/workflow-package-checkout-search` | In Progress | `design-workflow-package-checkout-search`, `design-workflow-package-integrity`, `command` |
-| `active/workflow-package-install-scoped-callee-validation` | Ready | `design-workflow-package-checkout#scoped-cross-workflow-validation-during-install`, `architecture#workflow-checkout-boundary` |
-| `active/workflow-node-package-install` | Completed | `design-workflow-node-package-install`, `design-workflow-package-registry`, `design-workflow-package-commands` |
-| `active/workflow-package-raw-checkout-status` | Completed | `design-workflow-package-commands#package-lifecycle-commands`, `design-workflow-package-checkout`, `command` |
-| `active/workflow-package-registry` | Ready | `design-workflow-package-registry` |
-| `active/workflow-definition-inheritance-loader` | Completed | `design-workflow-json#extends` |
+| `active/package-checkout-content-digest-metadata` | In Progress | `architecture` |
+| `active/workflow-package-checkout-search` | In Progress | `design-workflow-package-checkout-search` |
+| `active/workflow-package-publish` | In Progress | `design-workflow-package-publish` |
+| `active/workflow-package-registry-migration` | In Progress | `design-workflow-package-migration` |
+| `active/workflow-package-registry` | In Progress | `design-workflow-package-registry` |
+| `active/workflow-registry-run-temp-checkout` | In Progress | `command`, `design-workflow-package-checkout`, `design-workflow-package-registry` |
 
 ## Recently Completed
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boundary-addon-source-tree-loading` | 2026-06-16 | `design-workflow-json` |
+| `chat-event-attachment-judgement` | 2026-06-16 | `design-chat-sdk-event-sources` |
+| `chat-gateway-trio-review-improvements` | 2026-06-16 | `design-telegram-gateway-agent-trio` |
+| `discord-gateway-chat-history` | 2026-06-16 | `design-discord-gateway-chat-history`, `design-discord-gateway-chat-history`, `design-discord-gateway-chat-history`, `design-discord-gateway-chat-history`, `design-discord-gateway-chat-history`, `design-discord-gateway-chat-history` |
+| `executable-node-addon-manifest-dependencies` | 2026-06-16 | `design-executable-node-addon-manifest-dependencies` |
+| `matrix-attachment-text` | 2026-06-16 | `design-matrix-attachment-text`, `design-matrix-attachment-text`, `design-matrix-attachment-text`, `design-matrix-attachment-text`, `design-event-listener-workflow-trigger`, `architecture` |
+| `native-bash-dispatch-regression-test` | 2026-06-16 | `architecture` |
+| `native-command-bash-script-dispatch` | 2026-06-16 | `architecture`, `command` |
+| `opentelemetry-instrumentation` | 2026-06-16 | `architecture`, `command` |
+| `package-checkout-content-digest-metadata` | 2026-06-16 | `architecture` |
+| `run-log-workflow-definition-body` | 2026-06-16 | `design-graphql-manager-control-plane` |
+| `sdk-node-addons-review-improvements` | 2026-06-16 | `architecture`, `design-node-addon-catalog-and-chat-reply-worker`, `design-telegram-gateway-agent-trio` |
+| `sequential-list-event-source` | 2026-06-16 | `design-event-listener-workflow-trigger`, `command` |
+| `server-workflow-manifest` | 2026-06-16 | `design-server-workflow-manifest`, `command` |
+| `swift-codex-agent-cli-graphql-ops-compat` | 2026-06-16 | `swift-codex-agent-cli-graphql-ops-compat` |
+| `swift-codex-agent-process-sdk-compat` | 2026-06-16 | `swift-codex-agent-process-sdk-compat` |
+| `swift-codex-agent-session-rollout-compat` | 2026-06-16 | `swift-codex-agent-session-rollout-compat` |
+| `swift-migration-v017-adversarial-gap-closure` | 2026-06-16 | `design-swift-native-migration` |
+| `workflow-definition-inheritance-loader` | 2026-06-16 | `design-workflow-json` |
+| `workflow-node-package-install` | 2026-06-16 | `design-workflow-node-package-install` |
+| `workflow-package-checkout` | 2026-06-16 | `design-workflow-package-checkout` |
+| `workflow-package-dependency-install` | 2026-06-16 | `design-workflow-package-registry` |
+| `workflow-package-install-scoped-callee-validation` | 2026-06-16 | `design-workflow-package-checkout`, `architecture` |
+| `workflow-package-raw-checkout-status` | 2026-06-16 | `design-workflow-package-commands`, `design-workflow-package-checkout` |
+| `workflow-registry-run-temp-checkout` | 2026-06-16 | `command`, `design-workflow-package-checkout`, `design-workflow-package-registry` |
+| `swift-deletion-readiness-gate` | 2026-06-16 | `design-swift-native-migration#typescript-deletion-readiness-todo-loop` |
+| `swift-homebrew-production-cutover` | 2026-06-12 | `design-swift-native-migration#branch-production-swift-homebrew-release-cutover`, `architecture`, `qa-swift-native-migration#release-cutover-threshold` |
+| `swift-native-migration` | 2026-06-12 | `design-swift-native-migration`, `architecture`, `qa-swift-native-migration` |
+| `swift-native-migration-task-009-final-cutover-gate` | 2026-06-12 | `design-swift-native-migration#task-009-final-parity-security-and-cutover-gate` |
+| `swift-native-migration-task-008-packaging-cutover-readiness` | 2026-06-12 | `design-swift-native-migration#task-008-packaging-and-homebrew-cutover-readiness-gates` |
+| `swift-native-migration-task-007-cli-parity` | 2026-06-12 | `design-swift-native-migration#task-007-swift-cli-validate-inspect-and-deterministic-run-parity`, `command#swift-native-migration-cli-parity` |
+| `swift-native-migration-task-006-contracts` | 2026-06-12 | `design-swift-native-migration#task-006-package-add-on-event-hook-graphql-and-server-contract-boundary` |
+| `swift-native-migration-task-005-runtime-session` | 2026-06-12 | `design-swift-native-migration#task-005-runtime-session-message-store-and-publication-boundary` |
 | `sqlite-only-node-io-mailbox-removal` | 2026-06-08 | `design-node-execution-inbox-contract#contract-shape`, `design-sqlite-message-store#node-execution-io-boundary`, `design-sqlite-message-store#file-mailbox-removal-boundary`, `architecture#message-architecture`, `design-node-output-contract#runtime-artifact-model`, `design-graphql-manager-control-plane#communication-query-model` |
 | `sqlite-message-payload-attachment-snapshot-preservation` | 2026-06-08 | `design-sqlite-message-store#payload-attachment-snapshot-rules` |
 | `manager-control-idempotency-atomic-claim` | 2026-06-07 | `design-graphql-manager-control-plane#idempotency-contract`, `design-graphql-manager-control-plane#atomic-idempotency-claim-flow`, `notes#manager-authidempotency-contract` |
@@ -541,5 +566,7 @@ PHASE_TO_PLANS = {
   154: ["impl-plans/completed/step-run-history-rerun-foundation.md"],
   155: ["impl-plans/completed/step-run-history-rerun-runtime.md"],
   173: ["impl-plans/workflow-status-active-session-loadability.md"],
+  200: ["impl-plans/swift-stdio-node-io.md"],
+  201: ["impl-plans/native-stdio-node-io.md"],
 }
 ```

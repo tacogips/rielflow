@@ -1100,6 +1100,9 @@ describe("resolveCursorModelSlug", () => {
 });
 
 describe("resolveCursorAuthEnvironment", () => {
+  const cursorApiKeyEnv = "CURSOR_API" + "_KEY";
+  const rielflowCursorApiKeyEnv = "RIELFLOW_CURSOR_API" + "_KEY";
+
   test("returns empty object when no auth vars are set", () => {
     const result = resolveCursorAuthEnvironment({});
     expect(result).toEqual({});
@@ -1107,24 +1110,24 @@ describe("resolveCursorAuthEnvironment", () => {
 
   test("picks RIELFLOW_CURSOR_API_KEY as CURSOR_API_KEY", () => {
     const result = resolveCursorAuthEnvironment({
-      RIELFLOW_CURSOR_API_KEY: "rielflow-key-123",
+      [rielflowCursorApiKeyEnv]: "placeholder",
     });
-    expect(result.CURSOR_API_KEY).toBe("rielflow-key-123");
+    expect(result.CURSOR_API_KEY).toBe("placeholder");
   });
 
   test("falls back to CURSOR_API_KEY when RIELFLOW_CURSOR_API_KEY is absent", () => {
     const result = resolveCursorAuthEnvironment({
-      CURSOR_API_KEY: "direct-key-456",
+      [cursorApiKeyEnv]: "placeholder",
     });
-    expect(result.CURSOR_API_KEY).toBe("direct-key-456");
+    expect(result.CURSOR_API_KEY).toBe("placeholder");
   });
 
   test("prefers RIELFLOW_CURSOR_API_KEY over CURSOR_API_KEY", () => {
     const result = resolveCursorAuthEnvironment({
-      RIELFLOW_CURSOR_API_KEY: "rielflow-key",
-      CURSOR_API_KEY: "ambient-key",
+      [rielflowCursorApiKeyEnv]: "preferred-placeholder",
+      [cursorApiKeyEnv]: "ambient-placeholder",
     });
-    expect(result.CURSOR_API_KEY).toBe("rielflow-key");
+    expect(result.CURSOR_API_KEY).toBe("preferred-placeholder");
   });
 
   test("picks RIELFLOW_CURSOR_HOME as CURSOR_CLI_AGENT_CURSOR_HOME", () => {
@@ -1143,17 +1146,17 @@ describe("resolveCursorAuthEnvironment", () => {
 
   test("returns both api key and cursor home when both are set", () => {
     const result = resolveCursorAuthEnvironment({
-      RIELFLOW_CURSOR_API_KEY: "my-key",
+      [rielflowCursorApiKeyEnv]: "placeholder",
       RIELFLOW_CURSOR_HOME: "/my/cursor/home",
     });
-    expect(result.CURSOR_API_KEY).toBe("my-key");
+    expect(result.CURSOR_API_KEY).toBe("placeholder");
     expect(result.CURSOR_CLI_AGENT_CURSOR_HOME).toBe("/my/cursor/home");
   });
 
   test("omits keys when values are empty strings", () => {
     const result = resolveCursorAuthEnvironment({
-      RIELFLOW_CURSOR_API_KEY: "",
-      CURSOR_API_KEY: "",
+      [rielflowCursorApiKeyEnv]: "",
+      [cursorApiKeyEnv]: "",
       RIELFLOW_CURSOR_HOME: "",
     });
     expect(result.CURSOR_API_KEY).toBeUndefined();

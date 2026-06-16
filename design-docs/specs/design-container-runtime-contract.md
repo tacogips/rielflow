@@ -117,8 +117,9 @@ or:
   contract
 - managers remain the only components that create or route canonical
   `workflow_messages` rows
-- resolved node input is delivered to the container through a non-mailbox
-  process boundary such as JSON stdin or an executor-private request file
+- resolved node input is delivered to the container through JSON stdin attached
+  to the runner with `-i`; executor-private request-file mounts are not part of
+  the worker ABI
 - stdout is the preferred structured JSON candidate output stream; stderr is
   captured as diagnostics only
 - staged output files are allowed only for non-message file or binary
