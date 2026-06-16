@@ -256,7 +256,7 @@ diagnostic surface before this task starts.
 **Implementation Notes**:
 
 - Run focused tests before broader test/typecheck commands.
-- Run the issue reproduction command from `/Users/taco/gits/tacogips/rielflow`
+- Run the issue reproduction command from `<rielflow-repo>`
   when the local registry/package data exists.
 - If the reproduction command cannot run because registry data is missing,
   record the exact blocker and rely on deterministic local fixture tests.
@@ -288,7 +288,7 @@ diagnostic surface before this task starts.
 
 ## Verification Plan
 
-Run these commands from `/Users/taco/gits/tacogips/rielflow`:
+Run these commands from `<rielflow-repo>`:
 
 ```bash
 bun test packages/rielflow/src/workflow/packages/packages.test.ts

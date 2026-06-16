@@ -36,11 +36,11 @@ cross-scope workflow migration behavior.
 
 ### Codex And Cursor References
 
-- `/Users/taco/gits/tacogips/codex-agent/src/sdk/model-availability.ts`
-- `/Users/taco/gits/tacogips/codex-agent/impl-plans/completed/model-auth-availability-preflight.md`
-- `/Users/taco/gits/tacogips/worktrees/cursor-cli-agent/sdk-run-everything-options/src/cursor/process-runner.ts`
-- `/Users/taco/gits/tacogips/worktrees/cursor-cli-agent/sdk-run-everything-options/src/cursor/model-availability.ts`
-- `/Users/taco/gits/tacogips/worktrees/cursor-cli-agent/sdk-run-everything-options/src/sdk/agent-runner.ts`
+- `<codex-agent-reference>/src/sdk/model-availability.ts`
+- `<codex-agent-reference>/impl-plans/completed/model-auth-availability-preflight.md`
+- `<worktrees-root>/cursor-cli-agent/sdk-run-everything-options/src/cursor/process-runner.ts`
+- `<worktrees-root>/cursor-cli-agent/sdk-run-everything-options/src/cursor/model-availability.ts`
+- `<worktrees-root>/cursor-cli-agent/sdk-run-everything-options/src/sdk/agent-runner.ts`
 
 ## Modules
 

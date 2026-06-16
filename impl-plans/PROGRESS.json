@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-16T02:29:20+09:00",
+  "lastUpdated": "2026-06-16T23:05:21.577Z",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -10420,6 +10420,103 @@
         "impl-plans/README.md",
         "impl-plans/PROGRESS.json",
         "design-docs/specs/design-swift-native-migration.md"
+      ]
+    },
+    "swift-codex-agent-process-sdk-compat": {
+      "phase": 2,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "swift-codex-agent-session-rollout-compat:TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-003",
+            "swift-codex-agent-session-rollout-compat:TASK-001"
+          ]
+        },
+        "TASK-006": {
+          "status": "completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "swift-codex-agent-session-rollout-compat:TASK-003"
+          ]
+        },
+        "TASK-007": {
+          "status": "completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005",
+            "TASK-006"
+          ]
+        }
+      },
+      "lastUpdated": "2026-06-16T22:54:17+09:00",
+      "progressLog": [
+        {
+          "date": "2026-06-16",
+          "note": "Completed Swift codex-agent compatibility migration; swift test passed (320 tests)."
+        }
+      ]
+    },
+    "swift-codex-agent-cli-graphql-ops-compat": {
+      "title": "Swift Codex Agent CLI, GraphQL, And Operations Compatibility",
+      "path": "impl-plans/active/swift-codex-agent-cli-graphql-ops-compat.md",
+      "designReference": "design-docs/specs/swift-codex-agent-cli-graphql-ops-compat.md",
+      "status": "Completed",
+      "lastUpdated": "2026-06-16T22:54:17+09:00",
+      "tasks": {},
+      "progressLog": [
+        {
+          "date": "2026-06-16",
+          "note": "Completed Swift codex-agent compatibility migration; swift test passed (320 tests)."
+        }
+      ]
+    },
+    "swift-codex-agent-session-rollout-compat": {
+      "title": "Swift Codex Agent Session, Rollout, And Search Compatibility",
+      "path": "impl-plans/active/swift-codex-agent-session-rollout-compat.md",
+      "designReference": "design-docs/specs/swift-codex-agent-session-rollout-compat.md",
+      "status": "Completed",
+      "lastUpdated": "2026-06-16T22:54:17+09:00",
+      "tasks": {},
+      "progressLog": [
+        {
+          "date": "2026-06-16",
+          "note": "Completed Swift codex-agent compatibility migration; swift test passed (320 tests)."
+        }
       ]
     }
   }

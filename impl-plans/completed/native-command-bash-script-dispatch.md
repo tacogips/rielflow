@@ -353,7 +353,7 @@ git diff --check -- packages/rielflow-addons/src/native-node-executor/template-e
 Package-managed workflow smoke when available:
 
 ```bash
-workflow run codex-source-security-check-loop --working-dir /Users/taco/gits/tacogips/rielflow
+workflow run codex-source-security-check-loop --working-dir <rielflow-repo>
 ```
 
 Boundary check if scanner code is touched unexpectedly:

@@ -60,6 +60,10 @@ let package = Package(
     .testTarget(
       name: "AgentAdapterTests",
       dependencies: ["RielflowCore", "RielflowAdapters", "CodexAgent", "ClaudeCodeAgent", "CursorCLIAgent"]
+    ),
+    .testTarget(
+      name: "CodexAgentTests",
+      dependencies: ["RielflowCore", "RielflowAdapters", "CodexAgent"]
     )
   ],
   swiftLanguageModes: [.v6]

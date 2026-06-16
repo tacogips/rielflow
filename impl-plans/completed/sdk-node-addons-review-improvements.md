@@ -58,7 +58,7 @@ Telegram, and Matrix examples intact.
 - Node: `step4-impl-plan-create`
 - Issue reference: branch review for `feature/sdk-node-addons`
 - Repository root:
-  `/Users/taco/gits/tacogips/worktrees/rielflow-workspace/feature/sdk-node-addons`
+  `<worktrees-root>/rielflow-workspace/feature/sdk-node-addons`
 - Accepted design review: Step 3, `needs_revision: false`, `accepted: true`
 
 Codex-agent references:

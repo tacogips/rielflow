@@ -22,18 +22,18 @@ public struct CodexAgentCommandBuilder: LocalAgentCommandBuilding {
   }
 
   public func buildCommand(for input: AdapterExecutionInput) throws -> LocalAgentCommand {
-    var arguments = [executableName, "exec", "--json", "--model", input.node.model]
-    if let effort = input.node.effort {
-      arguments.append(contentsOf: ["-c", #"model_reasoning_effort="\#(effort.rawValue)""#])
-    }
-    arguments.append(contentsOf: additionalArguments)
-    arguments.append(contentsOf: stringArray(input.node.variables["codexAdditionalArgs"]))
     let imagePaths = resolveAdapterImagePaths(input)
-    for imagePath in imagePaths {
-      arguments.append(contentsOf: ["--image", imagePath])
-    }
-    arguments.append("--")
-    arguments.append(buildCombinedPromptText(promptText: input.promptText, systemPromptText: input.systemPromptText))
+    let configOverrides = input.node.effort.map { [#"model_reasoning_effort="\#($0.rawValue)""#] } ?? []
+    let processOptions = CodexProcessOptions(
+      model: input.node.model,
+      images: imagePaths,
+      configOverrides: configOverrides,
+      additionalArguments: additionalArguments + stringArray(input.node.variables["codexAdditionalArgs"])
+    )
+    let arguments = [executableName] + CodexProcessCommandBuilder.buildExecArguments(
+      prompt: buildCombinedPromptText(promptText: input.promptText, systemPromptText: input.systemPromptText),
+      options: processOptions
+    )
 
     var environment = environment
     environment["RIEL_AGENT_BACKEND"] = provider
@@ -154,7 +154,7 @@ private func stringArray(_ value: JSONValue?) -> [String] {
   }
 }
 
-private func normalizeCodexExecJSONStdout(_ text: String) -> String {
+public func normalizeCodexExecJSONStdout(_ text: String) -> String {
   let lines = text
     .split(whereSeparator: \.isNewline)
     .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }

@@ -44,9 +44,9 @@ mapping and must not carry forward stale relative-reference claims.
 ### Codex Reference Mapping
 
 - `design-docs/specs/architecture.md`: authoritative Codex-agent audit trail.
-- `/Users/taco/gits/tacogips/codex-agent`: inspected by Step 3; no relevant
+- `<codex-agent-reference>`: inspected by Step 3; no relevant
   OpenTelemetry, OTEL, telemetry, trace, or Jaeger implementation found.
-- `/Users/taco/gits/tacogips/worktrees/codex-agent`: inspected by Step 3; no
+- `<worktrees-root>/codex-agent`: inspected by Step 3; no
   relevant OpenTelemetry, OTEL, telemetry, trace, or Jaeger implementation
   found.
 - `codex-agent` remains only a worker backend identity for telemetry

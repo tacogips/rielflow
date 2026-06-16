@@ -23,7 +23,7 @@ node-addon packages, and temporary direct workflows can run installed executable
 add-ons only with an explicit development/test direct-run grant.
 
 The acceptance fixture is the sibling local registry package
-`/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon`.
+`<rielflow-packages-repo>/packages/greeting-node-addon`.
 It must remain a `node-addon` package that installs `examples/greeting-shell@1`
 and executes its packaged `greeting.bash` through a temporary workflow smoke.
 
@@ -47,7 +47,7 @@ and executes its packaged `greeting.bash` through a temporary workflow smoke.
   array, `@path/to/grant.json`, or an existing file path. The parsed value feeds
   `ExecutableAddonValidationOptions.directExecutableAddonGrants`.
 - Make `greeting-node-addon` install from
-  `/Users/taco/gits/tacogips/rielflow-packages` and run
+  `<rielflow-packages-repo>` and run
   `examples/greeting-shell@1` successfully in a temp project.
 
 **Excluded**:
@@ -72,11 +72,11 @@ and executes its packaged `greeting.bash` through a temporary workflow smoke.
     installed checkout provenance, verified package integrity, exact add-on
     digest, and capability grants.
 - Codex-agent references:
-  - `/Users/taco/gits/tacogips/rielflow`: current uncommitted implementation
+  - `<rielflow-repo>`: current uncommitted implementation
     baseline.
-  - `/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon`:
+  - `<rielflow-packages-repo>/packages/greeting-node-addon`:
     target executable node-addon package.
-  - `/Users/taco/gits/tacogips/codex-agent`: behavioral process-command
+  - `<codex-agent-reference>`: behavioral process-command
     reference only; do not copy code or move Rielflow behavior into adapter
     boundaries.
 
@@ -308,9 +308,9 @@ export interface ResolvedExecutableAddonCommand {
 
 ### 6. Greeting Node-addon Registry Package
 
-#### `/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon/rielflow-package.json`
-#### `/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon/addons/examples/greeting-shell/1/addon.json`
-#### `/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon/addons/examples/greeting-shell/1/greeting.bash`
+#### `<rielflow-packages-repo>/packages/greeting-node-addon/rielflow-package.json`
+#### `<rielflow-packages-repo>/packages/greeting-node-addon/addons/examples/greeting-shell/1/addon.json`
+#### `<rielflow-packages-repo>/packages/greeting-node-addon/addons/examples/greeting-shell/1/greeting.bash`
 
 **Status**: COMPLETED
 
@@ -398,7 +398,7 @@ interface ExecutableAddonVerificationCase {
 | Dependency install and checkout provenance | `packages/rielflow/src/workflow/packages/dependencies.ts`, `checkout.ts`, `search.ts` | COMPLETED | Package tests |
 | Installed executable resolution and direct grants | `packages/rielflow/src/workflow/load.ts`, `validate.ts`, `install-validation.ts`, `packages/rielflow/src/cli/argument-parser.ts`, `packages/rielflow/src/cli/workflow-run-command.ts` | COMPLETED | Workflow/package/CLI tests |
 | Native command runtime path | `packages/rielflow-addons/src/native-node-executor/template-env-and-containers.ts` | COMPLETED | Add-on/runtime tests |
-| Greeting node-addon package | `/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon` | COMPLETED | Live local smoke |
+| Greeting node-addon package | `<rielflow-packages-repo>/packages/greeting-node-addon` | COMPLETED | Live local smoke |
 | Documentation and progress log | `design-docs/specs/command.md`, `design-docs/specs/architecture.md`, `impl-plans/active/executable-node-addon-manifest-dependencies.md` | COMPLETED | Diff check |
 
 ## Dependencies
@@ -421,7 +421,7 @@ Tasks may be parallelized only when their write scopes remain disjoint:
 - `local-addon-runtime-resolution`: local add-on resolver and native executor
   files under `packages/rielflow-addons/src/*`.
 - `greeting-registry-package`: sibling registry files under
-  `/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon/*`.
+  `<rielflow-packages-repo>/packages/greeting-node-addon/*`.
 
 Do not parallelize dependency checkout, direct-run grant validation, or live
 smoke wiring until the type/manifest and resolver surfaces have joined.
@@ -465,7 +465,7 @@ Run the required live local smoke in an isolated temp project:
 ```bash
 tmp_project="$(mktemp -d)"
 grant_file="$tmp_project/direct-executable-addon-grant.json"
-bun run packages/rielflow/src/bin.ts package registry add local /Users/taco/gits/tacogips/rielflow-packages --project-root "$tmp_project"
+bun run packages/rielflow/src/bin.ts package registry add local <rielflow-packages-repo> --project-root "$tmp_project"
 bun run packages/rielflow/src/bin.ts package install greeting-node-addon --project-root "$tmp_project" --output json
 bun run packages/rielflow/src/bin.ts workflow run --workflow-json-file <temp-greeting-workflow.json> --project-root "$tmp_project" --direct-executable-addon-grant @"$grant_file" --output json
 ```

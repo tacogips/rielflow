@@ -64,9 +64,9 @@ Out of scope:
 - Current branch tests:
   `packages/rielflow/src/workflow/load.test.ts`
 - Behavioral package reference:
-  `/Users/taco/gits/tacogips/rielflow-packages/packages/cursor-cli-design-and-implement-review-loop/workflows/cursor-cli-design-and-implement-review-loop/workflow.json`
+  `<rielflow-packages-repo>/packages/cursor-cli-design-and-implement-review-loop/workflows/cursor-cli-design-and-implement-review-loop/workflow.json`
 - Behavioral package reference:
-  `/Users/taco/gits/tacogips/rielflow-packages/packages/claude-code-design-and-implement-review-loop/workflows/claude-code-design-and-implement-review-loop/workflow.json`
+  `<rielflow-packages-repo>/packages/claude-code-design-and-implement-review-loop/workflows/claude-code-design-and-implement-review-loop/workflow.json`
 
 ## Modules
 

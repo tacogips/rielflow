@@ -65,12 +65,12 @@ Out of scope:
 
 - `codex-agent`: backend value inside package workflows only; no special install
   path.
-- `/Users/taco/gits/tacogips/rielflow`: local implementation repository.
-- `/Users/taco/gits/tacogips/codex-agent`: preferred local behavioral reference
+- `<rielflow-repo>`: local implementation repository.
+- `<codex-agent-reference>`: preferred local behavioral reference
   only; do not copy code.
-- `/Users/taco/gits/tacogips/rielflow-packages/packages/codex-impl-plan-completion-loop/rielflow-package.json`
-- `/Users/taco/gits/tacogips/rielflow-packages/packages/codex-recent-change-quality-loop/rielflow-package.json`
-- `/Users/taco/gits/tacogips/rielflow-packages/packages/codex-refactoring-divide-and-conquer/rielflow-package.json`
+- `<rielflow-packages-repo>/packages/codex-impl-plan-completion-loop/rielflow-package.json`
+- `<rielflow-packages-repo>/packages/codex-recent-change-quality-loop/rielflow-package.json`
+- `<rielflow-packages-repo>/packages/codex-refactoring-divide-and-conquer/rielflow-package.json`
 
 Relevant local implementation files:
 
@@ -460,7 +460,7 @@ manifest/types tests.
 
 ## Verification Plan
 
-Run from `/Users/taco/gits/tacogips/rielflow`:
+Run from `<rielflow-repo>`:
 
 ```bash
 bun test packages/rielflow/src/workflow/packages/packages.test.ts packages/rielflow/src/workflow/packages/checkout.test.ts
@@ -594,7 +594,7 @@ line counts: `checkout.ts` 896 lines, `dependencies.ts` 396 lines.
 task status table complete, checking the final focused-test/typecheck/diff
 criterion, and recording temporary registry-backed smoke coverage. The smoke
 command was attempted as out-of-scope regression coverage:
-`bun run packages/rielflow/src/bin.ts --user-root <temp> --project-root <temp> workflow run codex-impl-plan-completion-loop --from-registry --registry default --mock-scenario /Users/taco/gits/tacogips/rielflow-packages/packages/codex-impl-plan-completion-loop/workflows/codex-impl-plan-completion-loop/mock-scenario.json --output json`.
+`bun run packages/rielflow/src/bin.ts --user-root <temp> --project-root <temp> workflow run codex-impl-plan-completion-loop --from-registry --registry default --mock-scenario <rielflow-packages-repo>/packages/codex-impl-plan-completion-loop/workflows/codex-impl-plan-completion-loop/mock-scenario.json --output json`.
 It failed with `{"code":"VALIDATION","message":"package workflow validation failed: workflow validation failed"}`,
 which is recorded without adding temporary dependency staging behavior.
 

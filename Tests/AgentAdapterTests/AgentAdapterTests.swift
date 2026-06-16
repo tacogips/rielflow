@@ -332,6 +332,178 @@ final class AgentAdapterTests: XCTestCase {
     XCTAssertEqual(run.configuration.arguments.filter { $0 == "--model" }.count, 1)
   }
 
+  func testCodexProcessCommandBuilderMatchesReferenceExecCompatibilityArgs() {
+    let args = CodexProcessCommandBuilder.buildExecArguments(
+      prompt: "test prompt",
+      options: CodexProcessOptions(
+        model: "gpt-5.5",
+        sandbox: "workspace-write",
+        approvalMode: "on-failure",
+        fullAuto: true,
+        configOverrides: [#"model_reasoning_effort="high""#],
+        additionalArguments: ["--skip-git-repo-check"]
+      ),
+      terminatePromptWithDoubleDash: false
+    )
+
+    XCTAssertEqual(
+      args,
+      [
+        "exec",
+        "--json",
+        "--model",
+        "gpt-5.5",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--sandbox",
+        "workspace-write",
+        "-c",
+        #"model_reasoning_effort="high""#,
+        "--skip-git-repo-check",
+        "test prompt",
+      ]
+    )
+  }
+
+  func testCodexProcessCommandBuilderBuildsResumeCompatibilityArgs() {
+    let args = CodexProcessCommandBuilder.buildResumeArguments(
+      sessionId: "session-1",
+      prompt: "resume prompt",
+      options: CodexProcessOptions(
+        model: "gpt-5.5",
+        sandbox: "workspace-write",
+        fullAuto: true,
+        images: ["./one.png"],
+        configOverrides: [#"model_reasoning_effort="high""#],
+        additionalArguments: ["--skip-git-repo-check"]
+      )
+    )
+
+    XCTAssertEqual(
+      args,
+      [
+        "exec",
+        "--sandbox",
+        "workspace-write",
+        "resume",
+        "--json",
+        "--model",
+        "gpt-5.5",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "-c",
+        #"model_reasoning_effort="high""#,
+        "--skip-git-repo-check",
+        "--image",
+        "./one.png",
+        "--",
+        "session-1",
+        "resume prompt",
+      ]
+    )
+  }
+
+  func testCodexProcessCommandBuilderBuildsForkArgsAndEnvironmentOverlay() {
+    let args = CodexProcessCommandBuilder.buildForkArguments(
+      sessionId: "session-1",
+      nthMessage: 3,
+      options: CodexProcessOptions(
+        model: "gpt-5.5",
+        sandbox: "read-only",
+        approvalMode: "always",
+        fullAuto: true,
+        configOverrides: [#"model_reasoning_effort="medium""#],
+        additionalArguments: ["--skip-git-repo-check"]
+      )
+    )
+    let environment = CodexProcessCommandBuilder.buildEnvironment(
+      base: ["PATH": "/bin", "CODEX_AGENT_TEST_ENV": "old"],
+      options: CodexProcessOptions(environmentVariables: ["CODEX_AGENT_TEST_ENV": "typed-env-value"])
+    )
+
+    XCTAssertEqual(
+      args,
+      [
+        "fork",
+        "session-1",
+        "--nth-message",
+        "3",
+        "--model",
+        "gpt-5.5",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--sandbox",
+        "read-only",
+        "-c",
+        #"model_reasoning_effort="medium""#,
+        "--skip-git-repo-check",
+      ]
+    )
+    XCTAssertFalse(args.contains("--ask-for-approval"))
+    XCTAssertFalse(args.contains("always"))
+    XCTAssertEqual(environment["PATH"], "/bin")
+    XCTAssertEqual(environment["CODEX_AGENT_TEST_ENV"], "typed-env-value")
+  }
+
+  func testCodexAgentEventNormalizerPortsSdkNormalizedEvents() {
+    var normalizer = CodexAgentEventNormalizer()
+
+    let started = normalizer.normalize(
+      [
+        "type": .string("session_meta"),
+        "payload": .object(["meta": .object(["id": .string("codex-session-1")])])
+      ],
+      includeSessionStarted: true
+    )
+    XCTAssertEqual(started, [
+      CodexAgentNormalizedEvent(type: "session.started", sessionId: "codex-session-1", payload: ["resumed": .bool(false)])
+    ])
+
+    let messageEvents = normalizer.normalize(
+      [
+        "type": .string("response_item"),
+        "payload": .object([
+          "type": .string("message"),
+          "role": .string("assistant"),
+          "content": .array([
+            .object(["type": .string("output_text"), "text": .string("hello")])
+          ])
+        ])
+      ],
+      fallbackSessionId: "codex-session-1"
+    )
+    XCTAssertEqual(messageEvents.map(\.type), ["assistant.delta", "assistant.snapshot"])
+    XCTAssertEqual(messageEvents.last?.payload["content"], .string("hello"))
+
+    let toolCall = normalizer.normalize(
+      [
+        "type": .string("response_item"),
+        "payload": .object([
+          "type": .string("function_call"),
+          "name": .string("read_file"),
+          "call_id": .string("call-1"),
+          "arguments": .string(#"{"path":"README.md"}"#)
+        ])
+      ],
+      fallbackSessionId: "codex-session-1"
+    )
+    XCTAssertEqual(toolCall.first?.type, "tool.call")
+    XCTAssertEqual(toolCall.first?.payload["name"], .string("read_file"))
+    XCTAssertEqual(toolCall.first?.payload["input"], .object(["path": .string("README.md")]))
+
+    let toolResult = normalizer.normalize(
+      [
+        "type": .string("response_item"),
+        "payload": .object([
+          "type": .string("function_call_output"),
+          "call_id": .string("call-1"),
+          "output": .object(["status": .string("ok")])
+        ])
+      ],
+      fallbackSessionId: "codex-session-1"
+    )
+    XCTAssertEqual(toolResult.first?.type, "tool.result")
+    XCTAssertEqual(toolResult.first?.payload["name"], .string("read_file"))
+    XCTAssertEqual(toolResult.first?.payload["isError"], .bool(false))
+  }
+
   func testClaudeCommandBuilderOwnsPrintModeArgvAndAttachmentPrompt() async throws {
     let runner = RecordingRunner(output: "done")
     let adapter = ClaudeCodeAgentAdapter(
