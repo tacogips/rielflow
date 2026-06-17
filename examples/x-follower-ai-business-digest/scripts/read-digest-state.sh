@@ -1,8 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-resolved_input_json=$(cat)
-node - "$resolved_input_json" <<'NODE'
+node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -91,5 +90,5 @@ const output = {
     previousState: state,
   },
 };
-process.stdout.write(`${JSON.stringify(output)}\n`);
+process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 NODE

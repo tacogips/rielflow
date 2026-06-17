@@ -38,9 +38,6 @@ Store questions, pending decisions, and items awaiting user approval.
 - `qa-product-rename-rielflow.md`: CLI alias, package/release compatibility,
   historical document rewrite scope, and runtime data migration decisions for
   the product rename from rielflow to Rielflow.
-- `qa-swift-native-migration.md`: replacement milestone scope, release cutover
-  threshold, and repository-owned agent source strategy for the Swift native
-  migration.
 - `qa-discord-gateway-chat-history.md`: Discord SDK dependency policy, resolved
   restart history persistence decision, message content intent, persona routing,
   bot-message history, credential environment naming, and default history-bound

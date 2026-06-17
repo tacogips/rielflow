@@ -741,9 +741,6 @@ export async function checkCursorBackendModelAvailability(input: {
       model: input.model,
       probe: input.probe ?? false,
       timeoutMs: normalizeTimeout(input.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),
-      ...(input.cursorBinary === undefined
-        ? {}
-        : { cursorAgentBinary: input.cursorBinary }),
       ...(input.cwd === undefined ? {} : { workspace: input.cwd }),
     }, input.cursorBinary);
     return {

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rielflow To Riela Migration Parity"
-  short_description: "Audit and close migration parity gaps"
-  default_prompt: "Use $rielflow-to-riela-migration-parity to audit migrated behavior, identify gaps, and drive Rielflow implementation to parity."

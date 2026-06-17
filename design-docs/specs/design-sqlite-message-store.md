@@ -68,8 +68,9 @@ Backend-specific input/output channels remain implementation details:
 
 - agent adapters render prompts from the resolved input object and may expose a
   reserved `Candidate-Path` for structured business JSON candidates
-- command and container nodes receive input through JSON stdin and return
-  candidate JSON through stdout or the executor result channel
+- command and container nodes should receive input through JSON stdin or an
+  executor-private request file and return candidate JSON through stdout or the
+  executor result channel
 - in-process add-ons receive the resolved input object directly and return a
   candidate output object
 

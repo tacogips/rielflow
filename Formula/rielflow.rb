@@ -1,7 +1,7 @@
 class Rielflow < Formula
-  desc "Swift-native workflow runtime for cooperative multi-agent execution"
+  desc "TypeScript/Bun workflow runtime for cooperative multi-agent execution"
   homepage "https://github.com/tacogips/rielflow"
-  version "0.1.15"
+  version "0.1.4"
   license "MIT"
 
   livecheck do
@@ -11,16 +11,22 @@ class Rielflow < Formula
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/tacogips/rielflow/releases/download/v0.1.15/rielflow-0.1.15-darwin-arm64.tar.gz"
-      sha256 "08bc9c49e1bae879237b398ef6174045187da1a7eeb70ae2931ef6f23179d224"
+      url "https://github.com/tacogips/rielflow/releases/download/v0.1.4/rielflow-0.1.4-darwin-arm64.tar.gz"
+      sha256 "61f86586f3973c5ffcee085e16b5a0c245b5fc9bea9d5d34400436fb6ffecda6"
     else
-      url "https://github.com/tacogips/rielflow/releases/download/v0.1.15/rielflow-0.1.15-darwin-x64.tar.gz"
-      sha256 "ac4d3683e5a77a51b0808ab93badcc548b452893ca1ea147f01dcf8715908e40"
+      url "https://github.com/tacogips/rielflow/releases/download/v0.1.4/rielflow-0.1.4-darwin-x64.tar.gz"
+      sha256 "129504b9cdab8ac88c373c75546fde100df1d3c53b3c96440c62aca51786c125"
     end
   end
 
   on_linux do
-    odie "rielflow Swift Homebrew archives are currently macOS-only; Linux requires a reviewed Swift Linux build contract"
+    if Hardware::CPU.arm?
+      url "https://github.com/tacogips/rielflow/releases/download/v0.1.4/rielflow-0.1.4-linux-arm64.tar.gz"
+      sha256 "cae9f0bb291f0ad0b010646ecc258e60bdfdd887c1d515eb2db4c3ab2ead1cc1"
+    else
+      url "https://github.com/tacogips/rielflow/releases/download/v0.1.4/rielflow-0.1.4-linux-x64.tar.gz"
+      sha256 "4b44700913395ad715fcfe11c0bfb5774dfae838c49f0c689aceb1d9dc4926c2"
+    end
   end
 
   def install
@@ -35,8 +41,8 @@ class Rielflow < Formula
         "workflowId": "addon-smoke",
         "description": "Smoke workflow that requires built-in add-on package resolution.",
         "defaults": {
-          "maxLoopIterations": 3,
-          "nodeTimeoutMs": 120000
+          "maxLoopIterations": 1,
+          "nodeTimeoutMs": 60000
         },
         "entryStepId": "send-reply",
         "nodes": [
@@ -66,7 +72,6 @@ class Rielflow < Formula
     usage = shell_output(
       "#{bin}/rielflow workflow usage addon-smoke --workflow-definition-dir #{testpath} --output json",
     )
-    assert_match '"workflowId":"addon-smoke"', usage
-    assert_match %r{rielflow\\?/chat-reply-worker}, usage
+    assert_match '"workflowId": "addon-smoke"', usage
   end
 end

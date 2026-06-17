@@ -418,23 +418,32 @@ Common files:
 - `commit-message.txt`
 - optional `output-attempts/`
 
-### Communication Persistence
+### Communication Artifact Directory
 
-SQLite `workflow_messages` is the canonical communication store for
-workflow-level input, node-to-node delivery, replay, retry, and external output
-handoff. The runtime must not create or rely on communication mirror files such
-as:
+Canonical path:
 
-- `communications/<communicationId>/message.json`
-- `communications/<communicationId>/outbox/<fromNodeId>/output.json`
-- `communications/<communicationId>/inbox/<toNodeId>/message.json`
-- `external-mailbox/input/output.json`
-- `external-mailbox/output/output.json`
+```text
+{artifact-root}/{workflow_id}/executions/{workflowExecutionId}/communications/{communicationId}/
+```
 
-Execution node artifacts still contain runtime-owned `input.json`,
-`output.json`, `meta.json`, `handoff.json`, and `output-attempts/` files for
-node execution audit. These files are not communication inbox/outbox ABI and do
-not replace `workflow_messages`.
+Common files:
+
+- `message.json`
+- `meta.json`
+- `outbox/<fromNodeId>/message.json`
+- `outbox/<fromNodeId>/output.json`
+- `inbox/<toNodeId>/message.json`
+- `attempts/<deliveryAttemptId>/attempt.json`
+- `attempts/<deliveryAttemptId>/receipt.json`
+
+### External Mailbox Artifacts
+
+The runtime also uses:
+
+- `external-mailbox/input/`
+- `external-mailbox/output/`
+
+to represent workflow-level inbound and outbound handoff using the same communication model.
 
 ## Runtime DB Model
 
@@ -447,9 +456,7 @@ SQLite stores query-oriented copies of node execution data such as:
 - input/output hashes
 - input/output JSON payloads
 
-For communication delivery, retry, replay, and manager inspection this DB is
-authoritative. Filesystem node artifacts remain audit/debug material for node
-execution state, not the source of truth for workflow message delivery.
+This DB is intentionally secondary to the filesystem artifact contract.
 
 ## Current validation rules
 

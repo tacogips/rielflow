@@ -48,14 +48,16 @@ async function runExampleScript(input: {
 }): Promise<Record<string, unknown>> {
   const inputPath = path.join(input.cwd, "resolved-input.json");
   const stdoutPath = path.join(input.cwd, "script-output.json");
-  await writeFile(inputPath, `${JSON.stringify(input.resolvedInput)}\n`);
+  await writeFile(
+    inputPath,
+    `${JSON.stringify(input.resolvedInput, null, 2)}\n`,
+  );
   const child = Bun.spawn(
     [
       "sh",
       "-c",
-      'cat "$1" | exec "$2" >"$3"',
+      'exec "$1" >"$2"',
       "rielflow-example-script",
-      inputPath,
       path.join(repoRoot, input.relativePath),
       stdoutPath,
     ],
@@ -64,6 +66,7 @@ async function runExampleScript(input: {
       env: {
         ...process.env,
         ...(input.env ?? {}),
+        RIEL_RESOLVED_INPUT_PATH: inputPath,
       },
       stderr: "pipe",
       stdout: "ignore",

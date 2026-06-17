@@ -6978,6 +6978,19 @@ describe("runWorkflow", () => {
     );
     expect(managerInput.promptText).toContain('"request":"ship release B"');
 
+    const sourceOutputRaw = await readFile(
+      path.join(
+        root,
+        "artifacts",
+        "root-mailbox-input",
+        "executions",
+        result.value.session.sessionId,
+        "external-mailbox",
+        "input",
+        "output.json",
+      ),
+      "utf8",
+    );
     const bootstrapMessage = await loadSqliteMessageRecord(
       result.value.session.sessionId,
       bootstrapCommunication.communicationId,
@@ -6987,21 +7000,8 @@ describe("runWorkflow", () => {
       bootstrapCommunication.activeDeliveryAttemptId ?? null,
     );
     expect(JSON.parse(bootstrapMessage.payloadJson ?? "null")).toEqual(
-      expect.objectContaining({
-        provider: "external-mailbox",
-        model: "workflow-input",
-        completionPassed: true,
-        payload: {
-          request: "ship release B",
-          constraints: ["tests", "review"],
-        },
-      }),
+      JSON.parse(sourceOutputRaw) as unknown,
     );
-    await expect(
-      Bun.file(
-        path.join(bootstrapCommunication.payloadRef.artifactDir, "output.json"),
-      ).exists(),
-    ).resolves.toBe(false);
   });
 
   test("normalizes plain-text human input to canonical text objects", async () => {
@@ -7046,35 +7046,22 @@ describe("runWorkflow", () => {
     };
     expect(mailboxInput.humanInput).toEqual({ text: "ship release B" });
 
-    const bootstrapCommunication = result.value.session.communications.find(
-      (entry) =>
-        entry.fromNodeId === "__workflow-input-mailbox__" &&
-        entry.deliveryKind === "external-input",
-    );
-    expect(bootstrapCommunication).toBeDefined();
-    if (bootstrapCommunication === undefined) {
-      return;
-    }
-
-    const bootstrapMessage = await loadSqliteMessageRecord(
-      result.value.session.sessionId,
-      bootstrapCommunication.communicationId,
-      {
-        ...workflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-      },
-    );
     const externalOutput = JSON.parse(
-      bootstrapMessage.payloadJson ?? "null",
+      await readFile(
+        path.join(
+          root,
+          "artifacts",
+          "root-human-input-text",
+          "executions",
+          result.value.session.sessionId,
+          "external-mailbox",
+          "input",
+          "output.json",
+        ),
+        "utf8",
+      ),
     ) as { payload: { text?: string } };
     expect(externalOutput.payload).toEqual({ text: "ship release B" });
-    await expect(
-      Bun.file(
-        path.join(bootstrapCommunication.payloadRef.artifactDir, "output.json"),
-      ).exists(),
-    ).resolves.toBe(false);
   });
 
   test("publishes the completed workflow result to an external mailbox", async () => {

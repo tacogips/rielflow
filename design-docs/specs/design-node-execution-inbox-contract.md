@@ -78,8 +78,8 @@ executor-specific mechanisms:
     diagnostic log output only
   - command scripts must not require `RIEL_MAILBOX_DIR`
 - `container`
-  - the native executor passes resolved input through JSON stdin attached to
-    the container process
+  - the native executor passes resolved input through a non-mailbox container
+    process boundary such as JSON stdin or an executor-private request file
   - stdout is the preferred structured JSON candidate output stream; stderr is
     diagnostic log output only
   - container entrypoints must not require a `/mailbox` mount or
@@ -204,9 +204,8 @@ The layering is:
 5. runtime validates, publishes node artifacts, and routes downstream by
    inserting new `workflow_messages` rows
 
-No layer in this path uses `RIEL_MAILBOX_DIR/inbox/input.json`,
-`RIEL_MAILBOX_DIR/outbox/output.json`, `RIEL_RESOLVED_INPUT_PATH`, or a mounted
-native request file for message handoff.
+No layer in this path uses `RIEL_MAILBOX_DIR/inbox/input.json` or
+`RIEL_MAILBOX_DIR/outbox/output.json` for message handoff.
 
 ## References
 

@@ -82,20 +82,24 @@ async function main(): Promise<void> {
     ? `時報です。${timeZone} の現在時刻は ${localTime} です。`
     : "";
   process.stdout.write(
-    `${JSON.stringify({
-      when: {
-        always: true,
-        should_announce: shouldAnnounce,
+    `${JSON.stringify(
+      {
+        when: {
+          always: true,
+          should_announce: shouldAnnounce,
+        },
+        payload: {
+          shouldAnnounce,
+          scheduledAt: scheduledAt.toISOString(),
+          timezone: timeZone,
+          intervalMinutes,
+          localTime,
+          replyText,
+        },
       },
-      payload: {
-        shouldAnnounce,
-        scheduledAt: scheduledAt.toISOString(),
-        timezone: timeZone,
-        intervalMinutes,
-        localTime,
-        replyText,
-      },
-    })}\n`,
+      null,
+      2,
+    )}\n`,
   );
 }
 

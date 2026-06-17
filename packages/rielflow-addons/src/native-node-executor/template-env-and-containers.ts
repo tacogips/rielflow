@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   atomicWriteTextFile,
@@ -31,12 +30,7 @@ export const X_GATEWAY_READ_BINARY = "x-gateway-reader";
 export const X_GATEWAY_BINARY = "x-gateway";
 export const MAIL_GATEWAY_READ_BINARY = "mail-gateway-reader";
 export const MAIL_GATEWAY_BINARY = "mail-gateway";
-const RESERVED_NATIVE_WORKER_ENV_KEYS = new Set([
-  "RIEL_RESOLVED_INPUT_PATH",
-  "RIEL_MAILBOX_DIR",
-  "RIELFLOW_WORKFLOW_INPUT",
-  "RIELFLOW_WORKFLOW_OUTPUT",
-]);
+const CONTAINER_RESOLVED_INPUT_PATH = "/rielflow-input/resolved-input.json";
 export interface NativeNodeExecutionContext {
   readonly timeoutMs: number;
   readonly signal: AbortSignal;
@@ -118,31 +112,18 @@ export function buildRielflowExecutionEnv(
     RIEL_NODE_EXEC_ID: input.nodeExecId,
   };
 }
-function buildResolvedInputJson(input: {
+async function writeResolvedInputRequestFile(input: {
+  readonly artifactDir: string;
   readonly executionMailbox: NodeExecutionMailbox;
-}): string {
-  return `${JSON.stringify(input.executionMailbox.input)}\n`;
-}
-function stripReservedNativeWorkerEnv(
-  env: NodeJS.ProcessEnv,
-): NodeJS.ProcessEnv {
-  const stripped: NodeJS.ProcessEnv = { ...env };
-  for (const key of RESERVED_NATIVE_WORKER_ENV_KEYS) {
-    delete stripped[key];
-  }
-  return stripped;
-}
-function appendRenderedWorkerEnv(
-  env: NodeJS.ProcessEnv,
-  renderedEnv: Readonly<Record<string, string>>,
-): NodeJS.ProcessEnv {
-  const merged = { ...env };
-  for (const [key, value] of Object.entries(renderedEnv)) {
-    if (!RESERVED_NATIVE_WORKER_ENV_KEYS.has(key)) {
-      merged[key] = value;
-    }
-  }
-  return merged;
+}): Promise<{ readonly hostPath: string; readonly json: string }> {
+  const requestPath = path.join(
+    input.artifactDir,
+    "resolved-input",
+    "native-request.json",
+  );
+  const requestJson = `${JSON.stringify(input.executionMailbox.input, null, 2)}\n`;
+  await atomicWriteTextFile(requestPath, requestJson);
+  return { hostPath: requestPath, json: requestJson };
 }
 export function buildCommandEnv(
   input: RielflowExecutionEnvInput & {
@@ -150,36 +131,28 @@ export function buildCommandEnv(
     readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
   },
 ): NodeJS.ProcessEnv {
-  const env = stripReservedNativeWorkerEnv({
+  return {
     ...process.env,
     ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
-  });
-  return {
-    ...appendRenderedWorkerEnv(env, input.renderedEnv),
+    ...input.renderedEnv,
     ...buildRielflowExecutionEnv(input),
   };
 }
 export function buildRunnerEnv(input: {
   readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
 }): NodeJS.ProcessEnv {
-  return stripReservedNativeWorkerEnv({
+  return {
     ...process.env,
     ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
-  });
+  };
 }
 export function buildContainerEnv(
   input: RielflowExecutionEnvInput & {
     readonly renderedEnv: Readonly<Record<string, string>>;
   },
 ): Readonly<Record<string, string>> {
-  const renderedWorkerEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(input.renderedEnv)) {
-    if (!RESERVED_NATIVE_WORKER_ENV_KEYS.has(key)) {
-      renderedWorkerEnv[key] = value;
-    }
-  }
   return {
-    ...renderedWorkerEnv,
+    ...input.renderedEnv,
     ...buildRielflowExecutionEnv(input),
   };
 }
@@ -211,13 +184,9 @@ export async function runSpawnedProcess(input: {
   const captureDirectory = input.captureDirectory ?? input.cwd;
   await mkdir(captureDirectory, { recursive: true });
   const captureId = randomUUID();
-  const workerStdinPath = path.join(
-    captureDirectory,
-    `${captureId}-worker-stdin.json`,
-  );
+  const stdinPath = path.join(captureDirectory, `${captureId}-stdin.json`);
   const stdoutPath = path.join(captureDirectory, `${captureId}-stdout.log`);
   const stderrPath = path.join(captureDirectory, `${captureId}-stderr.log`);
-  await writeFile(workerStdinPath, input.stdin ?? "", "utf8");
   const readCapturedLogs = async (): Promise<SpawnedProcessResult> => {
     const [stdout, stderr] = await Promise.all([
       readFile(stdoutPath, "utf8").catch(() => ""),
@@ -225,33 +194,30 @@ export async function runSpawnedProcess(input: {
     ]);
     return { stdout, stderr };
   };
-  const cleanupCaptureFiles = (): void => {
-    rmSync(workerStdinPath, { force: true });
-    rmSync(stdoutPath, { force: true });
-    rmSync(stderrPath, { force: true });
-  };
 
   return await new Promise<SpawnedProcessResult>((resolve, reject) => {
     const child = spawn(
-      "/bin/sh",
+      "sh",
       [
         "-c",
-        "stdin_file=$1; stdout_file=$2; stderr_file=$3; shift 3; exec \"$@\" <\"$stdin_file\" >\"$stdout_file\" 2>\"$stderr_file\"",
+        "stdin_file=$RIEL_PROCESS_STDIN; stdout_file=$RIEL_PROCESS_STDOUT; stderr_file=$RIEL_PROCESS_STDERR; cat >\"$stdin_file\"; unset RIEL_PROCESS_STDIN RIEL_PROCESS_STDOUT RIEL_PROCESS_STDERR; exec \"$@\" <\"$stdin_file\" >\"$stdout_file\" 2>\"$stderr_file\"",
         "rielflow-process",
-        workerStdinPath,
-        stdoutPath,
-        stderrPath,
         input.command,
         ...input.args,
       ],
       {
         cwd: input.cwd,
-        env: input.env,
+        env: {
+          ...input.env,
+          RIEL_PROCESS_STDIN: stdinPath,
+          RIEL_PROCESS_STDOUT: stdoutPath,
+          RIEL_PROCESS_STDERR: stderrPath,
+        },
         stdio: ["pipe", "ignore", "ignore"],
       },
     );
     child.stdin.on("error", () => {});
-    child.stdin.end();
+    child.stdin.end(input.stdin ?? "");
 
     let settled = false;
     let abortRequested = false;
@@ -284,15 +250,13 @@ export async function runSpawnedProcess(input: {
 
     child.on("error", (error: unknown) => {
       finish(async () => {
-        const logs = await readCapturedLogs();
-        cleanupCaptureFiles();
+        await readCapturedLogs();
         const message =
           error instanceof Error ? error.message : "unknown spawn error";
         reject(
           new AdapterExecutionError(
             "provider_error",
             `native node execution failed: ${message}`,
-            { processLogs: buildProcessLogAttachments(logs) },
           ),
         );
       });
@@ -301,7 +265,6 @@ export async function runSpawnedProcess(input: {
     child.on("close", (code, signal) => {
       finish(async () => {
         const logs = await readCapturedLogs();
-        cleanupCaptureFiles();
         if (abortRequested) {
           reject(
             new AdapterExecutionError(
@@ -333,39 +296,30 @@ export function readStdoutOutputPayload(
   stdout: string,
   sourceLabel: string,
 ): Readonly<Record<string, unknown>> {
-  const records = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  if (records.length === 0) {
+  const raw = stdout.trim();
+  if (raw.length === 0) {
     throw new AdapterExecutionError(
       "invalid_output",
-      `${sourceLabel} must write exactly one JSONL object to stdout`,
-    );
-  }
-  if (records.length > 1) {
-    throw new AdapterExecutionError(
-      "invalid_output",
-      `${sourceLabel} must write exactly one JSONL object to stdout; received ${records.length} non-empty lines`,
+      `${sourceLabel} must write a JSON object to stdout`,
     );
   }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(records[0] ?? "") as unknown;
+    parsed = JSON.parse(raw) as unknown;
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "unknown parse error";
     throw new AdapterExecutionError(
       "invalid_output",
-      `${sourceLabel} stdout JSONL record must be valid JSON: ${message}`,
+      `${sourceLabel} stdout must be valid JSON: ${message}`,
     );
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new AdapterExecutionError(
       "invalid_output",
-      `${sourceLabel} stdout JSONL record must be a JSON object`,
+      `${sourceLabel} stdout must be a JSON object`,
     );
   }
   return parsed as Readonly<Record<string, unknown>>;
@@ -616,10 +570,13 @@ export async function executeCommandNode(
 
   const variables = resolveTemplateVariables(input);
   const argv = renderTemplateEntries(commandConfig.argvTemplate, variables);
-  const resolvedInputJson = buildResolvedInputJson(input);
+  const resolvedInputRequest = await writeResolvedInputRequestFile(input);
   const renderedEnv = renderTemplateMap(commandConfig.envTemplate, variables);
   const childEnv = buildCommandEnv({
-    renderedEnv,
+    renderedEnv: {
+      ...renderedEnv,
+      RIEL_RESOLVED_INPUT_PATH: resolvedInputRequest.hostPath,
+    },
     workflowId: input.workflowId,
     workflowExecutionId: input.workflowExecutionId,
     nodeId: input.nodeId,
@@ -635,11 +592,7 @@ export async function executeCommandNode(
     path.join(input.workflowDirectory, commandConfig.scriptPath);
   const extension = path.extname(scriptPath);
   const shellCommand =
-    extension === ".bash"
-      ? "/bin/bash"
-      : extension === ".sh"
-        ? "/bin/sh"
-        : undefined;
+    extension === ".bash" ? "bash" : extension === ".sh" ? "sh" : undefined;
   const command = shellCommand ?? scriptPath;
   const args =
     shellCommand === undefined ? [...argv] : [scriptPath, ...argv];
@@ -651,7 +604,7 @@ export async function executeCommandNode(
     env: childEnv,
     context,
     artifactDir: input.artifactDir,
-    stdin: resolvedInputJson,
+    stdin: resolvedInputRequest.json,
   });
   const processLogs = buildProcessLogAttachments(result);
 
@@ -684,7 +637,7 @@ export async function executeContainerNode(
     containerConfig.argsTemplate,
     variables,
   );
-  const resolvedInputJson = buildResolvedInputJson(input);
+  const resolvedInputRequest = await writeResolvedInputRequestFile(input);
   const renderedEnv = renderTemplateMap(containerConfig.envTemplate, variables);
   const { runnerKind, runnerCommand } = resolveContainerRunner({
     container: containerConfig,
@@ -692,7 +645,10 @@ export async function executeContainerNode(
   });
 
   const containerEnv = buildContainerEnv({
-    renderedEnv,
+    renderedEnv: {
+      ...renderedEnv,
+      RIEL_RESOLVED_INPUT_PATH: CONTAINER_RESOLVED_INPUT_PATH,
+    },
     workflowId: input.workflowId,
     workflowExecutionId: input.workflowExecutionId,
     nodeId: input.nodeId,
@@ -700,6 +656,10 @@ export async function executeContainerNode(
   });
 
   const runArgs = ["run", "--rm", "-i"];
+  runArgs.push(
+    "-v",
+    `${resolvedInputRequest.hostPath}:${CONTAINER_RESOLVED_INPUT_PATH}:ro`,
+  );
 
   if (containerConfig.workspace?.mode === "ephemeral") {
     const workspaceHostDir = path.join(input.artifactDir, "workspace");
@@ -802,7 +762,7 @@ export async function executeContainerNode(
       }),
       context,
       artifactDir: input.artifactDir,
-      stdin: resolvedInputJson,
+      stdin: resolvedInputRequest.json,
     });
   } catch (error: unknown) {
     throw mergeProcessLogsIntoAdapterError(error, buildProcessLogs);

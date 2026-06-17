@@ -221,7 +221,7 @@ Backend capability matrix:
 | ------- | -------------- | ------------------ | ------------------ | ---------- | ------------ |
 | `codex-agent` | Active preflight uses the installed Codex CLI `codex login status`; unauthenticated is `invalid`. | Active preflight uses bounded `codex exec --model <model> --skip-git-repo-check --sandbox read-only <prompt>` and parses CLI diagnostics; unavailable model is `invalid`. | Codex reference has no dedicated plan mode. With no authored plan field, return `valid` and `not applicable`; if Rielflow later exposes a Codex plan field, unsupported values are `invalid` until the Codex adapter maps them. | Validate only Rielflow-authored Codex adapter options. The installed `codex-cli 0.137.0` readiness path accepts `--sandbox read-only` and rejects the removed `--ask-for-approval` flag. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `codex-agent` and map to Codex `model_reasoning_effort` config overrides. |
 | `claude-code-agent` | Active preflight uses `<claude-code-agent-checkout>/src/sdk/credentials/reader.ts` or `claude-code-agent auth status`; missing or expired credentials are `invalid`. | No inspected stable model reachability probe exists. Return `unknown` for model reachability while still reporting the authored model. | Plan executability maps to Claude `PermissionMode` value `plan` in `<claude-code-agent-checkout>/src/sdk/session-runner.ts`; static mode validation can be `valid`, but live plan execution remains `unknown` unless a future bounded command is added. | Validate `PermissionMode`: `default`, `acceptEdits`, `plan`, `bypassPermissions`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `claude-code-agent` and map to Claude Code `--effort`. |
-| `cursor-cli-agent` | Cursor has no stable local auth-status API in `<cursor-agent-checkout>/src/cursor/model-availability.ts`; return `unknown` unless a bounded probe reports an auth-like failure, which is `invalid` and must be worded as an authentication failure. | Active preflight may run the Cursor model probe from `<cursor-agent-checkout>/src/cursor/model-availability.ts`; unavailable model is `invalid`, unprobed passive validation is `unknown`, and `gpt-5.5` family models must be probed with the same resolved effort slug used for execution. | Plan executability maps to Cursor mode `plan` in `<cursor-agent-checkout>/src/sdk/agent-runner.ts`; the adapter validates the enum and reports live auth/model limitations separately. | Validate Cursor mode values `default`, `plan`, and `ask`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `cursor-cli-agent`; `gpt-5.5` family values resolve to Cursor model ids such as `gpt-5.5-high`, while Composer-family models do not receive effort suffixes or forwarded effort. |
+| `cursor-cli-agent` | Cursor has no stable local auth-status API in `<cursor-agent-checkout>/src/cursor/model-availability.ts`; return `unknown` unless a bounded probe reports an auth-like failure, which is `invalid`. | Active preflight may run the Cursor model probe from `<cursor-agent-checkout>/src/cursor/model-availability.ts`; unavailable model is `invalid`, unprobed passive validation is `unknown`. | Plan executability maps to Cursor mode `plan` in `<cursor-agent-checkout>/src/sdk/agent-runner.ts`; the adapter validates the enum and reports live auth/model limitations separately. | Validate Cursor mode values `default`, `plan`, and `ask`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `cursor-cli-agent` and map through the Cursor SDK's model-id effort selection. |
 
 Rielflow implementation boundary:
 
@@ -273,16 +273,8 @@ Cursor CLI validation intentionally diverges from Codex validation:
 - Cursor model reachability is optional and only active under executable
   preflight; passive validation reports `unknown`.
 - Cursor effort validation is `valid` for authored or patched `low`, `medium`,
-  `high`, and `xhigh` values. For `gpt-5.5` family models, validation and
-  execution resolve the effort into the Cursor model slug first, for example
-  `gpt-5.5` plus `high` becomes `gpt-5.5-high`; `xhigh` uses
-  `extra-high` in the model slug. Composer-family models do not receive an
-  effort suffix or forwarded Cursor effort.
-- Cursor active preflight must probe the resolved Cursor model slug, not the raw
-  workflow model, so issue #63 cannot fail preflight for `gpt-5.5` when
-  execution would use `gpt-5.5-high`.
-- Auth-like probe output must produce a `cursor-cli-agent` authentication
-  failure result before any model-unavailable classification.
+  `high`, and `xhigh` values because the dependency-owned SDK maps the common
+  field to Cursor model-id effort selection.
 - A node patch may switch an agent node from `codex-agent` to
   `cursor-cli-agent` by setting `executionBackend` and `model`; after the patch,
   Cursor validation is authoritative for that node and Codex-specific process
@@ -343,9 +335,9 @@ Implementation should cover:
 - cursor-cli-agent active preflight validates mode and reports auth as unknown
   when no stable auth signal exists
 - cursor-cli-agent validates `default`, `plan`, and `ask`, accepts valid
-  authored or patched effort fields, resolves `gpt-5.5` family effort to the
-  probed and executed model slug, suppresses effort for Composer-family models,
-  and reports auth-like probe failures as authentication failures
+  authored or patched effort fields, and relies on dependency-owned model-id
+  effort mapping
+  fields
 - add-on `validate` hooks contribute node results exactly once
 - local manifest add-ons remain schema-only and do not execute code
 - CLI JSON, GraphQL payloads, and library detailed validation expose the same
