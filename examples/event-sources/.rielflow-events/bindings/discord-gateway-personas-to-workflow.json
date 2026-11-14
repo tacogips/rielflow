@@ -1,0 +1,27 @@
+{
+  "id": "discord-gateway-personas-to-workflow",
+  "sourceId": "discord-gateway-personas",
+  "outputDestinations": ["discord-gateway-persona-replies"],
+  "workflowName": "discord-persona-chat",
+  "match": {
+    "eventType": "chat.message"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "history": "{{event.input.history}}",
+      "historySource": "{{event.input.historySource}}",
+      "personaCandidates": ["yui", "mika", "rina"],
+      "conversationId": "{{event.conversation.id}}",
+      "threadId": "{{event.conversation.threadId}}"
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}:{{event.conversation.id}}:{{event.conversation.threadId}}"
+  }
+}

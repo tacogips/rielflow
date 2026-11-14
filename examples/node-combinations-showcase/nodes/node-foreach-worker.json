@@ -1,0 +1,12 @@
+{
+  "id": "foreach-worker",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/foreach-worker.md",
+  "variables": {
+    "lane": "foreach-loop"
+  },
+  "output": {
+    "description": "Return the current iteration result and whether more items remain."
+  }
+}
