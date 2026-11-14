@@ -1,0 +1,19 @@
+{
+  "room_id": "!release:matrix.example",
+  "type": "m.room.message",
+  "event_id": "$release-event-1",
+  "sender": "@alice:matrix.example",
+  "origin_server_ts": 1778641000000,
+  "content": {
+    "msgtype": "m.text",
+    "body": "Run the release workflow from Matrix.",
+    "formatted_body": "<p>Run the release workflow from Matrix.</p>",
+    "m.relates_to": {
+      "rel_type": "m.thread",
+      "event_id": "$release-thread-root",
+      "m.in_reply_to": {
+        "event_id": "$release-parent"
+      }
+    }
+  }
+}

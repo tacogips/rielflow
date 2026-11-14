@@ -1,0 +1,5 @@
+{
+  "id": "example-reply-chat",
+  "kind": "chat",
+  "sourceId": "example-reply-webhook"
+}

@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore local Rielflow runtime artifacts and transient stores."
+paths = [
+  '''(^|/)\.rielflow-artifact/''',
+  '''(^|/)\.rielflow-data/''',
+  '''(^|/)tmp/''',
+  '''(^|/)dist/''',
+  '''(^|/)packages/[^/]+/dist/''',
+]

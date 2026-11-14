@@ -1,0 +1,17 @@
+{
+  "reviewer": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "reviewStatus": "approved",
+      "reviewSummary": "Standalone worker-only review workflow completed.",
+      "reviewNotes": [
+        "The incoming draft is concise.",
+        "The requested checks were satisfied."
+      ]
+    }
+  }
+}
