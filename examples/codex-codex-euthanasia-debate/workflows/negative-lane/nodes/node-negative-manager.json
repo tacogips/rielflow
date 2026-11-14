@@ -1,0 +1,7 @@
+{
+  "id": "negative-manager",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/negative-manager.md",
+  "variables": {}
+}

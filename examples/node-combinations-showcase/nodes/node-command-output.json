@@ -1,0 +1,9 @@
+{
+  "id": "command-output",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/command-output.md",
+  "variables": {
+    "lane": "command"
+  }
+}

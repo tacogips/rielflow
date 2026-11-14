@@ -1,0 +1,12 @@
+{
+  "id": "affirmative-output",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/affirmative-output.md",
+  "variables": {
+    "stanceLabel": "affirmative"
+  },
+  "output": {
+    "description": "Return the publishable affirmative debate turn for the next conversation step."
+  }
+}

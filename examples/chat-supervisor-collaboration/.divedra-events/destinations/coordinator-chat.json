@@ -1,0 +1,5 @@
+{
+  "id": "coordinator-chat",
+  "kind": "chat",
+  "sourceId": "collaboration-chat"
+}

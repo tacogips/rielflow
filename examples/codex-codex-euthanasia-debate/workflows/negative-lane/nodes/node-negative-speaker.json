@@ -1,0 +1,23 @@
+{
+  "id": "negative-speaker",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "sessionPolicy": {
+    "mode": "reuse"
+  },
+  "systemPromptTemplateFile": "prompts/negative-system.md",
+  "promptTemplateFile": "prompts/negative-speaker.md",
+  "sessionStartPromptTemplateFile": "prompts/session-start.md",
+  "argumentsTemplate": {
+    "role": "negative",
+    "topic": "euthanasia",
+    "maxTurns": 10
+  },
+  "variables": {
+    "stanceLabel": "negative",
+    "opponentStanceLabel": "affirmative"
+  },
+  "output": {
+    "description": "Return the next negative debate turn as JSON."
+  }
+}
