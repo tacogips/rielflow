@@ -1,0 +1,11 @@
+{
+  "id": "judge-attachments",
+  "description": "Classify normalized Chat SDK attachment descriptors from workflow input or event runtime variables.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.4-mini",
+  "promptTemplateFile": "prompts/judge-attachments.md",
+  "variables": {},
+  "output": {
+    "description": "Return payload.attachments[] with deterministic judgement objects and manual-review flags."
+  }
+}
