@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rielflow Version Bump"
+  short_description: "Bump rielflow workspace versions without publishing a release."
+  default_prompt: "Bump the rielflow workspace to the requested version and verify the version metadata only."

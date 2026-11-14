@@ -1,0 +1,40 @@
+{
+  "id": "345678901234567890",
+  "channel_id": "567890123456789012",
+  "parent_channel_id": "234567890123456789",
+  "guild_id": "123456789012345678",
+  "timestamp": "2026-05-29T10:02:00.000Z",
+  "content": "Mika, what do you think about option two?",
+  "author": {
+    "id": "456789012345678901",
+    "username": "operator",
+    "global_name": "Operator",
+    "bot": false
+  },
+  "mentions": [],
+  "historySourceMode": "memory",
+  "history": [
+    {
+      "messageId": "111111111111111111",
+      "authorId": "222222222222222222",
+      "displayName": "Yui",
+      "username": "yui",
+      "isBot": false,
+      "createdAt": "2026-05-29T10:00:00.000Z",
+      "text": "We need to choose between a broad rewrite and a small adapter change.",
+      "conversationId": "234567890123456789",
+      "threadId": "567890123456789012"
+    },
+    {
+      "messageId": "333333333333333333",
+      "authorId": "444444444444444444",
+      "displayName": "Rina",
+      "username": "rina",
+      "isBot": false,
+      "createdAt": "2026-05-29T10:01:00.000Z",
+      "text": "Option two keeps the surface smaller and is easier to verify.",
+      "conversationId": "234567890123456789",
+      "threadId": "567890123456789012"
+    }
+  ]
+}
