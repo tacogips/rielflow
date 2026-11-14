@@ -1,0 +1,1187 @@
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+} from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { describe, expect, test } from "vitest";
+
+interface PackageManifest {
+  readonly name: string;
+  readonly private?: boolean;
+  readonly workspaces?: readonly string[];
+  readonly main?: string;
+  readonly module?: string;
+  readonly types?: string;
+  readonly exports?: Readonly<Record<string, unknown>>;
+  readonly dependencies?: Readonly<Record<string, string>>;
+}
+
+interface PackageRootImport {
+  readonly filePath: string;
+  readonly specifier: string;
+}
+
+interface DeclarationReference {
+  readonly filePath: string;
+  readonly specifier: string;
+}
+
+interface PackageDeclarationDependencyReference {
+  readonly filePath: string;
+  readonly dependencyName: string;
+  readonly specifier: string;
+}
+
+type AdapterExecutionErrorConstructor = new (
+  code: "provider_error" | "timeout" | "invalid_output" | "policy_blocked",
+  message: string,
+) => Error;
+
+type NormalizeAdapterFailure = (
+  error: unknown,
+  fallbackMessage: string,
+) => Error;
+
+async function readManifest(relativePath: string): Promise<PackageManifest> {
+  const content = await readFile(
+    path.join(process.cwd(), relativePath),
+    "utf8",
+  );
+  return JSON.parse(content) as PackageManifest;
+}
+
+async function collectTypeScriptFiles(relativeDir: string): Promise<string[]> {
+  const absoluteDir = path.join(process.cwd(), relativeDir);
+  const entries = await readdir(absoluteDir, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const relativePath = path.posix.join(relativeDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await collectTypeScriptFiles(relativePath)));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith(".ts")) {
+      files.push(relativePath);
+    }
+  }
+
+  return files;
+}
+
+async function collectPackageSourceFiles(): Promise<string[]> {
+  const packageEntries = await readdir(path.join(process.cwd(), "packages"), {
+    withFileTypes: true,
+  });
+  const packageSourceFiles = await Promise.all(
+    packageEntries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) =>
+        collectTypeScriptFiles(path.posix.join("packages", entry.name, "src")),
+      ),
+  );
+
+  return packageSourceFiles.flat().sort((a, b) => a.localeCompare(b));
+}
+
+async function collectWorkspacePackageNames(): Promise<string[]> {
+  const packageEntries = await readdir(path.join(process.cwd(), "packages"), {
+    withFileTypes: true,
+  });
+  const manifests = await Promise.all(
+    packageEntries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        return readManifest(
+          path.posix.join("packages", entry.name, "package.json"),
+        );
+      }),
+  );
+
+  return manifests
+    .map((manifest) => manifest.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function getLockfileWorkspaceSection(lockfile: string): string {
+  const workspacesStart = lockfile.indexOf('  "workspaces": {');
+  const packagesStart = lockfile.indexOf('  "packages": {');
+  if (workspacesStart === -1 || packagesStart === -1) {
+    throw new Error(
+      "bun.lock is missing the expected workspaces/packages sections",
+    );
+  }
+
+  return lockfile.slice(workspacesStart, packagesStart);
+}
+
+function collectLockWorkspacePackageNames(lockfile: string): string[] {
+  return Array.from(
+    getLockfileWorkspaceSection(lockfile).matchAll(
+      /"packages\/[^"]+":\s*\{[^}]*"name":\s*"(?<packageName>[^"]+)"/gsu,
+    ),
+    (match) => match.groups?.["packageName"],
+  )
+    .filter((packageName): packageName is string => packageName !== undefined)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function collectLockPackageEntrypointNames(lockfile: string): string[] {
+  const packagesStart = lockfile.indexOf('  "packages": {');
+  if (packagesStart === -1) {
+    throw new Error("bun.lock is missing the expected packages section");
+  }
+
+  return Array.from(
+    lockfile
+      .slice(packagesStart)
+      .matchAll(
+        /"(?<packageName>[^"]+)":\s*\["[^"]+@workspace:packages\/[^"]+"\]/gu,
+      ),
+    (match) => match.groups?.["packageName"],
+  )
+    .filter((packageName): packageName is string => packageName !== undefined)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function collectPackageRootImports(
+  filePath: string,
+  source: string,
+): PackageRootImport[] {
+  const imports: PackageRootImport[] = [];
+  const importLikePattern =
+    /(?:from\s+|import\s*\(\s*|import\s+)["'](?<specifier>[^"']+)["']/gu;
+
+  for (const match of source.matchAll(importLikePattern)) {
+    const specifier = match.groups?.["specifier"];
+    if (!specifier?.startsWith(".")) {
+      continue;
+    }
+    const resolvedSpecifier = path.posix.normalize(
+      path.posix.join(path.posix.dirname(filePath), specifier),
+    );
+    if (resolvedSpecifier === "src" || resolvedSpecifier.startsWith("src/")) {
+      imports.push({ filePath, specifier });
+    }
+  }
+
+  return imports;
+}
+
+function uniqueSortedRootImports(
+  imports: readonly PackageRootImport[],
+): PackageRootImport[] {
+  return Array.from(
+    new Map(
+      imports.map((rootImport) => [
+        `${rootImport.filePath}\0${rootImport.specifier}`,
+        rootImport,
+      ]),
+    ).values(),
+  ).sort(
+    (left, right) =>
+      left.filePath.localeCompare(right.filePath) ||
+      left.specifier.localeCompare(right.specifier),
+  );
+}
+
+function collectRelativeDeclarationReferences(
+  filePath: string,
+  source: string,
+): DeclarationReference[] {
+  const references: DeclarationReference[] = [];
+  const declarationReferencePattern =
+    /(?:from\s+|import\s*\(\s*)["'](?<specifier>\.[^"']+)["']/gu;
+
+  for (const match of source.matchAll(declarationReferencePattern)) {
+    const specifier = match.groups?.["specifier"];
+    if (specifier !== undefined) {
+      references.push({ filePath, specifier });
+    }
+  }
+
+  return references;
+}
+
+function collectWorkspaceDeclarationDependencyReferences(
+  filePath: string,
+  source: string,
+  workspacePackageNames: readonly string[],
+): PackageDeclarationDependencyReference[] {
+  const references: PackageDeclarationDependencyReference[] = [];
+  const declarationReferencePattern =
+    /(?:from\s+|import\s*\(\s*)["'](?<specifier>[^."'][^"']*)["']/gu;
+
+  for (const match of source.matchAll(declarationReferencePattern)) {
+    const specifier = match.groups?.["specifier"];
+    const dependencyName = workspacePackageNames.find(
+      (packageName) =>
+        specifier === packageName || specifier?.startsWith(`${packageName}/`),
+    );
+    if (specifier !== undefined && dependencyName !== undefined) {
+      references.push({ filePath, dependencyName, specifier });
+    }
+  }
+
+  return references;
+}
+
+async function resolveDeclarationReference(
+  filePath: string,
+  specifier: string,
+): Promise<string | undefined> {
+  const declarationBase = path.join(
+    process.cwd(),
+    path.dirname(filePath),
+    specifier,
+  );
+  const candidates = specifier.endsWith(".d.ts")
+    ? [declarationBase]
+    : [`${declarationBase}.d.ts`, path.join(declarationBase, "index.d.ts")];
+
+  for (const candidate of candidates) {
+    if ((await stat(candidate).catch(() => undefined))?.isFile() === true) {
+      return path.relative(process.cwd(), candidate);
+    }
+  }
+
+  return undefined;
+}
+
+async function collectReachableDeclarationFiles(entrypoint: string): Promise<{
+  readonly files: readonly string[];
+  readonly missingReferences: readonly DeclarationReference[];
+}> {
+  const files = new Set<string>();
+  const queue = [entrypoint];
+  const missingReferences: DeclarationReference[] = [];
+
+  for (const filePath of queue) {
+    if (files.has(filePath)) {
+      continue;
+    }
+    files.add(filePath);
+    const references = collectRelativeDeclarationReferences(
+      filePath,
+      await readFile(path.join(process.cwd(), filePath), "utf8"),
+    );
+    for (const reference of references) {
+      const resolved = await resolveDeclarationReference(
+        reference.filePath,
+        reference.specifier,
+      );
+      if (resolved === undefined) {
+        missingReferences.push(reference);
+        continue;
+      }
+      queue.push(resolved);
+    }
+  }
+
+  return {
+    files: Array.from(files).sort((a, b) => a.localeCompare(b)),
+    missingReferences,
+  };
+}
+
+async function importCopiedPackageEntrypoint(
+  packageName: string,
+  entrypoint: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  const modules = await importCopiedPackageEntrypoints([
+    { packageName, entrypoint },
+  ]);
+  const module = modules[packageName];
+  if (module === undefined) {
+    throw new Error(`failed to import copied package '${packageName}'`);
+  }
+  return module;
+}
+
+async function importCopiedPackageEntrypoints(
+  packages: readonly {
+    readonly packageName: string;
+    readonly entrypoint: string;
+  }[],
+): Promise<Readonly<Record<string, Readonly<Record<string, unknown>>>>> {
+  const tempDir = await mkdtemp(
+    path.join(os.tmpdir(), "rielflow-package-runtime-"),
+  );
+  try {
+    const nodeModulesDir = path.join(tempDir, "node_modules");
+    await mkdir(nodeModulesDir, { recursive: true });
+    const copiedPackageNames = new Set(
+      packages.map(({ packageName }) => packageName),
+    );
+    for (const copiedPackageName of copiedPackageNames) {
+      await cp(
+        path.join(process.cwd(), "packages", copiedPackageName),
+        path.join(nodeModulesDir, copiedPackageName),
+        { recursive: true },
+      );
+    }
+
+    const modules: Record<string, Readonly<Record<string, unknown>>> = {};
+    for (const packageInput of packages) {
+      const entrypointUrl = pathToFileURL(
+        path.join(
+          nodeModulesDir,
+          packageInput.packageName,
+          packageInput.entrypoint,
+        ),
+      ).href;
+      modules[packageInput.packageName] = (await import(
+        entrypointUrl
+      )) as Readonly<Record<string, unknown>>;
+    }
+    return modules;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function importRepositoryModule(
+  relativePath: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  return (await import(
+    pathToFileURL(path.join(process.cwd(), relativePath)).href
+  )) as Readonly<Record<string, unknown>>;
+}
+
+function sortedExportKeys(module: Readonly<Record<string, unknown>>): string[] {
+  return Object.keys(module).sort();
+}
+
+describe("package boundaries", () => {
+  test("root package is a private Bun workspace orchestrator", async () => {
+    const manifest = await readManifest("package.json");
+
+    expect(manifest.name).toBe("rielflow-workspace");
+    expect(manifest.private).toBe(true);
+    expect(manifest.workspaces).toEqual(["packages/*"]);
+  });
+
+  test("compatibility package preserves the rielflow library and cli exports", async () => {
+    const manifest = await readManifest("packages/rielflow/package.json");
+
+    expect(manifest.name).toBe("rielflow");
+    expect(manifest.main).toBe("dist/lib.js");
+    expect(manifest.module).toBe("dist/lib.js");
+    expect(manifest.types).toBe("dist/lib.d.ts");
+    expect(Object.keys(manifest.exports ?? {}).sort()).toEqual([".", "./cli"]);
+    expect(manifest.exports?.["./cli"]).toEqual({
+      types: "./dist/cli.d.ts",
+      import: "./dist/cli.js",
+      default: "./dist/cli.js",
+    });
+    expect(manifest.dependencies?.["rielflow-core"]).toBe("workspace:*");
+    expect(manifest.dependencies?.["rielflow-addons"]).toBe("workspace:*");
+    expect(manifest.dependencies?.["rielflow-events"]).toBe("workspace:*");
+    expect(manifest.dependencies?.["rielflow-graphql"]).toBe("workspace:*");
+    expect(manifest.dependencies?.["rielflow-hook"]).toBe("workspace:*");
+    expect(manifest.dependencies?.["rielflow-server"]).toBe("workspace:*");
+  });
+
+  test("bun lockfile tracks every workspace package manifest", async () => {
+    const lockfile = await readFile(
+      path.join(process.cwd(), "bun.lock"),
+      "utf8",
+    );
+    const workspacePackageNames = await collectWorkspacePackageNames();
+
+    expect(collectLockWorkspacePackageNames(lockfile)).toEqual(
+      workspacePackageNames,
+    );
+    expect(collectLockPackageEntrypointNames(lockfile)).toEqual(
+      workspacePackageNames,
+    );
+  });
+
+  test("core, add-ons, adapters, events, GraphQL, hook, and server packages expose package-local entrypoints", async () => {
+    const core = await readManifest("packages/rielflow-core/package.json");
+    const addons = await readManifest("packages/rielflow-addons/package.json");
+    const adapters = await readManifest(
+      "packages/rielflow-adapters/package.json",
+    );
+    const events = await readManifest("packages/rielflow-events/package.json");
+    const graphql = await readManifest(
+      "packages/rielflow-graphql/package.json",
+    );
+    const hook = await readManifest("packages/rielflow-hook/package.json");
+    const server = await readManifest("packages/rielflow-server/package.json");
+
+    expect(core.name).toBe("rielflow-core");
+    expect(core.main).toBe("dist/index.js");
+    expect(core.types).toBe("dist/index.d.ts");
+    expect(addons.name).toBe("rielflow-addons");
+    expect(addons.main).toBe("dist/index.js");
+    expect(addons.types).toBe("dist/index.d.ts");
+    expect(addons.dependencies?.["rielflow-core"]).toBe("workspace:*");
+    expect(adapters.name).toBe("rielflow-adapters");
+    expect(adapters.main).toBe("dist/index.js");
+    expect(adapters.types).toBe("dist/index.d.ts");
+    expect(adapters.dependencies?.["rielflow-core"]).toBe("workspace:*");
+    expect(events.name).toBe("rielflow-events");
+    expect(events.main).toBe("dist/index.js");
+    expect(events.types).toBe("dist/index.d.ts");
+    expect(events.dependencies?.["rielflow-core"]).toBe("workspace:*");
+    expect(Object.keys(events.exports ?? {}).sort()).toEqual([
+      ".",
+      "./path-resolution",
+      "./runtime-ports",
+      "./types",
+    ]);
+    expect(graphql.name).toBe("rielflow-graphql");
+    expect(graphql.main).toBe("dist/index.js");
+    expect(graphql.types).toBe("dist/index.d.ts");
+    expect(Object.keys(graphql.exports ?? {}).sort()).toEqual([
+      ".",
+      "./control-plane-service",
+      "./dto",
+      "./schema-contract",
+    ]);
+    expect(hook.name).toBe("rielflow-hook");
+    expect(hook.main).toBe("dist/index.js");
+    expect(hook.types).toBe("dist/index.d.ts");
+    expect(hook.dependencies?.["rielflow-core"]).toBe("workspace:*");
+    expect(Object.keys(hook.exports ?? {}).sort()).toEqual([
+      ".",
+      "./config",
+      "./context",
+      "./detect-vendor",
+      "./dispatch",
+      "./handler",
+      "./parse",
+      "./recorder-contracts",
+      "./redaction",
+      "./types",
+    ]);
+    expect(server.name).toBe("rielflow-server");
+    expect(server.main).toBe("dist/index.js");
+    expect(server.types).toBe("dist/index.d.ts");
+    expect(Object.keys(server.exports ?? {}).sort()).toEqual([
+      ".",
+      "./browser-overview",
+      "./contracts",
+    ]);
+  });
+
+  test("built package declarations preserve current compatibility exports", async () => {
+    const declarations = await readFile(
+      path.join(process.cwd(), "packages/rielflow/dist/lib.d.ts"),
+      "utf8",
+    );
+
+    expect(declarations).toContain("ContinueWorkflowFromHistoryInput");
+    expect(declarations).toContain("continueWorkflowFromHistory");
+    expect(declarations).toContain("listWorkflowUsage");
+    expect(declarations).toContain("WorkflowUsageCatalog");
+  });
+
+  test("default test tooling discovers package-local source tests", async () => {
+    const testRunner = await readFile(
+      path.join(process.cwd(), "scripts/run-bun-tests.sh"),
+      "utf8",
+    );
+
+    expect(testRunner).toContain("rg --files scripts packages");
+  });
+
+  test("workspace no longer keeps a root source tree", async () => {
+    const rootSourceStats = await stat(path.join(process.cwd(), "src")).catch(
+      () => undefined,
+    );
+
+    expect(rootSourceStats).toBeUndefined();
+  });
+
+  test("package root imports are limited to temporary compatibility facades", async () => {
+    const packageSourceFiles = await collectPackageSourceFiles();
+    const rootImports = uniqueSortedRootImports(
+      (
+        await Promise.all(
+          packageSourceFiles.map(async (filePath) =>
+            collectPackageRootImports(
+              filePath,
+              await readFile(path.join(process.cwd(), filePath), "utf8"),
+            ),
+          ),
+        )
+      ).flat(),
+    );
+
+    const allowedRootImports: PackageRootImport[] = [];
+
+    expect(rootImports).toEqual(allowedRootImports);
+  });
+
+  test("package root import detection resolves nested relative source paths", () => {
+    expect(
+      collectPackageRootImports(
+        "packages/rielflow/src/nested/facade.ts",
+        'import { runWorkflow } from "../../../../src/workflow/engine";',
+      ),
+    ).toEqual([
+      {
+        filePath: "packages/rielflow/src/nested/facade.ts",
+        specifier: "../../../../src/workflow/engine",
+      },
+    ]);
+  });
+
+  test("core workflow model ownership does not import runtime side effects", async () => {
+    const modelFiles = [
+      "packages/rielflow-core/src/authored-node.ts",
+      "packages/rielflow-core/src/authored-workflow.ts",
+      "packages/rielflow-core/src/json-schema.ts",
+      "packages/rielflow-core/src/node-template-fields.ts",
+      "packages/rielflow-core/src/paths.ts",
+      "packages/rielflow-core/src/prompt-template-context.ts",
+      "packages/rielflow-core/src/prompt-template-file.ts",
+      "packages/rielflow-core/src/render.ts",
+      "packages/rielflow-core/src/runtime-prompt-assets.ts",
+      "packages/rielflow-core/src/workflow-bundle-input.ts",
+      "packages/rielflow-core/src/workflow-model.ts",
+      "packages/rielflow-core/src/workflow-validation.ts",
+    ];
+    const forbiddenImportFragments = [
+      "/engine",
+      "/node-addons",
+      "/native-node-executor",
+      "/node-execution-mailbox",
+      "/superviser",
+      "/supervisor",
+      "/runtime-db",
+      "/manager-session",
+      "/communication-service",
+      "/events",
+      "/hook",
+      "/server",
+      "/graphql",
+      "/mailbox",
+    ];
+
+    const imports = (
+      await Promise.all(
+        modelFiles.map(async (filePath) =>
+          collectRelativeDeclarationReferences(
+            filePath,
+            await readFile(path.join(process.cwd(), filePath), "utf8"),
+          ),
+        ),
+      )
+    ).flat();
+
+    expect(
+      imports.filter((entry) =>
+        forbiddenImportFragments.some((fragment) =>
+          entry.specifier.includes(fragment),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  test("package declaration roots are constrained to entrypoint contracts", async () => {
+    const packageDeclarationRoots = await Promise.all(
+      [
+        "rielflow",
+        "rielflow-core",
+        "rielflow-addons",
+        "rielflow-adapters",
+        "rielflow-events",
+        "rielflow-graphql",
+        "rielflow-hook",
+        "rielflow-server",
+      ].map(async (packageName) => {
+        const distEntries = await readdir(
+          path.join(process.cwd(), "packages", packageName, "dist"),
+          { withFileTypes: true },
+        );
+        return {
+          packageName,
+          declarations: distEntries
+            .filter((entry) => entry.isFile() && entry.name.endsWith(".d.ts"))
+            .map((entry) => entry.name)
+            .sort((a, b) => a.localeCompare(b)),
+        };
+      }),
+    );
+
+    expect(packageDeclarationRoots).toEqual([
+      {
+        packageName: "rielflow",
+        declarations: [
+          "cli.d.ts",
+          "lib-continuation.d.ts",
+          "lib-sessions.d.ts",
+          "lib-step-runs.d.ts",
+          "lib-workflow-run-options.d.ts",
+          "lib.d.ts",
+          "main.d.ts",
+        ],
+      },
+      {
+        packageName: "rielflow-core",
+        declarations: [
+          "authored-node.d.ts",
+          "authored-workflow.d.ts",
+          "index.d.ts",
+          "json-schema.d.ts",
+          "node-template-fields.d.ts",
+          "paths.d.ts",
+          "prompt-template-context.d.ts",
+          "prompt-template-file.d.ts",
+          "render.d.ts",
+          "result.d.ts",
+          "runtime-prompt-assets.d.ts",
+          "workflow-bundle-input.d.ts",
+          "workflow-model.d.ts",
+          "workflow-validation.d.ts",
+        ],
+      },
+      {
+        packageName: "rielflow-addons",
+        declarations: [
+          "addon-source-summary.d.ts",
+          "index.d.ts",
+          "local-node-addons.d.ts",
+          "mailbox-prompt-guidance.d.ts",
+          "node-addons.d.ts",
+          "runtime-readiness.d.ts",
+        ],
+      },
+      {
+        packageName: "rielflow-adapters",
+        declarations: [
+          "anthropic-sdk.d.ts",
+          "claude.d.ts",
+          "codex.d.ts",
+          "cursor.d.ts",
+          "dispatch.d.ts",
+          "index.d.ts",
+          "llm-session-stall-watch.d.ts",
+          "local-agent.d.ts",
+          "openai-sdk.d.ts",
+          "shared.d.ts",
+        ],
+      },
+      {
+        packageName: "rielflow-events",
+        declarations: [
+          "index.d.ts",
+          "path-resolution.d.ts",
+          "runtime-ports.d.ts",
+          "types.d.ts",
+        ],
+      },
+      {
+        packageName: "rielflow-graphql",
+        declarations: [
+          "control-plane-service.d.ts",
+          "dto.d.ts",
+          "index.d.ts",
+          "schema-contract.d.ts",
+        ],
+      },
+      {
+        packageName: "rielflow-hook",
+        declarations: [
+          "config.d.ts",
+          "context.d.ts",
+          "detect-vendor.d.ts",
+          "dispatch.d.ts",
+          "handler.d.ts",
+          "index.d.ts",
+          "parse.d.ts",
+          "recorder-contracts.d.ts",
+          "redaction.d.ts",
+          "types.d.ts",
+        ],
+      },
+      {
+        packageName: "rielflow-server",
+        declarations: ["browser-overview.d.ts", "contracts.d.ts", "index.d.ts"],
+      },
+    ]);
+  });
+
+  test("built package declaration dependencies are declared in package manifests", async () => {
+    const workspacePackageNames = await collectWorkspacePackageNames();
+    const dependencyReferences = await Promise.all(
+      workspacePackageNames.map(async (packageName) => {
+        const packageDir = path.posix.join("packages", packageName);
+        const manifest = await readManifest(
+          path.posix.join(packageDir, "package.json"),
+        );
+        const declarationFiles = await collectTypeScriptFiles(
+          path.posix.join(packageDir, "dist"),
+        );
+        const references = (
+          await Promise.all(
+            declarationFiles.map(async (filePath) =>
+              collectWorkspaceDeclarationDependencyReferences(
+                filePath,
+                await readFile(path.join(process.cwd(), filePath), "utf8"),
+                workspacePackageNames,
+              ),
+            ),
+          )
+        )
+          .flat()
+          .filter((reference) => reference.dependencyName !== packageName);
+
+        return {
+          packageName,
+          referencedDependencies: Array.from(
+            new Set(references.map((reference) => reference.dependencyName)),
+          ).sort((a, b) => a.localeCompare(b)),
+          declaredDependencies: Object.keys(manifest.dependencies ?? {}).sort(
+            (a, b) => a.localeCompare(b),
+          ),
+        };
+      }),
+    );
+
+    expect(
+      dependencyReferences.map(
+        ({ packageName, referencedDependencies, declaredDependencies }) => ({
+          packageName,
+          missingDependencies: referencedDependencies.filter(
+            (dependencyName) => !declaredDependencies.includes(dependencyName),
+          ),
+        }),
+      ),
+    ).toEqual(
+      workspacePackageNames.map((packageName) => ({
+        packageName,
+        missingDependencies: [],
+      })),
+    );
+  });
+
+  test("events and hook packages own contracts without root source imports", async () => {
+    const contractFiles = [
+      "packages/rielflow-events/src/runtime-ports.ts",
+      "packages/rielflow-events/src/path-resolution.ts",
+      "packages/rielflow-events/src/types.ts",
+      "packages/rielflow-hook/src/config.ts",
+      "packages/rielflow-hook/src/context.ts",
+      "packages/rielflow-hook/src/detect-vendor.ts",
+      "packages/rielflow-hook/src/dispatch.ts",
+      "packages/rielflow-hook/src/handler.ts",
+      "packages/rielflow-hook/src/parse.ts",
+      "packages/rielflow-hook/src/recorder-contracts.ts",
+      "packages/rielflow-hook/src/redaction.ts",
+      "packages/rielflow-hook/src/types.ts",
+    ];
+    const rootImports = uniqueSortedRootImports(
+      (
+        await Promise.all(
+          contractFiles.map(async (filePath) =>
+            collectPackageRootImports(
+              filePath,
+              await readFile(path.join(process.cwd(), filePath), "utf8"),
+            ),
+          ),
+        )
+      ).flat(),
+    );
+
+    expect(rootImports).toEqual([]);
+  });
+
+  test("add-ons package dist declarations resolve package-owned references", async () => {
+    const { files: declarationFiles, missingReferences } =
+      await collectReachableDeclarationFiles(
+        "packages/rielflow-addons/dist/index.d.ts",
+      );
+
+    expect(declarationFiles).toEqual(
+      [
+        "packages/rielflow-addons/dist/addon-source-summary.d.ts",
+        "packages/rielflow-addons/dist/index.d.ts",
+        "packages/rielflow-addons/dist/local-node-addons.d.ts",
+        "packages/rielflow-addons/dist/mailbox-prompt-guidance.d.ts",
+        "packages/rielflow-addons/dist/native-node-executor/git-and-addon-execution.d.ts",
+        "packages/rielflow-addons/dist/native-node-executor/template-env-and-containers.d.ts",
+        "packages/rielflow-addons/dist/node-addons.d.ts",
+        "packages/rielflow-addons/dist/node-addons/addon-constants-and-agent-config.d.ts",
+        "packages/rielflow-addons/dist/node-addons/addon-payload-resolution.d.ts",
+        "packages/rielflow-addons/dist/node-addons/gateway-and-git-config.d.ts",
+        "packages/rielflow-addons/dist/runtime-readiness.d.ts",
+      ].sort((a, b) => a.localeCompare(b)),
+    );
+    expect(missingReferences).toEqual([]);
+
+    const leakedSourceImports = (
+      await Promise.all(
+        declarationFiles.map(async (filePath) => ({
+          filePath,
+          source: await readFile(path.join(process.cwd(), filePath), "utf8"),
+        })),
+      )
+    ).filter(({ source }) => source.includes("rielflow-core/src"));
+
+    expect(leakedSourceImports).toEqual([]);
+  });
+
+  test("core async add-on boundary delegates third-party resolver normalization to add-ons package", async () => {
+    const source = await readFile(
+      path.join(
+        process.cwd(),
+        "packages/rielflow/src/workflow/addon-package-boundary.ts",
+      ),
+      "utf8",
+    );
+    const asyncBoundaryStart = source.indexOf(
+      "export async function resolveBoundaryNodeAddonPayloadAsync",
+    );
+    const syncBoundaryStart = source.indexOf(
+      "export function resolveBoundaryNodeAddonPayloadSync",
+    );
+
+    expect(asyncBoundaryStart).toBeGreaterThanOrEqual(0);
+    expect(syncBoundaryStart).toBeGreaterThan(asyncBoundaryStart);
+
+    const asyncBoundarySource = source.slice(
+      asyncBoundaryStart,
+      syncBoundaryStart,
+    );
+    expect(asyncBoundarySource).toContain("loadBoundaryAddonPackage");
+    expect(asyncBoundarySource).toContain("resolveNodeAddonPayloadAsync");
+    expect(asyncBoundarySource).not.toContain(
+      "for (const resolver of input.thirdPartyResolvers",
+    );
+  });
+
+  test("adapters package dist declarations resolve package-owned references", async () => {
+    const { files: declarationFiles, missingReferences } =
+      await collectReachableDeclarationFiles(
+        "packages/rielflow-adapters/dist/index.d.ts",
+      );
+
+    expect(declarationFiles).toEqual(
+      [
+        "packages/rielflow-adapters/dist/anthropic-sdk.d.ts",
+        "packages/rielflow-adapters/dist/claude.d.ts",
+        "packages/rielflow-adapters/dist/codex.d.ts",
+        "packages/rielflow-adapters/dist/cursor.d.ts",
+        "packages/rielflow-adapters/dist/dispatch.d.ts",
+        "packages/rielflow-adapters/dist/index.d.ts",
+        "packages/rielflow-adapters/dist/llm-session-stall-watch.d.ts",
+        "packages/rielflow-adapters/dist/openai-sdk.d.ts",
+        "packages/rielflow-adapters/dist/shared.d.ts",
+      ].sort((a, b) => a.localeCompare(b)),
+    );
+    expect(missingReferences).toEqual([]);
+
+    const leakedSourceImports = (
+      await Promise.all(
+        declarationFiles.map(async (filePath) => ({
+          filePath,
+          source: await readFile(path.join(process.cwd(), filePath), "utf8"),
+        })),
+      )
+    ).filter(({ source }) => source.includes("rielflow-core/src"));
+
+    expect(leakedSourceImports).toEqual([]);
+  });
+
+  test("workspace does not create an unverified provisioning package", async () => {
+    const packageEntries = await readdir(path.join(process.cwd(), "packages"), {
+      withFileTypes: true,
+    });
+
+    expect(
+      packageEntries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .filter((name) => name.includes("provision"))
+        .sort(),
+    ).toEqual([]);
+  });
+
+  test("source package facades preserve their documented public contracts", async () => {
+    const compatibility = await importRepositoryModule(
+      "packages/rielflow/src/index.ts",
+    );
+    expect(sortedExportKeys(compatibility)).toContain("executeWorkflow");
+
+    const addons = await importRepositoryModule(
+      "packages/rielflow-addons/src/index.ts",
+    );
+    const sourceNodeAddons = await importRepositoryModule(
+      "packages/rielflow/src/workflow/node-addons.ts",
+    );
+    const sourceLocalNodeAddons = await importRepositoryModule(
+      "packages/rielflow/src/workflow/local-node-addons.ts",
+    );
+    const sourceAddonSummaries = await importRepositoryModule(
+      "packages/rielflow/src/workflow/addon-source-summary.ts",
+    );
+    const sourceMailboxGuidance = await importRepositoryModule(
+      "packages/rielflow/src/workflow/mailbox-prompt-guidance.ts",
+    );
+    expect(sortedExportKeys(addons)).toEqual(
+      [
+        ...sortedExportKeys(sourceNodeAddons),
+        ...sortedExportKeys(sourceLocalNodeAddons),
+        ...sortedExportKeys(sourceAddonSummaries),
+        ...sortedExportKeys(sourceMailboxGuidance),
+        "executeAddonNode",
+        "executeNativeNode",
+        "isContainerRunnerWithDockerCli",
+        "isGatewayReadinessAddon",
+      ].sort(),
+    );
+
+    const adapters = await importRepositoryModule(
+      "packages/rielflow-adapters/src/index.ts",
+    );
+    const sourceDispatch = await importRepositoryModule(
+      "packages/rielflow/src/workflow/adapters/dispatch.ts",
+    );
+    expect(typeof adapters["DispatchingNodeAdapter"]).toBe("function");
+    expect(adapters["DispatchingNodeAdapter"]).toBe(
+      sourceDispatch["DispatchingNodeAdapter"],
+    );
+
+    const events = await importRepositoryModule(
+      "packages/rielflow-events/src/index.ts",
+    );
+    const eventPathResolution = await importRepositoryModule(
+      "packages/rielflow-events/src/path-resolution.ts",
+    );
+    expect(events["resolveEventPathReference"]).toBe(
+      eventPathResolution["resolveEventPathReference"],
+    );
+  });
+
+  test("core source facade stays within the core runtime contract", async () => {
+    const core = await importRepositoryModule(
+      "packages/rielflow-core/src/index.ts",
+    );
+
+    expect(sortedExportKeys(core)).toEqual([
+      "AdapterExecutionError",
+      "CLI_AGENT_BACKENDS",
+      "DEFAULT_SELF_IMPROVE_LOG_LIMIT",
+      "NODE_EXECUTION_BACKEND",
+      "NODE_EXECUTION_BACKENDS",
+      "NODE_EXECUTION_BACKEND_LIST_TEXT",
+      "NODE_TEMPLATE_FIELD_SPECS",
+      "NodeValidationResult",
+      "SUPERVISION_STALL_ERROR_PREFIX",
+      "applyWorkflowNodePatch",
+      "applyWorkflowNodePatchToRawPayloads",
+      "atomicWriteJsonFile",
+      "atomicWriteTextFile",
+      "buildFanoutGroupSummaries",
+      "buildInspectionSummary",
+      "buildMutableWorkflowWorkspace",
+      "buildPromptTemplateVariables",
+      "buildSupervisionStallWatch",
+      "buildWorkflowUsageCatalog",
+      "buildWorkflowUsageSummary",
+      "callStep",
+      "createCommunicationService",
+      "createExecutionCopyMutableWorkspace",
+      "createLifecycleSupervisionPolicyInput",
+      "createManagerMessageService",
+      "createManagerSessionStore",
+      "createSupervisorProgressEventSink",
+      "createSupervisorProgressRenderer",
+      "createSupervisorRunnerPool",
+      "createWorkflowSupervisorClient",
+      "createWorkflowSupervisorDispatchClient",
+      "createWorkflowSupervisorGraphqlClient",
+      "deriveWorkflowVisualization",
+      "describeSuperviserControlAddon",
+      "err",
+      "executeSuperviserControlNativeOperation",
+      "executeWorkflowSelfImprove",
+      "getEngineSupervisionPatcherId",
+      "getSuperviserControlAddonProviderOperationId",
+      "getSupervisionSummary",
+      "getWorkflowSelfImproveReport",
+      "hasInvalidNodeValidationResult",
+      "hashManagerAuthToken",
+      "isCliAgentBackend",
+      "isSuperviserControlAddonName",
+      "isSupervisionStallLastError",
+      "listEventReplyDispatchesFromRuntimeDb",
+      "listNodeTemplateFieldContainers",
+      "listRuntimeHookEvents",
+      "listRuntimeLlmSessionMessages",
+      "listRuntimeNodeExecutions",
+      "listRuntimeNodeLogs",
+      "listRuntimeSessions",
+      "listSessions",
+      "listWorkflowCatalogSources",
+      "listWorkflowSelfImproveReports",
+      "loadSession",
+      "loadWorkflowFromCatalog",
+      "loadWorkflowFromDisk",
+      "mergeLoadOptionsForSessionMutableBundle",
+      "noopWorkflowRunEventSink",
+      "normalizeCliAgentBackend",
+      "normalizeNodeExecutionBackend",
+      "normalizeOutputContractEnvelope",
+      "normalizeSessionState",
+      "normalizeTextBusinessPayload",
+      "normalizeWorkflowNodePatchMap",
+      "normalizeWorkflowWorkingDirectoryOverride",
+      "ok",
+      "parseJsonObjectCandidate",
+      "parseManagerControlActions",
+      "parseManagerControlPayload",
+      "planSupervisionRemediation",
+      "postDispatchSupervisorConversationThroughGraphql",
+      "readWorkflowNodePatch",
+      "readWorkflowPatchRevisionsFromArtifact",
+      "recordWorkflowPatchRevision",
+      "renderPromptTemplate",
+      "resolveAddonSource",
+      "resolveAmbientManagerExecutionContext",
+      "resolveCurrentStepId",
+      "resolveCurrentStepIdFromWorkflow",
+      "resolveNodeExecutionWorkingDirectory",
+      "resolveRuntimeDbPath",
+      "resolveSupervisionRerunAnchor",
+      "resolveSupervisionRerunTarget",
+      "resolveWorkflowCreateSource",
+      "resolveWorkflowScopeSelector",
+      "resolveWorkflowSelfImprovePolicy",
+      "resolveWorkflowSource",
+      "runWorkflow",
+      "saveSession",
+      "validateJsonSchemaDefinition",
+      "validateJsonValueAgainstSchema",
+      "verifyManagerAuthToken",
+      "withResolvedWorkflowSourceOptions",
+    ]);
+    expect(core["runCli"]).toBeUndefined();
+    expect(core["startServe"]).toBeUndefined();
+    expect(core["handleApiRequest"]).toBeUndefined();
+    expect(core["createGraphqlSchema"]).toBeUndefined();
+    expect(core["createNodeAddonRegistry"]).toBeUndefined();
+    expect(core["executeNativeNode"]).toBeUndefined();
+  });
+
+  test("core package build does not inline add-on implementation ownership", async () => {
+    const coreEntrypoint = [
+      await readFile(
+        path.join(process.cwd(), "packages/rielflow-core/dist/index.js"),
+        "utf8",
+      ),
+      await readFile(
+        path.join(process.cwd(), "packages/rielflow-core/dist/core-runtime.js"),
+        "utf8",
+      ),
+    ].join("\n");
+
+    expect(coreEntrypoint).not.toContain("GIT_COMMIT_ADDON");
+    expect(coreEntrypoint).not.toContain("executeNativeNode");
+    expect(coreEntrypoint).not.toContain("createNodeAddonRegistry");
+    expect(coreEntrypoint).not.toContain("native-node");
+    expect(coreEntrypoint).not.toContain("node-addons");
+    expect(coreEntrypoint).not.toContain("rielflow/git-commit");
+    expect(coreEntrypoint).not.toContain("rielflow/git-push");
+    expect(coreEntrypoint).not.toContain("rielflow/x-gateway");
+    expect(coreEntrypoint).not.toContain("rielflow/mail-gateway");
+    expect(coreEntrypoint).not.toContain("chat-reply-worker");
+  });
+
+  test("built package entrypoints import from isolated package copies", async () => {
+    const compat = await importCopiedPackageEntrypoint(
+      "rielflow",
+      "dist/lib.js",
+    );
+    const core = await importCopiedPackageEntrypoint(
+      "rielflow-core",
+      "dist/index.js",
+    );
+    const addons = await importCopiedPackageEntrypoint(
+      "rielflow-addons",
+      "dist/index.js",
+    );
+    const events = await importCopiedPackageEntrypoint(
+      "rielflow-events",
+      "dist/path-resolution.js",
+    );
+    const copiedAdapterInstall = await importCopiedPackageEntrypoints([
+      { packageName: "rielflow-core", entrypoint: "dist/index.js" },
+      { packageName: "rielflow-adapters", entrypoint: "dist/index.js" },
+    ]);
+    const adapters = copiedAdapterInstall["rielflow-adapters"];
+
+    expect(typeof compat["continueWorkflowFromHistory"]).toBe("function");
+    expect(typeof core["runWorkflow"]).toBe("function");
+    expect(typeof addons["createNodeAddonRegistry"]).toBe("function");
+    expect(typeof events["resolveEventPathReference"]).toBe("function");
+    expect(typeof adapters?.["DispatchingNodeAdapter"]).toBe("function");
+  });
+
+  test("built adapter package shares core adapter error identity", async () => {
+    const copiedAdapterInstall = await importCopiedPackageEntrypoints([
+      { packageName: "rielflow-core", entrypoint: "dist/index.js" },
+      { packageName: "rielflow-adapters", entrypoint: "dist/index.js" },
+    ]);
+    const core = copiedAdapterInstall["rielflow-core"];
+    const adapters = copiedAdapterInstall["rielflow-adapters"];
+    const AdapterExecutionError = core?.[
+      "AdapterExecutionError"
+    ] as AdapterExecutionErrorConstructor;
+    const normalizeAdapterFailure = adapters?.[
+      "normalizeAdapterFailure"
+    ] as NormalizeAdapterFailure;
+
+    expect(typeof AdapterExecutionError).toBe("function");
+    expect(typeof normalizeAdapterFailure).toBe("function");
+
+    const existingError = new AdapterExecutionError(
+      "provider_error",
+      "provider failed",
+    );
+    expect(normalizeAdapterFailure(existingError, "fallback")).toBe(
+      existingError,
+    );
+    expect(
+      normalizeAdapterFailure(new Error("failed"), "fallback"),
+    ).toBeInstanceOf(AdapterExecutionError);
+  });
+
+  test("built cli subpath is import-safe", async () => {
+    const beforeExitCode = process.exitCode;
+    const stdoutWrite = process.stdout.write;
+    const stderrWrite = process.stderr.write;
+    const writes: string[] = [];
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const cli = (await import(
+        pathToFileURL(path.join(process.cwd(), "packages/rielflow/dist/cli.js"))
+          .href
+      )) as Readonly<Record<string, unknown>>;
+      expect(typeof cli["runCli"]).toBe("function");
+      expect(process.exitCode).toBe(beforeExitCode);
+      expect(writes.join("")).toBe("");
+    } finally {
+      process.stdout.write = stdoutWrite;
+      process.stderr.write = stderrWrite;
+    }
+  });
+});

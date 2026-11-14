@@ -1,0 +1,11 @@
+{
+  "id": "step2-handoff",
+  "description": "Package the next incomplete active implementation plan for delegated execution by design-and-implement-review-loop.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/step2-handoff.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON whose payload contains workflowInput for design-and-implement-review-loop plus selected plan metadata and handoff notes."
+  }
+}
