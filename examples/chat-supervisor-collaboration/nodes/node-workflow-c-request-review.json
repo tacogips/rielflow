@@ -1,0 +1,10 @@
+{
+  "id": "workflow-c-request-review",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/workflow-c-request-review.md",
+  "variables": {},
+  "output": {
+    "description": "Return review requests addressed to Workflow A and Workflow B chat destinations."
+  }
+}

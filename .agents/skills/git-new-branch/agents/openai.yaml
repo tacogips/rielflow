@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git New Branch"
+  short_description: "Create branches in managed worktrees"
+  default_prompt: "Use $git-new-branch to create a new branch in a managed git worktree."

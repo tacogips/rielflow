@@ -1,0 +1,44 @@
+{
+  "route-message": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.4-mini",
+    "when": {
+      "target_yui": true,
+      "target_mika": false,
+      "target_rina": false
+    },
+    "payload": {
+      "target": "yui",
+      "reason": "No persona was named, so Yui is the default responder.",
+      "target_yui": true,
+      "target_mika": false,
+      "target_rina": false
+    }
+  },
+  "yui-codex": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.4-mini",
+    "when": {
+      "handoff_mika": true,
+      "handoff_rina": false
+    },
+    "payload": {
+      "replyText": "Yuiです。まず私の意見としては、3人の役割を明確に分けて、通常対応は私、流行や見せ方はMika、深い技術検討はRinaに任せる形が扱いやすいです。Mikaの視点も聞いてみます。",
+      "handoff_mika": true,
+      "handoff_rina": false
+    }
+  },
+  "mika-claude": {
+    "provider": "scenario-mock",
+    "model": "claude-sonnet-4-5",
+    "when": {
+      "handoff_yui": false,
+      "handoff_rina": false
+    },
+    "payload": {
+      "replyText": "Mikaだよ。見え方としては名前が短くて呼びやすいのが大事。Yui、Mika、RinaならTelegramでも読みやすいし、キャラ差も一発で伝わると思う。",
+      "handoff_yui": false,
+      "handoff_rina": false
+    }
+  }
+}
