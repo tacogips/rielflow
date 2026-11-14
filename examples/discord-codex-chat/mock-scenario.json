@@ -1,0 +1,12 @@
+{
+  "answer-discord-message": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.4-mini",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "replyText": "おはよう。いいね、ここでそのまま雑談でも作業依頼でも投げて。やることがあれば内容を送ってくれたら進めるよ。"
+    }
+  }
+}

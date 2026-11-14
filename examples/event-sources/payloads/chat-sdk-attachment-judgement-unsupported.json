@@ -1,0 +1,29 @@
+{
+  "provider": "slack",
+  "eventId": "chat-sdk-attachment-judgement-evt-unsupported",
+  "eventType": "message",
+  "occurredAt": "2026-05-14T00:10:00.000Z",
+  "actor": {
+    "id": "U789",
+    "displayName": "Archive Operator"
+  },
+  "conversation": {
+    "id": "C123",
+    "threadId": "1720000000.000300"
+  },
+  "message": {
+    "text": "Classify this archive if possible.",
+    "format": "plain",
+    "attachments": [
+      {
+        "id": "archive-unknown",
+        "kind": "other",
+        "mediaType": "application/zip",
+        "filename": "evidence-bundle.zip",
+        "sizeBytes": 512000,
+        "contentRef": "chat-sdk/chat-sdk-attachment-judgement-evt-unsupported/evidence-bundle.zip",
+        "classificationHints": ["unsupported-archive"]
+      }
+    ]
+  }
+}
