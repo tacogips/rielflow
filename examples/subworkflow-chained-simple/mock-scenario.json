@@ -1,0 +1,110 @@
+{
+  "rielflow-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "root-dispatch",
+      "policy": "sequential-lanes"
+    }
+  },
+  "alpha-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "alpha-dispatch"
+    }
+  },
+  "alpha-input": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "normalizedRequest": "Process the seed phrase for alpha-worker.",
+      "constraints": [
+        "Stay concise",
+        "Return structured JSON"
+      ]
+    }
+  },
+  "alpha-worker": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "intermediate": {
+        "token": "alpha-token-1",
+        "detail": "alpha stage completed"
+      }
+    }
+  },
+  "alpha-output": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "token": "alpha-token-1",
+      "status": "ready",
+      "notes": [
+        "alpha-lane published output for the next ordered beta lane"
+      ]
+    }
+  },
+  "beta-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "beta-dispatch"
+    }
+  },
+  "beta-input": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "normalizedRequest": "Finalize using the alpha-lane token.",
+      "upstreamToken": "alpha-token-1"
+    }
+  },
+  "beta-worker": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "answer": "beta stage consumed alpha output.",
+      "detail": "chained lane demo"
+    }
+  },
+  "beta-output": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "summary": "Chained lane example completed.",
+      "status": "ready",
+      "notes": [
+        "beta-lane followed alpha-lane in ordered node flow"
+      ]
+    }
+  }
+}
