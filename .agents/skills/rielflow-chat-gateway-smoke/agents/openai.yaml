@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rielflow Chat Gateway Smoke"
+  short_description: "Live chat gateway smoke tests"
+  default_prompt: "Use $rielflow-chat-gateway-smoke to run live smoke tests for rielflow Discord, Telegram, and Matrix chat gateways with Computer Use."
