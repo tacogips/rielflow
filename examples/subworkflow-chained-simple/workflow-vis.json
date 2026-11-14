@@ -1,0 +1,40 @@
+{
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "order": 0
+    },
+    {
+      "id": "alpha-manager",
+      "order": 1
+    },
+    {
+      "id": "alpha-input",
+      "order": 2
+    },
+    {
+      "id": "alpha-worker",
+      "order": 3
+    },
+    {
+      "id": "alpha-output",
+      "order": 4
+    },
+    {
+      "id": "beta-manager",
+      "order": 5
+    },
+    {
+      "id": "beta-input",
+      "order": 6
+    },
+    {
+      "id": "beta-worker",
+      "order": 7
+    },
+    {
+      "id": "beta-output",
+      "order": 8
+    }
+  ]
+}

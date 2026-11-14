@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "order": 0
+    },
+    {
+      "id": "add-manager",
+      "order": 1
+    },
+    {
+      "id": "add-input",
+      "order": 2
+    },
+    {
+      "id": "add-worker",
+      "order": 3
+    },
+    {
+      "id": "add-output",
+      "order": 4
+    },
+    {
+      "id": "multiply-manager",
+      "order": 5
+    },
+    {
+      "id": "multiply-input",
+      "order": 6
+    },
+    {
+      "id": "multiply-worker",
+      "order": 7
+    },
+    {
+      "id": "multiply-output",
+      "order": 8
+    },
+    {
+      "id": "divide-manager",
+      "order": 9
+    },
+    {
+      "id": "divide-input",
+      "order": 10
+    },
+    {
+      "id": "divide-worker",
+      "order": 11
+    },
+    {
+      "id": "divide-output",
+      "order": 12
+    }
+  ],
+  "uiMeta": {
+    "layout": "vertical"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "id": "container-worker",
+  "nodeType": "container",
+  "variables": {
+    "lane": "container"
+  },
+  "container": {
+    "build": {
+      "contextPath": "containers/mock-worker",
+      "containerfilePath": "containers/mock-worker/Containerfile"
+    },
+    "entrypoint": [
+      "/bin/sh",
+      "-lc"
+    ],
+    "argsTemplate": [
+      "echo container showcase lane"
+    ],
+    "envTemplate": {
+      "SHOWCASE_LANE": "container"
+    },
+    "workingDirectory": "/workspace",
+    "workspace": {
+      "mode": "ephemeral",
+      "mountPath": "/workspace"
+    },
+    "resources": {
+      "cpuMax": 1,
+      "memoryMaxMb": 256,
+      "pidsMax": 64
+    },
+    "networkPolicy": "disabled"
+  },
+  "durability": {
+    "mode": "node-persistent",
+    "mountPath": "/durable"
+  },
+  "output": {
+    "description": "Return a compact summary of the container lane result."
+  }
+}

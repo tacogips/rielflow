@@ -1,0 +1,615 @@
+{
+  "divedra-manager": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "start_affirmative": true
+      },
+      "payload": {
+        "stage": "root-dispatch",
+        "policy": "affirmative-starts"
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "start_affirmative": false
+      },
+      "payload": {
+        "stage": "conversation-dispatch",
+        "policy": "runtime-managed-turns"
+      }
+    }
+  ],
+  "affirmative-manager": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 1
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 2
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 3
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 4
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 5
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 6
+      }
+    }
+  ],
+  "affirmative-input": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 1,
+        "topic": "euthanasia",
+        "opponentClaim": null
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 2,
+        "topic": "euthanasia",
+        "opponentClaim": "Legalizing euthanasia risks coercion and weakens protection for vulnerable patients."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 3,
+        "topic": "euthanasia",
+        "opponentClaim": "Even with safeguards, prognoses can be wrong and pressure can remain hidden."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 4,
+        "topic": "euthanasia",
+        "opponentClaim": "Palliative care should be improved instead of making intentional death part of medicine."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 5,
+        "topic": "euthanasia",
+        "opponentClaim": "Normalizing euthanasia can subtly change expectations for disabled or elderly people."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 6,
+        "topic": "euthanasia",
+        "opponentClaim": "Review boards and consent checks cannot eliminate every wrongful death."
+      }
+    }
+  ],
+  "affirmative-speaker": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 1,
+        "argument": "Permitting euthanasia under strict safeguards respects patient autonomy when suffering is unbearable and irreversible.",
+        "responseToOpponent": "Opening statement.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 2,
+        "argument": "Safeguards such as capacity checks, waiting periods, and independent review can narrow the risk of coercion.",
+        "responseToOpponent": "Risk to vulnerable patients is real, but regulation is more protective than forcing desperate decisions into secrecy.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 3,
+        "argument": "Medical uncertainty already exists in end-of-life care, so the answer is stronger review rather than denying all choice.",
+        "responseToOpponent": "Prognostic error is a reason for stricter eligibility, not a reason to remove every option for competent adults.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 4,
+        "argument": "Palliative care and euthanasia are not mutually exclusive; a system can improve comfort care while preserving last-resort autonomy.",
+        "responseToOpponent": "Better palliative care helps many patients, but it does not answer every case of enduring loss of dignity or suffering.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 5,
+        "argument": "Respectful legal frameworks can affirm that no one is obligated to choose euthanasia while still allowing it for those who persistently request it.",
+        "responseToOpponent": "A ban can also create harmful social pressure by trapping patients in prolonged suffering they clearly reject.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 6,
+        "argument": "The strongest ethical case remains autonomy constrained by evidence, review, and explicit voluntary consent.",
+        "responseToOpponent": "No safeguard is perfect, but regulated choice can still be ethically preferable to denying relief in every case.",
+        "done": true
+      }
+    }
+  ],
+  "affirmative-output": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 1,
+        "argument": "Permitting euthanasia under strict safeguards respects patient autonomy when suffering is unbearable and irreversible.",
+        "responseToOpponent": "Opening statement.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 2,
+        "argument": "Safeguards such as capacity checks, waiting periods, and independent review can narrow the risk of coercion.",
+        "responseToOpponent": "Risk to vulnerable patients is real, but regulation is more protective than forcing desperate decisions into secrecy.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 3,
+        "argument": "Medical uncertainty already exists in end-of-life care, so the answer is stronger review rather than denying all choice.",
+        "responseToOpponent": "Prognostic error is a reason for stricter eligibility, not a reason to remove every option for competent adults.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 4,
+        "argument": "Palliative care and euthanasia are not mutually exclusive; a system can improve comfort care while preserving last-resort autonomy.",
+        "responseToOpponent": "Better palliative care helps many patients, but it does not answer every case of enduring loss of dignity or suffering.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 5,
+        "argument": "Respectful legal frameworks can affirm that no one is obligated to choose euthanasia while still allowing it for those who persistently request it.",
+        "responseToOpponent": "A ban can also create harmful social pressure by trapping patients in prolonged suffering they clearly reject.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "affirmative",
+        "turnNumber": 6,
+        "argument": "The strongest ethical case remains autonomy constrained by evidence, review, and explicit voluntary consent.",
+        "responseToOpponent": "No safeguard is perfect, but regulated choice can still be ethically preferable to denying relief in every case.",
+        "done": true,
+        "summary": "Debate reached the configured 10-turn cap with the affirmative side delivering the final published turn."
+      }
+    }
+  ],
+  "negative-manager": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 1
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 2
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 3
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 4
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 5
+      }
+    }
+  ],
+  "negative-input": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 1,
+        "topic": "euthanasia",
+        "opponentClaim": "Permitting euthanasia under strict safeguards respects patient autonomy when suffering is unbearable and irreversible."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 2,
+        "topic": "euthanasia",
+        "opponentClaim": "Safeguards such as capacity checks, waiting periods, and independent review can narrow the risk of coercion."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 3,
+        "topic": "euthanasia",
+        "opponentClaim": "Medical uncertainty already exists in end-of-life care, so the answer is stronger review rather than denying all choice."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 4,
+        "topic": "euthanasia",
+        "opponentClaim": "Palliative care and euthanasia are not mutually exclusive; a system can improve comfort care while preserving last-resort autonomy."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 5,
+        "topic": "euthanasia",
+        "opponentClaim": "Respectful legal frameworks can affirm that no one is obligated to choose euthanasia while still allowing it for those who persistently request it."
+      }
+    }
+  ],
+  "negative-speaker": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 1,
+        "argument": "Legalizing euthanasia risks coercion and weakens protection for vulnerable patients whose choices may be shaped by fear, cost, or pressure.",
+        "responseToOpponent": "Autonomy matters, but the law must account for unequal power and hidden coercion.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 2,
+        "argument": "Even with safeguards, prognoses can be wrong and pressure can remain hidden in family or institutional settings.",
+        "responseToOpponent": "Review processes cannot reliably observe every subtle form of coercion or despair.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 3,
+        "argument": "Palliative care should be improved instead of making intentional death part of medicine.",
+        "responseToOpponent": "Expanding care reduces suffering without normalizing doctors as agents of death.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 4,
+        "argument": "Normalizing euthanasia can subtly change expectations for disabled or elderly people who already feel like burdens.",
+        "responseToOpponent": "Legal choice can still create ambient pressure even when no one openly forces it.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 5,
+        "argument": "Review boards and consent checks cannot eliminate every wrongful death, so the moral cost of legalization remains too high.",
+        "responseToOpponent": "When the failure mode is an irreversible death, residual risk carries unusual ethical weight.",
+        "done": false
+      }
+    }
+  ],
+  "negative-output": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 1,
+        "argument": "Legalizing euthanasia risks coercion and weakens protection for vulnerable patients whose choices may be shaped by fear, cost, or pressure.",
+        "responseToOpponent": "Autonomy matters, but the law must account for unequal power and hidden coercion.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 2,
+        "argument": "Even with safeguards, prognoses can be wrong and pressure can remain hidden in family or institutional settings.",
+        "responseToOpponent": "Review processes cannot reliably observe every subtle form of coercion or despair.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 3,
+        "argument": "Palliative care should be improved instead of making intentional death part of medicine.",
+        "responseToOpponent": "Expanding care reduces suffering without normalizing doctors as agents of death.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 4,
+        "argument": "Normalizing euthanasia can subtly change expectations for disabled or elderly people who already feel like burdens.",
+        "responseToOpponent": "Legal choice can still create ambient pressure even when no one openly forces it.",
+        "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 5,
+        "argument": "Review boards and consent checks cannot eliminate every wrongful death, so the moral cost of legalization remains too high.",
+        "responseToOpponent": "When the failure mode is an irreversible death, residual risk carries unusual ethical weight.",
+        "done": false
+      }
+    }
+  ]
+}

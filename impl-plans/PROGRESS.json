@@ -1,0 +1,1943 @@
+{
+  "lastUpdated": "2026-03-30T12:47:57Z",
+  "phases": {
+    "1": { "status": "COMPLETED" },
+    "2": { "status": "COMPLETED" },
+    "3": { "status": "COMPLETED" },
+    "4": { "status": "COMPLETED" },
+    "5": { "status": "COMPLETED" },
+    "6": { "status": "COMPLETED" },
+    "7": { "status": "COMPLETED" },
+    "8": { "status": "COMPLETED" },
+    "9": { "status": "COMPLETED" },
+    "10": { "status": "COMPLETED" },
+    "11": { "status": "COMPLETED" },
+    "12": { "status": "COMPLETED" },
+    "13": { "status": "COMPLETED" },
+    "14": { "status": "COMPLETED" },
+    "15": { "status": "COMPLETED" },
+    "16": { "status": "COMPLETED" },
+    "17": { "status": "COMPLETED" },
+    "18": { "status": "COMPLETED" },
+    "19": { "status": "COMPLETED" },
+    "20": { "status": "COMPLETED" },
+    "21": { "status": "COMPLETED" },
+    "22": { "status": "COMPLETED" },
+    "23": { "status": "COMPLETED" },
+    "24": { "status": "COMPLETED" },
+    "25": { "status": "COMPLETED" },
+    "26": { "status": "COMPLETED" },
+    "27": { "status": "COMPLETED" },
+    "28": { "status": "COMPLETED" },
+    "29": { "status": "COMPLETED" },
+    "30": { "status": "COMPLETED" },
+    "31": { "status": "COMPLETED" },
+    "32": { "status": "COMPLETED" },
+    "33": { "status": "COMPLETED" },
+    "34": { "status": "COMPLETED" },
+    "35": { "status": "COMPLETED" },
+    "36": { "status": "COMPLETED" },
+    "37": { "status": "COMPLETED" },
+    "38": { "status": "COMPLETED" },
+    "39": { "status": "COMPLETED" },
+    "40": { "status": "COMPLETED" },
+    "41": { "status": "COMPLETED" },
+    "42": { "status": "COMPLETED" },
+    "43": { "status": "COMPLETED" },
+    "44": { "status": "COMPLETED" },
+    "45": { "status": "COMPLETED" },
+    "46": { "status": "COMPLETED" },
+    "47": { "status": "COMPLETED" },
+    "48": { "status": "COMPLETED" },
+    "49": { "status": "COMPLETED" },
+    "50": { "status": "COMPLETED" },
+    "51": { "status": "COMPLETED" },
+    "52": { "status": "COMPLETED" },
+    "53": { "status": "COMPLETED" },
+    "54": { "status": "COMPLETED" },
+    "55": { "status": "COMPLETED" },
+    "56": { "status": "COMPLETED" },
+    "57": { "status": "COMPLETED" },
+    "58": { "status": "COMPLETED" },
+    "59": { "status": "COMPLETED" },
+    "60": { "status": "COMPLETED" },
+    "61": { "status": "COMPLETED" },
+    "62": { "status": "COMPLETED" },
+    "63": { "status": "COMPLETED" },
+    "64": { "status": "COMPLETED" },
+    "65": { "status": "COMPLETED" },
+    "66": { "status": "COMPLETED" },
+    "67": { "status": "COMPLETED" },
+    "68": { "status": "COMPLETED" },
+    "69": { "status": "COMPLETED" },
+    "70": { "status": "COMPLETED" },
+    "71": { "status": "IN_PROGRESS" },
+    "72": { "status": "COMPLETED" },
+    "73": { "status": "COMPLETED" },
+    "74": { "status": "COMPLETED" },
+    "75": { "status": "COMPLETED" },
+    "76": { "status": "COMPLETED" },
+    "77": { "status": "COMPLETED" },
+    "78": { "status": "COMPLETED" },
+    "79": { "status": "COMPLETED" },
+    "80": { "status": "COMPLETED" }
+  },
+  "plans": {
+    "workflow-core-and-validation": {
+      "phase": 1,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "workflow-cli-mvp": {
+      "phase": 2,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["workflow-core-and-validation:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "workflow-core-and-validation:TASK-004"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "workflow-execution-and-session": {
+      "phase": 3,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["workflow-cli-mvp:TASK-004"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["workflow-core-and-validation:TASK-004"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-003"]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-004"]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-005"]
+        }
+      }
+    },
+    "workflow-serve-mvp": {
+      "phase": 4,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["workflow-execution-and-session:TASK-005"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-003"]
+        }
+      }
+    },
+    "workflow-vcs-handoff-checkpoints": {
+      "phase": 5,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["workflow-execution-and-session:TASK-005"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "workflow-save-revision-api": {
+      "phase": 6,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["workflow-serve-mvp:TASK-004"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "workflow-deterministic-mock-and-rerun": {
+      "phase": 7,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["workflow-execution-and-session:TASK-006"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-003"]
+        }
+      }
+    },
+    "autonomous-execution-gap-closure": {
+      "phase": 8,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-004"]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-006", "TASK-005"]
+        },
+        "TASK-008": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005",
+            "TASK-006",
+            "TASK-007"
+          ]
+        }
+      }
+    },
+    "workflow-tui-mvp": {
+      "phase": 9,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "workflow-tui-cli-parity": {
+      "phase": 10,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "workflow-tui-resume-decoupling": {
+      "phase": 11,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        }
+      }
+    },
+    "node-execution-backend-selection": {
+      "phase": 12,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "node-output-contract-and-validation": {
+      "phase": 13,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-004"]
+        }
+      }
+    },
+    "workflow-web-editor-execution": {
+      "phase": 14,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "workflow-serve-mvp:TASK-004",
+            "workflow-save-revision-api:TASK-003"
+          ]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "divedra-manager-prompt-contract": {
+      "phase": 15,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "node-session-reuse": {
+      "phase": 16,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "node-backend-model-separation": {
+      "phase": 17,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "runtime-owned-external-output-publication": {
+      "phase": 18,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "divedra-manager-prompt-contract:TASK-003",
+            "node-output-contract-and-validation:TASK-005"
+          ]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "mailbox-delivery-manager-ownership": {
+      "phase": 19,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "mailbox-output-snapshot-fidelity": {
+      "phase": 20,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["mailbox-delivery-manager-ownership:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "mailbox-cross-boundary-routing-scope": {
+      "phase": 21,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["mailbox-delivery-manager-ownership:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "mailbox-cross-boundary-edge-validation": {
+      "phase": 22,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["mailbox-cross-boundary-routing-scope:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "mailbox-artifact-atomic-writes": {
+      "phase": 23,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["mailbox-output-snapshot-fidelity:TASK-002"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "branch-and-loop-block-subworkflows": {
+      "phase": 24,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-shared-ui-contract": {
+      "phase": 25,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "refactoring-shared-visualization-derivation": {
+      "phase": 26,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-shared-editable-workflow-types": {
+      "phase": 27,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-api-client": {
+      "phase": 28,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["refactoring-shared-ui-contract:TASK-003"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-workflow-operations": {
+      "phase": 29,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "refactoring-shared-editable-workflow-types:TASK-002",
+            "refactoring-shared-visualization-derivation:TASK-002"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-support-helpers": {
+      "phase": 30,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "refactoring-editor-api-client:TASK-002",
+            "refactoring-editor-workflow-operations:TASK-002"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-state-helpers": {
+      "phase": 31,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["refactoring-editor-support-helpers:TASK-002"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-mutation-helpers": {
+      "phase": 32,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "refactoring-editor-workflow-operations:TASK-002",
+            "refactoring-editor-support-helpers:TASK-002",
+            "refactoring-editor-state-helpers:TASK-002"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-data-loaders": {
+      "phase": 33,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "refactoring-editor-api-client:TASK-002",
+            "refactoring-editor-state-helpers:TASK-002"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-field-updates": {
+      "phase": 34,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "refactoring-editor-support-helpers:TASK-002",
+            "refactoring-editor-state-helpers:TASK-002",
+            "refactoring-editor-mutation-helpers:TASK-002"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-server-api-request-parsing": {
+      "phase": 35,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-execution-helpers": {
+      "phase": 36,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "refactoring-editor-support-helpers:TASK-002",
+            "refactoring-editor-api-client:TASK-002"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-action-helpers": {
+      "phase": 37,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "refactoring-editor-api-client:TASK-002",
+            "refactoring-editor-data-loaders:TASK-002",
+            "refactoring-editor-support-helpers:TASK-002",
+            "refactoring-editor-execution-helpers:TASK-002"
+          ]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-server-ui-asset-serving": {
+      "phase": 38,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-component-boundaries": {
+      "phase": 39,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["refactoring-editor-action-helpers:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "refactoring-server-workflow-bundle-parsing": {
+      "phase": 40,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["refactoring-server-api-request-parsing:TASK-002"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-editor-main-panel-component": {
+      "phase": 41,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["refactoring-editor-component-boundaries:TASK-004"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "refactoring-frontend-solidjs-migration": {
+      "phase": 42,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["refactoring-editor-main-panel-component:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-003", "TASK-004", "TASK-005", "TASK-006"]
+        },
+        "TASK-008": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-007"]
+        }
+      }
+    },
+    "refactoring-editor-session-controller": {
+      "phase": 42,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["refactoring-editor-action-helpers:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "refactoring-frontend-solidjs-migration:TASK-007"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "frontend-mode-built-asset-contract": {
+      "phase": 43,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["refactoring-server-ui-asset-serving:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "refactoring-frontend-solidjs-migration:TASK-008"
+          ]
+        }
+      }
+    },
+    "frontend-mode-package-root-alignment": {
+      "phase": 44,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["frontend-mode-built-asset-contract:TASK-002"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "frontend-tooling-package-root-alignment": {
+      "phase": 45,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["frontend-mode-package-root-alignment:TASK-002"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "graphql-manager-control-plane": {
+      "phase": 46,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        }
+      }
+    },
+    "graphql-manager-control-plane-surface": {
+      "phase": 47,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "graphql-manager-control-plane:TASK-001",
+            "graphql-manager-control-plane:TASK-002",
+            "graphql-manager-control-plane:TASK-003"
+          ]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-003", "TASK-002"]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-003", "TASK-004"]
+        }
+      }
+    },
+    "graphql-manager-ambient-context-transport": {
+      "phase": 48,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-control-plane-surface:TASK-004"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "graphql-manager-artifact-atomic-writes": {
+      "phase": 49,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "graphql-manager-runtime-session-lifecycle": {
+      "phase": 50,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "graphql-manager-http-context-isolation": {
+      "phase": 51,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "graphql-manager-ambient-context-transport:TASK-002",
+            "graphql-manager-runtime-session-lifecycle:TASK-003"
+          ]
+        }
+      }
+    },
+    "graphql-manager-control-mode-exclusivity": {
+      "phase": 54,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["graphql-manager-runtime-session-lifecycle:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "graphql-manager-control-mode-claim-atomicity": {
+      "phase": 55,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-control-mode-exclusivity:TASK-002"]
+        }
+      }
+    },
+    "graphql-manager-message-id-collision-safety": {
+      "phase": 56,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-control-plane-surface:TASK-001"]
+        }
+      }
+    },
+    "graphql-manager-idempotency-canonicalization": {
+      "phase": 57,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-control-plane-surface:TASK-001"]
+        }
+      }
+    },
+    "graphql-manager-communication-scope-enforcement": {
+      "phase": 58,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["graphql-manager-control-plane-surface:TASK-001"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "graphql-manager-attachment-scope-enforcement": {
+      "phase": 59,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-control-plane-surface:TASK-001"]
+        }
+      }
+    },
+    "graphql-manager-http-transport-context-hardening": {
+      "phase": 60,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-http-context-isolation:TASK-001"]
+        }
+      }
+    },
+    "graphql-cli-execution-transport": {
+      "phase": 61,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-control-plane-surface:TASK-004"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "runtime-artifact-atomic-write-collision-safety": {
+      "phase": 52,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["graphql-manager-artifact-atomic-writes:TASK-002"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "tui-resume-runtime-variable-merge": {
+      "phase": 53,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["workflow-tui-resume-decoupling:TASK-001"]
+        }
+      }
+    },
+    "graphql-browser-execution-session-migration": {
+      "phase": 62,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-control-plane-surface:TASK-004"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "graphql-browser-workflow-definition-migration": {
+      "phase": 63,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-browser-execution-session-migration:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "graphql-workflow-execution-overview": {
+      "phase": 64,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-browser-execution-session-migration:TASK-003"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "manager-driven-call-node-runtime": {
+      "phase": 65,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "graphql-library-rest-surface-simplification": {
+      "phase": 66,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["graphql-manager-control-plane-surface:TASK-001"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "example-node-combination-showcase": {
+      "phase": 67,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "node-execution-inbox-contract": {
+      "phase": 68,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "user-action-and-optional-node-execution": {
+      "phase": 69,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "manager-kind-simplification": {
+      "phase": 70,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "workflow-role-unification": {
+      "phase": 71,
+      "status": "In Progress",
+      "tasks": {
+        "TASK-001": {
+          "status": "In Progress",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "In Progress",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Not Started",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
+        }
+      }
+    },
+    "simplified-workflow-json-transition-examples": {
+      "phase": 76,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "inline-node-and-nested-example-layout": {
+      "phase": 77,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "tui-opentui-solid-migration": {
+      "phase": 72,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-003"]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-004", "TASK-005"]
+        }
+      }
+    },
+    "tui-solid-runtime-fallback-hardening": {
+      "phase": 72,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["tui-opentui-solid-migration:TASK-006"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "remove-web-ui": {
+      "phase": 72,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "workflow-definition-alignment-follow-up": {
+      "phase": 78,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["inline-node-and-nested-example-layout:TASK-001"]
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "root-data-dir-project-root-scoping": {
+      "phase": 72,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "tui-workflow-browser-and-json-input": {
+      "phase": 71,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        }
+      }
+    },
+    "node-system-and-session-prompts": {
+      "phase": 73,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        }
+      }
+    },
+    "tui-workflow-definition-screen": {
+      "phase": 74,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "example-workflow-expected-results-and-verification": {
+      "phase": 75,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        }
+      }
+    },
+    "tui-workflow-history-delete-all": {
+      "phase": 79,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "workflow-id-filesystem-safety": {
+      "phase": 80,
+      "status": "Completed",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "id": "multiply-worker",
+  "nodeType": "container",
+  "variables": {
+    "stageName": "multiply"
+  },
+  "container": {
+    "build": {
+      "contextPath": "containers/multiply-worker",
+      "containerfilePath": "containers/multiply-worker/Containerfile"
+    },
+    "entrypoint": [
+      "/bin/sh",
+      "-lc"
+    ],
+    "argsTemplate": [
+      "/app/multiply.sh \"$@\"",
+      "--"
+    ],
+    "envTemplate": {
+      "ARITHMETIC_STAGE": "multiply"
+    },
+    "workingDirectory": "/workspace",
+    "workspace": {
+      "mode": "ephemeral",
+      "mountPath": "/workspace"
+    },
+    "resources": {
+      "cpuMax": 1,
+      "memoryMaxMb": 256,
+      "pidsMax": 64
+    },
+    "networkPolicy": "disabled"
+  },
+  "durability": {
+    "mode": "node-persistent",
+    "mountPath": "/durable"
+  },
+  "output": {
+    "description": "Return the multiplication result as a JSON object."
+  }
+}

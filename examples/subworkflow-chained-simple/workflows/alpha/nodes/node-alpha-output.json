@@ -1,0 +1,33 @@
+{
+  "id": "alpha-output",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/alpha-output.md",
+  "variables": {},
+  "output": {
+    "description": "Publish alpha-lane output for downstream sub-workflows.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "token",
+        "status"
+      ],
+      "properties": {
+        "token": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

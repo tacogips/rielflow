@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "order": 0
+    },
+    {
+      "id": "main-divedra",
+      "order": 1
+    },
+    {
+      "id": "workflow-input",
+      "order": 2
+    },
+    {
+      "id": "implementation-brief",
+      "order": 3
+    },
+    {
+      "id": "implement",
+      "order": 4
+    },
+    {
+      "id": "workflow-output",
+      "order": 5
+    }
+  ],
+  "uiMeta": {
+    "layout": "vertical"
+  }
+}

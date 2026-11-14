@@ -1,0 +1,63 @@
+{
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "order": 0
+    },
+    {
+      "id": "command-manager",
+      "order": 1
+    },
+    {
+      "id": "command-input",
+      "order": 2
+    },
+    {
+      "id": "command-worker",
+      "order": 3
+    },
+    {
+      "id": "command-output",
+      "order": 4
+    },
+    {
+      "id": "container-manager",
+      "order": 5
+    },
+    {
+      "id": "container-input",
+      "order": 6
+    },
+    {
+      "id": "container-worker",
+      "order": 7
+    },
+    {
+      "id": "container-output",
+      "order": 8
+    },
+    {
+      "id": "foreach-manager",
+      "order": 9
+    },
+    {
+      "id": "foreach-input",
+      "order": 10
+    },
+    {
+      "id": "foreach-worker",
+      "order": 11
+    },
+    {
+      "id": "foreach-judge",
+      "order": 12
+    },
+    {
+      "id": "foreach-output",
+      "order": 13
+    }
+  ],
+  "uiMeta": {
+    "layout": "vertical"
+  }
+}

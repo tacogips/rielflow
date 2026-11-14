@@ -1,0 +1,55 @@
+{
+  "name": "divedra",
+  "version": "0.1.0",
+  "description": "TypeScript/Bun workflow runtime for cooperative multi-agent execution",
+  "type": "module",
+  "main": "dist/main.js",
+  "module": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js",
+      "default": "./dist/main.js"
+    }
+  },
+  "scripts": {
+    "dev": "bun run --watch src/main.ts",
+    "build": "bun run build:server",
+    "build:server": "bun build src/main.ts --outdir dist --target bun",
+    "typecheck:server": "tsc --noEmit",
+    "start": "bun run src/main.ts",
+    "test": "bash ./scripts/run-bun-tests.sh",
+    "test:all": "bun run test",
+    "test:watch": "bash ./scripts/run-bun-tests.sh --watch",
+    "typecheck": "bun run typecheck:server",
+    "lint": "bun run typecheck",
+    "format": "prettier --ignore-unknown --write \"src/**/*.{ts,tsx}\" \"scripts/**/*\" \"*.{md,json}\"",
+    "format:check": "prettier --ignore-unknown --check \"src/**/*.{ts,tsx}\" \"scripts/**/*\" \"*.{md,json}\"",
+    "clean": "rm -rf dist"
+  },
+  "homepage": "https://github.com/user/repo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/user/repo"
+  },
+  "license": "MIT",
+  "trustedDependencies": [],
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.78.0",
+    "@opentui/core": "0.1.90",
+    "@opentui/solid": "0.1.90",
+    "claude-code-agent": "github:tacogips/claude-code-agent#17090d0ff4aff1ab17102aa680c70da90ace9a0e",
+    "codex-agent": "github:tacogips/codex-agent#2781229d65e261ab0d40fb1e33d1301e0fc69014",
+    "graphql": "16.13.1",
+    "graphql-yoga": "5.18.1",
+    "openai": "6.27.0",
+    "solid-js": "1.9.11"
+  },
+  "devDependencies": {
+    "@types/bun": "1.1.14",
+    "prettier": "3.4.2",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  }
+}

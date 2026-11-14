@@ -1,0 +1,52 @@
+import type { SessionStoreOptions } from "../workflow/session-store";
+import { inferRootDataDirFromExplicitStorageRoots } from "../workflow/paths";
+import type { LoadOptions } from "../workflow/types";
+import { handleGraphqlRequest } from "./graphql";
+
+export interface ApiContext extends LoadOptions, SessionStoreOptions {
+  readonly readOnly?: boolean;
+  readonly noExec?: boolean;
+  readonly fixedWorkflowName?: string;
+}
+
+function json(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload, null, 2), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
+}
+
+export async function handleApiRequest(
+  request: Request,
+  context: ApiContext,
+): Promise<Response> {
+  const inferredRootDataDir = inferRootDataDirFromExplicitStorageRoots({
+    ...(context.artifactRoot === undefined
+      ? {}
+      : { artifactRoot: context.artifactRoot }),
+    ...(context.sessionStoreRoot === undefined
+      ? {}
+      : { sessionStoreRoot: context.sessionStoreRoot }),
+    ...(context.cwd === undefined ? {} : { cwd: context.cwd }),
+  });
+  const normalizedContext =
+    context.rootDataDir !== undefined || inferredRootDataDir === undefined
+      ? context
+      : {
+          ...context,
+          rootDataDir: inferredRootDataDir,
+        };
+  const url = new URL(request.url);
+
+  if (url.pathname === "/graphql") {
+    return handleGraphqlRequest(request, normalizedContext);
+  }
+
+  if (url.pathname === "/healthz") {
+    return json({ service: "divedra-serve", status: "ok" });
+  }
+
+  return json({ error: "not found" }, 404);
+}
