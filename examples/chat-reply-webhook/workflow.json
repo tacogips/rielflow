@@ -1,0 +1,25 @@
+{
+  "workflowId": "chat-reply-webhook",
+  "description": "Reply to a chat webhook event with the built-in divedra chat reply worker add-on.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "entryNodeId": "reply-to-chat",
+  "nodes": [
+    {
+      "id": "reply-to-chat",
+      "kind": "task",
+      "role": "worker",
+      "addon": {
+        "name": "divedra/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "Thanks {{event.actor.displayName}}. I received: {{event.input.text}}",
+          "visibility": "public",
+          "threadPolicy": "same-thread"
+        }
+      }
+    }
+  ]
+}

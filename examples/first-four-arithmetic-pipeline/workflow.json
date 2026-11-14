@@ -1,0 +1,82 @@
+{
+  "workflowId": "first-four-arithmetic-pipeline",
+  "description": "Validation-oriented arithmetic pipeline authored as a linear ordered node list that chains addition, multiplication, and division across agent, container, and command worker nodes.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000,
+    "containerRuntime": {
+      "runnerKind": "podman"
+    }
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}} as a three-stage arithmetic pipeline. Managers do not need worker internals; they only move the scoped payload to the next stage when dependencies are ready.",
+    "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
+  },
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "role": "manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "add-manager",
+      "group": "add-stage",
+      "nodeFile": "workflows/add/nodes/node-add-manager.json"
+    },
+    {
+      "id": "add-input",
+      "group": "add-stage",
+      "nodeFile": "workflows/add/nodes/node-add-input.json"
+    },
+    {
+      "id": "add-worker",
+      "group": "add-stage",
+      "nodeFile": "workflows/add/nodes/node-add-worker.json"
+    },
+    {
+      "id": "add-output",
+      "group": "add-stage",
+      "nodeFile": "workflows/add/nodes/node-add-output.json"
+    },
+    {
+      "id": "multiply-manager",
+      "group": "multiply-stage",
+      "nodeFile": "workflows/multiply/nodes/node-multiply-manager.json"
+    },
+    {
+      "id": "multiply-input",
+      "group": "multiply-stage",
+      "nodeFile": "workflows/multiply/nodes/node-multiply-input.json"
+    },
+    {
+      "id": "multiply-worker",
+      "group": "multiply-stage",
+      "nodeFile": "workflows/multiply/nodes/node-multiply-worker.json"
+    },
+    {
+      "id": "multiply-output",
+      "group": "multiply-stage",
+      "nodeFile": "workflows/multiply/nodes/node-multiply-output.json"
+    },
+    {
+      "id": "divide-manager",
+      "group": "divide-stage",
+      "nodeFile": "workflows/divide/nodes/node-divide-manager.json"
+    },
+    {
+      "id": "divide-input",
+      "group": "divide-stage",
+      "nodeFile": "workflows/divide/nodes/node-divide-input.json"
+    },
+    {
+      "id": "divide-worker",
+      "group": "divide-stage",
+      "nodeFile": "workflows/divide/nodes/node-divide-worker.json"
+    },
+    {
+      "id": "divide-output",
+      "group": "divide-stage",
+      "nodeFile": "workflows/divide/nodes/node-divide-output.json"
+    }
+  ]
+}
