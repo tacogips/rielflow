@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+ui/dist/
+*.tsbuildinfo
+
+# Bun (binary lockfile - we use text lockfile bun.lock instead)
+bun.lockb
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Nix
+.direnv/
+result
+/result-*
+/.pre-commit-config.yaml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+playwright-report/
+test-results/
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Implementation progress lock file
+impl-plans/.progress.lock
+
+# Private files
+**/.envrc.private*
+.private*/
+
+# rielflow runtime artifacts and session store (default paths)
+.rielflow/artifacts/
+.rielflow/artifacts/**
+.rielflow/logs/
+.rielflow/logs/**
+.rielflow-data/
+.rielflow-data/**
+.rielflow-opt/
+.rielflow-opt/**
+.rielflow-artifact/
+.rielflow-artifact/**
+.rielflow-datas/
+.rielflow-datas/**
