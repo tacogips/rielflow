@@ -1,0 +1,201 @@
+{
+  "divedra-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "root-dispatch",
+      "policy": "sequential-stages"
+    }
+  },
+  "add-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "add-dispatch"
+    }
+  },
+  "add-input": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "add-input",
+      "allNumbers": [10, 20, 3, 2, 99],
+      "firstFour": [10, 20, 3, 2],
+      "operands": [10, 20],
+      "ignoredTail": [99]
+    }
+  },
+  "add-worker": {
+    "provider": "scenario-mock",
+    "model": "gpt-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "operation": "add",
+      "operands": [10, 20],
+      "result": 30
+    }
+  },
+  "add-output": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "add-output",
+      "firstFour": [10, 20, 3, 2],
+      "result": 30,
+      "nextOperand": 3,
+      "operations": [
+        {
+          "operation": "add",
+          "result": 30
+        }
+      ]
+    }
+  },
+  "multiply-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "multiply-dispatch"
+    }
+  },
+  "multiply-input": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "multiply-input",
+      "firstFour": [10, 20, 3, 2],
+      "operands": [30, 3],
+      "operations": [
+        {
+          "operation": "add",
+          "result": 30
+        }
+      ]
+    }
+  },
+  "multiply-worker": {
+    "provider": "scenario-mock",
+    "model": "container/mock-multiply",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "operation": "multiply",
+      "operands": [30, 3],
+      "result": 90
+    }
+  },
+  "multiply-output": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "multiply-output",
+      "firstFour": [10, 20, 3, 2],
+      "result": 90,
+      "nextOperand": 2,
+      "operations": [
+        {
+          "operation": "add",
+          "result": 30
+        },
+        {
+          "operation": "multiply",
+          "result": 90
+        }
+      ]
+    }
+  },
+  "divide-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "divide-dispatch"
+    }
+  },
+  "divide-input": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "divide-input",
+      "firstFour": [10, 20, 3, 2],
+      "operands": [90, 2],
+      "operations": [
+        {
+          "operation": "add",
+          "result": 30
+        },
+        {
+          "operation": "multiply",
+          "result": 90
+        }
+      ]
+    }
+  },
+  "divide-worker": {
+    "provider": "scenario-mock",
+    "model": "command/mock-divide",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "operation": "divide",
+      "operands": [90, 2],
+      "result": 45
+    }
+  },
+  "divide-output": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "firstFour": [10, 20, 3, 2],
+      "finalResult": 45,
+      "summary": "(10 + 20) * 3 / 2 = 45",
+      "operations": [
+        {
+          "operation": "add",
+          "result": 30
+        },
+        {
+          "operation": "multiply",
+          "result": 90
+        },
+        {
+          "operation": "divide",
+          "result": 45
+        }
+      ]
+    }
+  }
+}

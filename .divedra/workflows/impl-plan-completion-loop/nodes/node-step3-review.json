@@ -1,0 +1,11 @@
+{
+  "id": "step3-review",
+  "description": "Review the latest implementation-plan task iteration.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/step3-review.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with when.needs_revision true only when high or mid findings require another implementation pass for the same task."
+  }
+}

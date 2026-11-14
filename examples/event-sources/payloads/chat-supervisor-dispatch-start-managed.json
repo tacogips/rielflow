@@ -1,0 +1,15 @@
+{
+  "eventId": "chat-dispatch-demo-start-1",
+  "eventType": "chat.supervisor.dispatch.demo",
+  "actor": {
+    "id": "user-1",
+    "displayName": "Example User"
+  },
+  "conversation": {
+    "id": "example-channel",
+    "threadId": "thread-supervisor-dispatch-demo"
+  },
+  "input": {
+    "text": "Start the echo worker."
+  }
+}

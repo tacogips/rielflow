@@ -1,0 +1,19 @@
+{
+  "id": "chat-sdk-slack",
+  "kind": "chat-sdk",
+  "provider": "slack",
+  "mode": "generic-webhook",
+  "webhook": {
+    "path": "chat-sdk/slack",
+    "signingSecretEnv": "DIVEDRA_CHAT_SDK_SLACK_WEBHOOK_SECRET",
+    "bearerTokenEnv": "DIVEDRA_CHAT_SDK_SLACK_BEARER_TOKEN",
+    "rateLimit": {
+      "windowMs": 60000,
+      "maxRequests": 60
+    }
+  },
+  "send": {
+    "endpointUrlEnv": "DIVEDRA_CHAT_SDK_SLACK_SEND_URL",
+    "tokenEnv": "DIVEDRA_CHAT_SDK_SLACK_SEND_TOKEN"
+  }
+}
