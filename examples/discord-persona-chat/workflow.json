@@ -1,0 +1,48 @@
+{
+  "workflowId": "discord-persona-chat",
+  "description": "Route a Discord Gateway chat message to Yui, Mika, or Rina with bounded channel or thread history, then reply through the configured chat destination.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep the Discord reply text in replyText and selected persona in persona."
+  },
+  "entryStepId": "answer-persona-message",
+  "nodes": [
+    {
+      "id": "answer-persona-message",
+      "nodeFile": "nodes/node-answer-persona-message.json"
+    },
+    {
+      "id": "send-discord-persona-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "{{inbox.latest.output.payload.persona}}",
+          "visibility": "public",
+          "threadPolicy": "same-thread"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "answer-persona-message",
+      "nodeId": "answer-persona-message",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-discord-persona-reply"
+        }
+      ]
+    },
+    {
+      "id": "send-discord-persona-reply",
+      "nodeId": "send-discord-persona-reply",
+      "role": "worker"
+    }
+  ]
+}

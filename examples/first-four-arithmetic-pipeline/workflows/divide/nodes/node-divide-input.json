@@ -1,0 +1,42 @@
+{
+  "id": "divide-input",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/divide-input.md",
+  "variables": {},
+  "output": {
+    "description": "Return the multiplication result together with the fourth input number for the division worker.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "firstFour",
+        "operands",
+        "stage"
+      ],
+      "properties": {
+        "stage": {
+          "type": "string",
+          "const": "divide-input"
+        },
+        "firstFour": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "operands": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

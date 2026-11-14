@@ -1,0 +1,7 @@
+{
+  "id": "example-reply-webhook",
+  "kind": "webhook",
+  "path": "/events/example-reply-webhook",
+  "provider": "webhook",
+  "replyEndpointEnv": "RIEL_EXAMPLE_REPLY_ENDPOINT"
+}
