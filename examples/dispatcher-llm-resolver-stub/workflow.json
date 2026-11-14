@@ -1,0 +1,25 @@
+{
+  "workflowId": "dispatcher-llm-resolver-stub",
+  "description": "Single-worker stub used as the LLM resolver target for supervisor-dispatch bindings in examples. Pair with mock-scenario payloads under default-supervisor-dispatcher/.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Emit only resolver-shaped JSON required by supervisor dispatch when not overridden by mocks."
+  },
+  "entryStepId": "resolver-worker",
+  "nodes": [
+    {
+      "id": "resolver-worker",
+      "nodeFile": "nodes/node-resolver-worker.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "resolver-worker",
+      "nodeId": "resolver-worker",
+      "role": "worker"
+    }
+  ]
+}

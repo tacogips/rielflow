@@ -1,0 +1,19 @@
+{
+  "id": "matrix-release-chat-to-workflow",
+  "sourceId": "team-matrix",
+  "outputDestinations": ["release-matrix-chat"],
+  "match": {
+    "eventType": "chat.message",
+    "conversationId": "!release:matrix.example"
+  },
+  "workflowName": "matrix-chat-reply",
+  "inputMapping": {
+    "mode": "event-input",
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": false,
+    "allowUnsafeSyncWebhook": true,
+    "dedupeWindowMs": 86400000
+  }
+}
