@@ -1,0 +1,8 @@
+{
+  "id": "workflow-a-review-chat",
+  "kind": "chat",
+  "sourceId": "collaboration-chat",
+  "target": {
+    "conversationId": "workflow-a-review"
+  }
+}
