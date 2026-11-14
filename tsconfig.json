@@ -1,0 +1,70 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "divedra-core": ["packages/divedra-core/src/index.ts"],
+      "divedra-core/*": ["packages/divedra-core/src/*.ts"],
+      "divedra-addons": ["packages/divedra-addons/src/index.ts"],
+      "divedra-addons/*": ["packages/divedra-addons/src/*.ts"],
+      "divedra-adapters": ["packages/divedra-adapters/src/index.ts"],
+      "divedra-adapters/*": ["packages/divedra-adapters/src/*.ts"],
+      "divedra-graphql": ["packages/divedra-graphql/src/index.ts"],
+      "divedra-graphql/*": ["packages/divedra-graphql/src/*.ts"],
+      "divedra-events": ["packages/divedra-events/src/index.ts"],
+      "divedra-events/*": ["packages/divedra-events/src/*.ts"],
+      "divedra-hook": ["packages/divedra-hook/src/index.ts"],
+      "divedra-hook/*": ["packages/divedra-hook/src/*.ts"],
+      "divedra-server": ["packages/divedra-server/src/index.ts"],
+      "divedra-server/*": ["packages/divedra-server/src/*.ts"]
+    },
+    "types": ["bun-types"],
+
+    /* Emit */
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "removeComments": false,
+
+    /* Interop Constraints */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    /* Type Checking - Maximum Strictness */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "alwaysStrict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    /* Additional Strict Checks */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+
+    /* Completeness */
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["scripts/**/*.ts", "packages/*/src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "packages/*/dist"]
+}

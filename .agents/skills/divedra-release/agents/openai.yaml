@@ -1,0 +1,3 @@
+interface:
+  display_name: "divedra-release"
+  short_description: "Use when preparing, publishing, verifying, or troubleshooting a divedra release through GitHub release assets and the tacogips/tap Homebrew formula."
