@@ -1,0 +1,21 @@
+{
+  "name": "divedra-core",
+  "version": "0.1.0",
+  "description": "Core workflow runtime and library APIs for divedra",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run --cwd ../.. build:server",
+    "typecheck": "bun run --cwd ../.. typecheck"
+  },
+  "license": "MIT"
+}

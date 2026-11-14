@@ -1,0 +1,9 @@
+{
+  "id": "beta-manager",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/beta-manager.md",
+  "variables": {
+    "workflowId": "subworkflow-chained-simple"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "divedra-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "dispatch",
+      "callPolicy": "workflow-call-review"
+    }
+  },
+  "draft-write": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "draft": "Initial workflow-call draft.",
+      "requestedChecks": [
+        "clarity",
+        "scope"
+      ],
+      "status": "ready-for-review"
+    }
+  },
+  "reviewer": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "reviewStatus": "approved",
+      "reviewSummary": "Worker-only review workflow completed.",
+      "reviewNotes": [
+        "Confirmed the draft is concise.",
+        "Confirmed the scope stays within the requested review."
+      ],
+      "reviewedDraft": "Initial workflow-call draft."
+    }
+  },
+  "apply-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "summary": "Workflow-call review was applied in the parent workflow.",
+      "status": "ready",
+      "reviewSource": "workflow-call",
+      "reviewTargetWorkflowId": "workflow-call-review-target"
+    }
+  }
+}
