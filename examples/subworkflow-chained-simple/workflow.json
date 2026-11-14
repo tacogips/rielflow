@@ -1,0 +1,59 @@
+{
+  "workflowId": "subworkflow-chained-simple",
+  "description": "Minimal runnable bundle authored as an ordered node list with two sequential grouped lanes, where beta consumes the published result from alpha.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}} as two sequential grouped lanes. Run alpha first; after alpha-output succeeds, run beta and pass along the prior published result.",
+    "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
+  },
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "role": "manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "alpha-manager",
+      "group": "alpha-lane",
+      "nodeFile": "workflows/alpha/nodes/node-alpha-manager.json"
+    },
+    {
+      "id": "alpha-input",
+      "group": "alpha-lane",
+      "nodeFile": "workflows/alpha/nodes/node-alpha-input.json"
+    },
+    {
+      "id": "alpha-worker",
+      "group": "alpha-lane",
+      "nodeFile": "workflows/alpha/nodes/node-alpha-worker.json"
+    },
+    {
+      "id": "alpha-output",
+      "group": "alpha-lane",
+      "nodeFile": "workflows/alpha/nodes/node-alpha-output.json"
+    },
+    {
+      "id": "beta-manager",
+      "group": "beta-lane",
+      "nodeFile": "workflows/beta/nodes/node-beta-manager.json"
+    },
+    {
+      "id": "beta-input",
+      "group": "beta-lane",
+      "nodeFile": "workflows/beta/nodes/node-beta-input.json"
+    },
+    {
+      "id": "beta-worker",
+      "group": "beta-lane",
+      "nodeFile": "workflows/beta/nodes/node-beta-worker.json"
+    },
+    {
+      "id": "beta-output",
+      "group": "beta-lane",
+      "nodeFile": "workflows/beta/nodes/node-beta-output.json"
+    }
+  ]
+}

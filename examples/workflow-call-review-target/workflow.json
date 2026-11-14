@@ -1,0 +1,19 @@
+{
+  "workflowId": "workflow-call-review-target",
+  "description": "Worker-only callee workflow used by workflow-call-simple. It returns the latest succeeded worker result as the workflow-call output.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Read runtimeVariables.workflowCall.input and return concise review feedback as business JSON."
+  },
+  "entryNodeId": "reviewer",
+  "nodes": [
+    {
+      "id": "reviewer",
+      "role": "worker",
+      "nodeFile": "nodes/node-reviewer.json"
+    }
+  ]
+}

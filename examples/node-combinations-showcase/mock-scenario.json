@@ -1,0 +1,292 @@
+{
+  "divedra-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "root-dispatch",
+      "policy": "run-showcase-groups-in-order"
+    }
+  },
+  "command-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "lane": "command",
+      "stage": "dispatch"
+    }
+  },
+  "command-input": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "lane": "command",
+      "request": "Show the authored command-node path."
+    }
+  },
+  "command-worker": {
+    "provider": "scenario-mock",
+    "model": "command/mock-showcase",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "lane": "command",
+      "scriptPath": "scripts/mock-command.sh",
+      "stdout": "command showcase lane",
+      "exitCode": 0
+    }
+  },
+  "command-output": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "lane": "command",
+      "summary": "Command lane completed through the authored command node path.",
+      "result": "command showcase lane"
+    }
+  },
+  "container-manager": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "lane": "container",
+      "stage": "dispatch"
+    }
+  },
+  "container-input": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "lane": "container",
+      "request": "Show the authored container-node path."
+    }
+  },
+  "container-worker": {
+    "provider": "scenario-mock",
+    "model": "container/mock-showcase",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "lane": "container",
+      "image": "containers/mock-worker",
+      "stdout": "container showcase lane",
+      "exitCode": 0
+    }
+  },
+  "container-output": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "lane": "container",
+      "summary": "Container lane completed through the authored container node path.",
+      "result": "container showcase lane"
+    }
+  },
+  "foreach-manager": [
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "lane": "foreach-loop",
+        "iteration": 1,
+        "remaining": 3
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "lane": "foreach-loop",
+        "iteration": 2,
+        "remaining": 2
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "lane": "foreach-loop",
+        "iteration": 3,
+        "remaining": 1
+      }
+    }
+  ],
+  "foreach-input": [
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "iteration": 1,
+        "item": "alpha",
+        "remainingItems": [
+          "beta",
+          "gamma"
+        ]
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "iteration": 2,
+        "item": "beta",
+        "remainingItems": [
+          "gamma"
+        ]
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "iteration": 3,
+        "item": "gamma",
+        "remainingItems": []
+      }
+    }
+  ],
+  "foreach-worker": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "iteration": 1,
+        "item": "alpha",
+        "processed": "processed-alpha",
+        "hasMore": true
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "iteration": 2,
+        "item": "beta",
+        "processed": "processed-beta",
+        "hasMore": true
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "iteration": 3,
+        "item": "gamma",
+        "processed": "processed-gamma",
+        "hasMore": false
+      }
+    }
+  ],
+  "foreach-judge": [
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "continue_items": true,
+        "foreach_done": false
+      },
+      "payload": {
+        "iteration": 1,
+        "decision": "continue"
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "continue_items": true,
+        "foreach_done": false
+      },
+      "payload": {
+        "iteration": 2,
+        "decision": "continue"
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "claude-haiku-4-5",
+      "when": {
+        "continue_items": false,
+        "foreach_done": true
+      },
+      "payload": {
+        "iteration": 3,
+        "decision": "stop"
+      }
+    }
+  ],
+  "foreach-output": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "summary": "Node combination showcase exercised command, container, and repeat-based foreach authoring with deterministic outputs.",
+      "status": "ready",
+      "commandLane": {
+        "result": "command showcase lane"
+      },
+      "containerLane": {
+        "result": "container showcase lane"
+      },
+      "foreachLane": {
+        "iterations": [
+          "processed-alpha",
+          "processed-beta",
+          "processed-gamma"
+        ],
+        "totalIterations": 3
+      }
+    }
+  }
+}

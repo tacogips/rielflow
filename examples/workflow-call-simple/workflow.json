@@ -1,0 +1,45 @@
+{
+  "workflowId": "workflow-call-simple",
+  "description": "Managed parent workflow that drafts work, invokes a worker-only review workflow through workflowCalls, and resumes with the returned result.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}}. Start draft-write first, then wait for the workflow-call review result before apply-review runs.",
+    "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
+  },
+  "managerNodeId": "divedra-manager",
+  "workflowCalls": [
+    {
+      "id": "call-review",
+      "workflowId": "workflow-call-review-target",
+      "callerNodeId": "draft-write",
+      "resultNodeId": "apply-review"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "role": "manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "draft-write",
+      "role": "worker",
+      "nodeFile": "nodes/node-draft-write.json"
+    },
+    {
+      "id": "apply-review",
+      "role": "worker",
+      "nodeFile": "nodes/node-apply-review.json"
+    }
+  ],
+  "edges": [
+    {
+      "from": "divedra-manager",
+      "to": "draft-write",
+      "when": "always"
+    }
+  ]
+}
