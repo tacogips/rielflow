@@ -1,0 +1,29 @@
+{
+  "id": "matrix-agent-trio-to-workflow",
+  "sourceId": "team-matrix",
+  "outputDestinations": ["matrix-persona-replies"],
+  "match": {
+    "eventType": "chat.message",
+    "conversationId": "!persona:matrix.example"
+  },
+  "workflowName": "matrix-agent-trio-chat",
+  "inputMapping": {
+    "mode": "event-input",
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": false,
+    "allowUnsafeSyncWebhook": true,
+    "dedupeWindowMs": 86400000
+  },
+  "taskPlanning": {
+    "enabled": false
+  },
+  "mailboxBridge": {
+    "output": {
+      "progress": {
+        "mode": "none"
+      }
+    }
+  }
+}
