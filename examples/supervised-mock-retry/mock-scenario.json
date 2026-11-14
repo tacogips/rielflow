@@ -1,0 +1,23 @@
+{
+  "main-worker": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": { "always": true },
+      "fail": true
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": { "always": true },
+      "payload": {
+        "summary": "Recovered after supervised rerun (second mock response).",
+        "status": "ready",
+        "verification": [
+          "supervised-mock-retry with --auto-improve and mock-scenario sequence"
+        ],
+        "risks": []
+      }
+    }
+  ]
+}
