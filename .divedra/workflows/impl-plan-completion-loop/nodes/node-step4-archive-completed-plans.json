@@ -1,0 +1,12 @@
+{
+  "id": "step4-archive-completed-plans",
+  "description": "Archive completed active implementation plans and refresh implementation-plan indexes before publishing final workflow output.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/archive-completed-plans.sh"
+  },
+  "output": {
+    "description": "Return JSON with archived plan paths, skipped plan paths, active plans remaining, and index update results."
+  }
+}

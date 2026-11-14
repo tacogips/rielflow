@@ -1,0 +1,7 @@
+{
+  "id": "divedra-manager",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.3-codex-spark",
+  "promptTemplateFile": "prompts/divedra-manager.md",
+  "variables": {}
+}
