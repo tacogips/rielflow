@@ -1,0 +1,59 @@
+{
+  "id": "yui-codex",
+  "description": "Yui Codex: a refined Japanese female secretary persona backed by codex-agent. She is the default responder.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.4-mini",
+  "systemPromptTemplateFile": "prompts/yui-system.md",
+  "promptTemplateFile": "prompts/persona-reply.md",
+  "variables": {
+    "personaName": "Yui Codex",
+    "shortName": "Yui",
+    "backendName": "codex-agent",
+    "codexAdditionalArgs": [
+      "--ignore-rules"
+    ],
+    "peerSummary": "Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent. Rina Cursor is an intellectual otaku and technical analyst.",
+    "personaId": "yui",
+    "memoryRoot": "{{workflowInput.memoryRoot}}"
+  },
+  "output": {
+    "description": "Return Yui's chat reply; optional handoff flags are adapter-level when values; optional memoryEntries are written by the following deterministic memory node.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "replyText"
+      ],
+      "properties": {
+        "replyText": {
+          "type": "string"
+        },
+        "memoryEntries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "importance": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "content"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

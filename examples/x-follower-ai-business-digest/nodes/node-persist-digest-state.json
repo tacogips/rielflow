@@ -1,0 +1,15 @@
+{
+  "id": "persist-digest-state",
+  "description": "Persists the newest fetched X post id so later hourly runs do not duplicate already fetched posts.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/persist-digest-state.sh",
+    "envTemplate": {
+      "RIEL_X_DIGEST_STATE_FILE": "{{workflowInput.stateFile}}"
+    }
+  },
+  "output": {
+    "description": "Output envelope preserving should_send_telegram and replyText for conditional Telegram delivery."
+  }
+}

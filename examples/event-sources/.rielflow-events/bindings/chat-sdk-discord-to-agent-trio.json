@@ -1,0 +1,27 @@
+{
+  "id": "chat-sdk-discord-to-agent-trio",
+  "sourceId": "chat-sdk-discord",
+  "outputDestinations": ["chat-sdk-discord-replies"],
+  "workflowName": "discord-agent-trio-chat",
+  "match": {
+    "eventType": "chat.message",
+    "conversationId": "1509762313576648815"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "provider": "{{event.input.provider}}",
+      "conversationId": "{{event.conversation.id}}",
+      "threadId": "{{event.conversation.threadId}}",
+      "personaNames": ["Yui Codex", "Mika Trend", "Rina Cursor"]
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}:{{event.conversation.id}}:{{event.conversation.threadId}}"
+  }
+}

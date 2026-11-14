@@ -1,0 +1,19 @@
+{
+  "main-worker": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "summary": "Worker-only workflow completed from its explicit entry node.",
+      "status": "ready",
+      "verification": [
+        "workflow validate",
+        "workflow inspect",
+        "workflow run --mock-scenario"
+      ],
+      "risks": []
+    }
+  }
+}

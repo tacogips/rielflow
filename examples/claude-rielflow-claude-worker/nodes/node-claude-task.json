@@ -1,0 +1,13 @@
+{
+  "id": "claude-task",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "sessionPolicy": {
+    "mode": "reuse"
+  },
+  "promptTemplateFile": "prompts/claude-task.md",
+  "variables": {},
+  "output": {
+    "description": "Return the claude-code worker result with the produced answer, a short rationale, and any follow-up notes."
+  }
+}
