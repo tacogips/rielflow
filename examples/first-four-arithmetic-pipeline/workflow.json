@@ -1,0 +1,198 @@
+{
+  "workflowId": "first-four-arithmetic-pipeline",
+  "description": "Validation-oriented arithmetic pipeline authored in the step-addressed shape that chains addition, multiplication, and division across agent, container, and command worker nodes.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000,
+    "containerRuntime": {
+      "runnerKind": "podman"
+    }
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}} as a three-stage arithmetic pipeline. Managers do not need worker internals; they only move the scoped payload to the next stage when dependencies are ready.",
+    "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
+  },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "add-manager",
+      "nodeFile": "workflows/add/nodes/node-add-manager.json"
+    },
+    {
+      "id": "add-input",
+      "nodeFile": "workflows/add/nodes/node-add-input.json"
+    },
+    {
+      "id": "add-worker",
+      "nodeFile": "workflows/add/nodes/node-add-worker.json"
+    },
+    {
+      "id": "add-output",
+      "nodeFile": "workflows/add/nodes/node-add-output.json"
+    },
+    {
+      "id": "multiply-manager",
+      "nodeFile": "workflows/multiply/nodes/node-multiply-manager.json"
+    },
+    {
+      "id": "multiply-input",
+      "nodeFile": "workflows/multiply/nodes/node-multiply-input.json"
+    },
+    {
+      "id": "multiply-worker",
+      "nodeFile": "workflows/multiply/nodes/node-multiply-worker.json"
+    },
+    {
+      "id": "multiply-output",
+      "nodeFile": "workflows/multiply/nodes/node-multiply-output.json"
+    },
+    {
+      "id": "divide-manager",
+      "nodeFile": "workflows/divide/nodes/node-divide-manager.json"
+    },
+    {
+      "id": "divide-input",
+      "nodeFile": "workflows/divide/nodes/node-divide-input.json"
+    },
+    {
+      "id": "divide-worker",
+      "nodeFile": "workflows/divide/nodes/node-divide-worker.json"
+    },
+    {
+      "id": "divide-output",
+      "nodeFile": "workflows/divide/nodes/node-divide-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "add-manager"
+        }
+      ]
+    },
+    {
+      "id": "add-manager",
+      "nodeId": "add-manager",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "add-input"
+        }
+      ]
+    },
+    {
+      "id": "add-input",
+      "nodeId": "add-input",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "add-worker"
+        }
+      ]
+    },
+    {
+      "id": "add-worker",
+      "nodeId": "add-worker",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "add-output"
+        }
+      ]
+    },
+    {
+      "id": "add-output",
+      "nodeId": "add-output",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "multiply-manager"
+        }
+      ]
+    },
+    {
+      "id": "multiply-manager",
+      "nodeId": "multiply-manager",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "multiply-input"
+        }
+      ]
+    },
+    {
+      "id": "multiply-input",
+      "nodeId": "multiply-input",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "multiply-worker"
+        }
+      ]
+    },
+    {
+      "id": "multiply-worker",
+      "nodeId": "multiply-worker",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "multiply-output"
+        }
+      ]
+    },
+    {
+      "id": "multiply-output",
+      "nodeId": "multiply-output",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "divide-manager"
+        }
+      ]
+    },
+    {
+      "id": "divide-manager",
+      "nodeId": "divide-manager",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "divide-input"
+        }
+      ]
+    },
+    {
+      "id": "divide-input",
+      "nodeId": "divide-input",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "divide-worker"
+        }
+      ]
+    },
+    {
+      "id": "divide-worker",
+      "nodeId": "divide-worker",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "divide-output"
+        }
+      ]
+    },
+    {
+      "id": "divide-output",
+      "nodeId": "divide-output",
+      "role": "worker"
+    }
+  ]
+}

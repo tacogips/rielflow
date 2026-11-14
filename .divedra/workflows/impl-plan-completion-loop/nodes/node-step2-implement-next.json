@@ -1,0 +1,11 @@
+{
+  "id": "step2-implement-next",
+  "description": "Implement the next incomplete implementation-plan task.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/step2-implement-next.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with changed files, completed task ids, plan updates, verification commands, blocked reasons if any, and whether review should request revision."
+  }
+}

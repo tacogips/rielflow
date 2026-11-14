@@ -1,0 +1,358 @@
+import { describe, expect, test } from "vitest";
+import {
+  AdapterExecutionError,
+  type AdapterExecutionInput,
+  type NodeAdapter,
+  isAdapterExecutionOutputEnvelope,
+  normalizeOutputContractEnvelope,
+  normalizeAdapterOutput,
+  parseJsonObjectCandidate,
+} from "./adapter";
+import { executeAdapterWithTimeout } from "./adapter-execution";
+
+describe("normalizeAdapterOutput", () => {
+  test("normalizes valid adapter output", () => {
+    const normalized = normalizeAdapterOutput(
+      {
+        provider: "provider-x",
+        model: "model-x",
+        promptText: "hello",
+        completionPassed: true,
+        when: { always: true },
+        payload: { value: 1 },
+      },
+      "fallback-model",
+    );
+
+    expect(normalized.provider).toBe("provider-x");
+    expect(normalized.model).toBe("model-x");
+    expect(normalized.when["always"]).toBe(true);
+  });
+
+  test("throws invalid_output for malformed payload", () => {
+    expect(() =>
+      normalizeAdapterOutput(
+        {
+          provider: "provider-x",
+          promptText: "hello",
+          completionPassed: true,
+          when: { always: "true" },
+          payload: { value: 1 },
+        },
+        "fallback-model",
+      ),
+    ).toThrowError(AdapterExecutionError);
+  });
+});
+
+describe("isAdapterExecutionOutputEnvelope", () => {
+  test("recognizes complete adapter output envelopes", () => {
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "codex-agent",
+        model: "gpt-5.5",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: true },
+        payload: { result: "ok" },
+      }),
+    ).toBe(true);
+  });
+
+  test("does not treat business payloads with provider and model fields as envelopes", () => {
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "external-system",
+        model: "business-model",
+        payload: { result: "ok" },
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects empty provider or model fields", () => {
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "",
+        model: "gpt-5.5",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: true },
+        payload: { result: "ok" },
+      }),
+    ).toBe(false);
+
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "codex-agent",
+        model: "",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: true },
+        payload: { result: "ok" },
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects malformed envelope control fields", () => {
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "codex-agent",
+        model: "gpt-5.5",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: "true" },
+        payload: { result: "ok" },
+      }),
+    ).toBe(false);
+
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "codex-agent",
+        model: "gpt-5.5",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: true },
+        payload: ["not", "an", "object"],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("parseJsonObjectCandidate", () => {
+  test("accepts a fenced json object response", () => {
+    expect(
+      parseJsonObjectCandidate(
+        '```json\n{\n  "summary": "ok"\n}\n```',
+        "test source",
+      ),
+    ).toEqual({ summary: "ok" });
+  });
+
+  test("accepts a fenced json object with surrounding prose", () => {
+    expect(
+      parseJsonObjectCandidate(
+        'Here is the JSON:\n```json\n{"summary":"ok"}\n```\nDone.',
+        "test source",
+      ),
+    ).toEqual({ summary: "ok" });
+  });
+
+  test("accepts the first balanced json object in prose", () => {
+    expect(
+      parseJsonObjectCandidate(
+        'I will continue with {"summary":"ok","nested":{"value":1}} now.',
+        "test source",
+      ),
+    ).toEqual({ summary: "ok", nested: { value: 1 } });
+  });
+
+  test("accepts a balanced json object at the start with trailing prose", () => {
+    expect(
+      parseJsonObjectCandidate(
+        '{"summary":"ok","count":2}\nAdditional notes.',
+        "test source",
+      ),
+    ).toEqual({ summary: "ok", count: 2 });
+  });
+
+  test("ignores braces inside json strings while extracting prose objects", () => {
+    expect(
+      parseJsonObjectCandidate(
+        'Wrapped {"summary":"{not depth}","quote":"escaped \\" { brace"} done.',
+        "test source",
+      ),
+    ).toEqual({ summary: "{not depth}", quote: 'escaped " { brace' });
+  });
+
+  test("skips balanced prose braces before the first valid json object", () => {
+    expect(
+      parseJsonObjectCandidate(
+        'Ignore {not json} and use {"summary":"ok"} instead.',
+        "test source",
+      ),
+    ).toEqual({ summary: "ok" });
+  });
+
+  test("rejects non-object json responses", () => {
+    expect(() =>
+      parseJsonObjectCandidate("[1,2,3]", "test source"),
+    ).toThrowError(AdapterExecutionError);
+  });
+
+  test("rejects valid array responses that contain objects", () => {
+    expect(() =>
+      parseJsonObjectCandidate('[{"summary":"ok"}]', "test source"),
+    ).toThrowError(AdapterExecutionError);
+  });
+
+  test("rejects scalar json responses", () => {
+    expect(() => parseJsonObjectCandidate('"ok"', "test source")).toThrowError(
+      AdapterExecutionError,
+    );
+  });
+
+  test("rejects unbalanced object text", () => {
+    expect(() =>
+      parseJsonObjectCandidate('prefix {"summary":"ok"', "test source"),
+    ).toThrowError(AdapterExecutionError);
+  });
+});
+
+describe("normalizeOutputContractEnvelope", () => {
+  test("keeps plain business payloads with adapter defaults", () => {
+    const normalized = normalizeOutputContractEnvelope(
+      { summary: "ok" },
+      "candidate",
+      {
+        completionPassed: true,
+        when: { always: true },
+      },
+    );
+
+    expect(normalized).toEqual({
+      completionPassed: true,
+      when: { always: true },
+      payload: { summary: "ok" },
+      usedEnvelope: false,
+    });
+  });
+
+  test("unwraps valid envelopes and honors completion overrides", () => {
+    const normalized = normalizeOutputContractEnvelope(
+      {
+        when: { needs_revision: true },
+        payload: { summary: "fix me" },
+        completionPassed: false,
+      },
+      "candidate",
+      {
+        completionPassed: true,
+        when: { always: true },
+      },
+    );
+
+    expect(normalized).toEqual({
+      completionPassed: false,
+      when: { needs_revision: true },
+      payload: { summary: "fix me" },
+      usedEnvelope: true,
+    });
+  });
+
+  test("rejects invalid when maps", () => {
+    expect(() =>
+      normalizeOutputContractEnvelope(
+        {
+          when: { needs_revision: "yes" },
+          payload: { summary: "bad" },
+        } as unknown as Readonly<Record<string, unknown>>,
+        "candidate",
+      ),
+    ).toThrowError(AdapterExecutionError);
+  });
+
+  test("rejects envelopes without object payloads", () => {
+    expect(() =>
+      normalizeOutputContractEnvelope(
+        {
+          when: { needs_revision: true },
+        },
+        "candidate",
+      ),
+    ).toThrowError(AdapterExecutionError);
+  });
+
+  test("rejects non-boolean completion overrides", () => {
+    expect(() =>
+      normalizeOutputContractEnvelope(
+        {
+          when: { needs_revision: true },
+          payload: { summary: "bad" },
+          completionPassed: "no",
+        } as unknown as Readonly<Record<string, unknown>>,
+        "candidate",
+      ),
+    ).toThrowError(AdapterExecutionError);
+  });
+});
+
+function makeExecutionInput(
+  overrides: Partial<AdapterExecutionInput> = {},
+): AdapterExecutionInput {
+  return {
+    workflowId: "wf",
+    workflowExecutionId: "wfexec-000001",
+    nodeId: "step-1",
+    nodeExecId: "exec-000001",
+    node: {
+      id: "step-1",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      variables: {},
+    } as AdapterExecutionInput["node"],
+    workingDirectory: "/tmp/project",
+    mergedVariables: {},
+    promptText: "prompt",
+    arguments: null,
+    executionIndex: 1,
+    artifactDir: "/tmp/step-1",
+    upstreamCommunicationIds: [],
+    ...overrides,
+  };
+}
+
+describe("executeAdapterWithTimeout", () => {
+  test("classifies non-DOM abort errors from timed-out adapters as timeout", async () => {
+    const abortingAdapter = {
+      async execute(_input, context) {
+        return await new Promise((_, reject) => {
+          context.signal.addEventListener(
+            "abort",
+            () => {
+              const error = new Error("operation aborted");
+              error.name = "AbortError";
+              reject(error);
+            },
+            { once: true },
+          );
+        });
+      },
+    } satisfies NodeAdapter;
+
+    const result = await executeAdapterWithTimeout(
+      abortingAdapter,
+      makeExecutionInput(),
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("timeout");
+    expect(result.error.message).toBe("adapter execution timed out");
+  });
+
+  test("does not classify adapter-raised abort errors before timeout as timeout", async () => {
+    const abortingAdapter = {
+      async execute() {
+        const error = new Error("operation aborted by adapter");
+        error.name = "AbortError";
+        throw error;
+      },
+    } satisfies NodeAdapter;
+
+    const result = await executeAdapterWithTimeout(
+      abortingAdapter,
+      makeExecutionInput(),
+      1000,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("provider_error");
+    expect(result.error.message).toBe("operation aborted by adapter");
+  });
+});

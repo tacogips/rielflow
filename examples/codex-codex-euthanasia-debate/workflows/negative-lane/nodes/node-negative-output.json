@@ -1,0 +1,12 @@
+{
+  "id": "negative-output",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/negative-output.md",
+  "variables": {
+    "stanceLabel": "negative"
+  },
+  "output": {
+    "description": "Return the publishable negative debate turn for the next conversation step."
+  }
+}
