@@ -1,0 +1,21 @@
+{
+  "Records": [
+    {
+      "eventID": "s3-fixture-1",
+      "eventName": "ObjectCreated:Put",
+      "awsRegion": "ap-northeast-1",
+      "s3": {
+        "bucket": {
+          "name": "team-docs"
+        },
+        "object": {
+          "key": "incoming/plans/release.md",
+          "versionId": "v1",
+          "eTag": "abc123",
+          "size": 12842,
+          "sequencer": "seq-1"
+        }
+      }
+    }
+  ]
+}

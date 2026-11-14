@@ -1,0 +1,47 @@
+{
+  "workflowId": "telegram-agent-trio-time-signal",
+  "description": "Send a deterministic Yui time-signal message to the Telegram trio chat on five-minute boundaries when driven by a 30-second cron event source.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 30000
+  },
+  "entryStepId": "prepare-time-signal",
+  "nodes": [
+    {
+      "id": "prepare-time-signal",
+      "nodeFile": "nodes/node-prepare-time-signal.json"
+    },
+    {
+      "id": "send-time-signal",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{workflowInput.replyText}}",
+          "replyAsTemplate": "yui",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "fail"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "prepare-time-signal",
+      "nodeId": "prepare-time-signal",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-time-signal",
+          "label": "should_announce"
+        }
+      ]
+    },
+    {
+      "id": "send-time-signal",
+      "nodeId": "send-time-signal",
+      "role": "worker"
+    }
+  ]
+}
