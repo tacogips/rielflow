@@ -1,0 +1,7 @@
+{
+  "id": "beta-worker",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/beta-worker.md",
+  "variables": {}
+}

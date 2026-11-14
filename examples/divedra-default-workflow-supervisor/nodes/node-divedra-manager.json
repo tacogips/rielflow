@@ -1,0 +1,9 @@
+{
+  "id": "divedra-manager",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/supervisor-manager.md",
+  "variables": {
+    "workflowId": "divedra-default-workflow-supervisor"
+  }
+}

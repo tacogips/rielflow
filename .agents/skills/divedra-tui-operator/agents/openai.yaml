@@ -1,0 +1,4 @@
+interface:
+  display_name: "Divedra TUI Operator"
+  short_description: "Navigate divedra operator UI"
+  default_prompt: "Use $divedra-tui-operator to explain how to inspect this workflow in the divedra UI."
