@@ -1,0 +1,9 @@
+{
+  "id": "release-matrix-chat",
+  "kind": "chat",
+  "sourceId": "team-matrix",
+  "target": {
+    "provider": "matrix",
+    "conversationId": "!release:matrix.example"
+  }
+}
