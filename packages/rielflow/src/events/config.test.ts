@@ -1,0 +1,1475 @@
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
+import { loadEventConfiguration, resolveEventRoot } from "./config";
+import { FILE_CHANGE_MAX_STABILITY_WINDOW_MS } from "./file-change-constraints";
+import { loadAndValidateEventConfiguration } from "./validate";
+
+const tempDirs: string[] = [];
+
+async function makeTempDir(): Promise<string> {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "rielflow-events-"));
+  tempDirs.push(directory);
+  return directory;
+}
+
+async function writeJson(filePath: string, payload: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
+
+describe("event configuration", () => {
+  test("resolves default event root next to workflow root", () => {
+    const root = path.join(os.tmpdir(), "event-root-project");
+    expect(
+      resolveEventRoot({
+        workflowRoot: path.join(root, ".rielflow"),
+        cwd: root,
+      }),
+    ).toBe(path.join(root, ".rielflow-events"));
+  });
+
+  test("loads and validates source and binding configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "local-webhook.json"), {
+      id: "local-webhook",
+      kind: "webhook",
+      path: "/events/local",
+    });
+    await writeJson(path.join(eventRoot, "destinations", "local-chat.json"), {
+      id: "local-chat",
+      kind: "chat",
+      sourceId: "local-webhook",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
+      id: "to-demo",
+      sourceId: "local-webhook",
+      outputDestinations: ["local-chat"],
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+    });
+
+    const loaded = await loadEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+    expect(loaded.sources.map((source) => source.id)).toEqual([
+      "local-webhook",
+    ]);
+    expect(loaded.destinations.map((destination) => destination.id)).toEqual([
+      "local-chat",
+    ]);
+    expect(loaded.bindings.map((binding) => binding.id)).toEqual(["to-demo"]);
+    expect(loaded.bindings[0]?.outputDestinations).toEqual(["local-chat"]);
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("validates bindings against user-scope workflow catalog entries", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user-scope");
+    const eventRoot = path.join(root, ".rielflow-events");
+
+    await writeJson(
+      path.join(userRoot, "workflows", "user-demo", "workflow.json"),
+      {
+        workflowId: "user-demo",
+      },
+    );
+    await writeJson(path.join(eventRoot, "sources", "local-webhook.json"), {
+      id: "local-webhook",
+      kind: "webhook",
+      path: "/events/local",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-user-demo.json"), {
+      id: "to-user-demo",
+      sourceId: "local-webhook",
+      workflowName: "user-demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      eventRoot,
+      workflowScope: "user",
+      userRoot,
+      cwd: root,
+      env: {},
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("reports invalid workflow scope environment values during validation", async () => {
+    const root = await makeTempDir();
+    const eventRoot = path.join(root, ".rielflow-events");
+
+    await writeJson(path.join(eventRoot, "sources", "local-webhook.json"), {
+      id: "local-webhook",
+      kind: "webhook",
+      path: "/events/local",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
+      id: "to-demo",
+      sourceId: "local-webhook",
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      eventRoot,
+      cwd: root,
+      env: {
+        RIEL_WORKFLOW_SCOPE: "global",
+      },
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(
+      validation.issues.some((issue) =>
+        issue.message.includes("RIEL_WORKFLOW_SCOPE"),
+      ),
+    ).toBe(true);
+  });
+
+  test("reports invalid binding and unsafe webhook sync execution", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(eventRoot, "sources", "local-webhook.json"), {
+      id: "local-webhook",
+      kind: "webhook",
+      path: "/events/local",
+      replyEndpointEnv: "not-loud-enough",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-missing.json"), {
+      id: "to-missing",
+      sourceId: "missing",
+      workflowName: "missing-workflow",
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{bad.scope}}",
+        },
+      },
+      execution: {
+        async: false,
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "bindings.to-missing.sourceId",
+        "bindings.to-missing.workflowName",
+        "bindings.to-missing.inputMapping.template.request",
+        "sources.local-webhook.replyEndpointEnv",
+      ]),
+    );
+  });
+
+  test("reports invalid output destinations and binding references", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "local-webhook.json"), {
+      id: "local-webhook",
+      kind: "webhook",
+      path: "/events/local",
+    });
+    await writeJson(path.join(eventRoot, "destinations", "bad-chat.json"), {
+      id: "bad-chat",
+      kind: "chat",
+      sourceId: "missing-source",
+      target: {
+        conversationId: "",
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "bad-backup.json"), {
+      id: "bad-backup",
+      kind: "s3-backup",
+      provider: "other",
+      rootPrefix: "../unsafe",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
+      id: "to-demo",
+      sourceId: "local-webhook",
+      outputDestinations: ["missing-destination"],
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+      taskPlanning: {
+        requiredInput: [
+          {
+            label: "missing path",
+          },
+        ],
+        planTemplate: "",
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "destinations.bad-chat.sourceId",
+        "destinations.bad-chat.target.conversationId",
+        "destinations.bad-backup.provider",
+        "destinations.bad-backup.bucket",
+        "destinations.bad-backup.rootPrefix",
+        "bindings.to-demo.outputDestinations[0]",
+        "bindings.to-demo.taskPlanning.requiredInput[0].path",
+        "bindings.to-demo.taskPlanning.planTemplate",
+      ]),
+    );
+  });
+
+  test("rejects duplicate event HTTP paths", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(eventRoot, "sources", "first-webhook.json"), {
+      id: "first-webhook",
+      kind: "webhook",
+      path: "/events/shared",
+    });
+    await writeJson(path.join(eventRoot, "sources", "second-webhook.json"), {
+      id: "second-webhook",
+      kind: "webhook",
+      path: "/events/shared",
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toContain(
+      "sources.second-webhook.path",
+    );
+  });
+
+  test("loads and validates local file change sources", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "local-docs.json"), {
+      id: "local-docs",
+      kind: "file-change",
+      directory: "./watched-docs",
+      changeTypes: ["create", "modify", "delete"],
+      recursive: false,
+      filters: { suffixes: [".md", ".json"] },
+      stabilityWindowMs: 25,
+    });
+    await writeJson(path.join(eventRoot, "bindings", "docs-demo.json"), {
+      id: "docs-demo",
+      sourceId: "local-docs",
+      workflowName: "demo",
+      match: { eventType: "file.change.created" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(validation.configuration.sources[0]).toMatchObject({
+      id: "local-docs",
+      kind: "file-change",
+      configFilePath: path.join(eventRoot, "sources", "local-docs.json"),
+    });
+  });
+
+  test("reports invalid file change source options", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(eventRoot, "sources", "bad-files.json"), {
+      id: "bad-files",
+      kind: "file-change",
+      directory: "",
+      changeTypes: ["create", "create", "move"],
+      recursive: "yes",
+      filters: { suffixes: [] },
+      stabilityWindowMs: -1,
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-files.directory",
+        "sources.bad-files.changeTypes[1]",
+        "sources.bad-files.changeTypes[2]",
+        "sources.bad-files.recursive",
+        "sources.bad-files.filters.suffixes",
+        "sources.bad-files.stabilityWindowMs",
+      ]),
+    );
+  });
+
+  test("reports unsafe and duplicate file change suffix filters", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(eventRoot, "sources", "bad-suffixes.json"), {
+      id: "bad-suffixes",
+      kind: "file-change",
+      directory: "./watched-docs",
+      changeTypes: ["create"],
+      filters: {
+        suffixes: ["docs/.md", "notes\\.txt", ".md", ".md", ""],
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-suffixes.filters.suffixes[0]",
+        "sources.bad-suffixes.filters.suffixes[1]",
+        "sources.bad-suffixes.filters.suffixes[3]",
+        "sources.bad-suffixes.filters.suffixes[4]",
+      ]),
+    );
+    expect(validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "sources.bad-suffixes.filters.suffixes[0]",
+          message: "suffix must not contain path separators",
+        }),
+        expect.objectContaining({
+          path: "sources.bad-suffixes.filters.suffixes[3]",
+          message: "duplicate suffix '.md'",
+        }),
+      ]),
+    );
+  });
+
+  test("reports file change stability windows above the documented bound", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(eventRoot, "sources", "slow-files.json"), {
+      id: "slow-files",
+      kind: "file-change",
+      directory: "./watched-docs",
+      changeTypes: ["modify"],
+      stabilityWindowMs: FILE_CHANGE_MAX_STABILITY_WINDOW_MS + 1,
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "sources.slow-files.stabilityWindowMs",
+          message: expect.stringContaining(
+            String(FILE_CHANGE_MAX_STABILITY_WINDOW_MS),
+          ),
+        }),
+      ]),
+    );
+  });
+
+  test("rejects unsafe synchronous S3 event receiver bindings", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "incoming-docs.json"), {
+      id: "incoming-docs",
+      kind: "s3-repository",
+      provider: "s3-compatible",
+      bucket: "docs",
+      eventReceiver: {
+        mode: "webhook-bridge",
+        path: "/events/incoming-docs",
+      },
+      objectAccess: {
+        mode: "metadata-only",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "docs-demo.json"), {
+      id: "docs-demo",
+      sourceId: "incoming-docs",
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+      execution: {
+        async: false,
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "bindings.docs-demo.execution.async",
+        message: expect.stringContaining("HTTP-backed"),
+      }),
+    );
+  });
+
+  test("rejects cron schedules and timezones the scheduler cannot execute", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-cron.json"), {
+      id: "bad-cron",
+      kind: "cron",
+      schedule: "*/0 2 * * *",
+      timezone: "Mars/Base",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
+      id: "to-demo",
+      sourceId: "bad-cron",
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-cron.schedule",
+        "sources.bad-cron.timezone",
+      ]),
+    );
+  });
+
+  test("validates Matrix source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "team-matrix.json"), {
+      id: "team-matrix",
+      kind: "matrix",
+      provider: "matrix",
+      homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+      accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
+      userId: "@rielflow:matrix.example",
+      rooms: [
+        {
+          roomId: "!release:matrix.example",
+          alias: "#release:matrix.example",
+        },
+      ],
+      sync: {
+        pollTimeoutMs: 30000,
+        sinceTokenPath: "matrix/team-matrix-sync.json",
+      },
+      history: {
+        maxMessages: 20,
+        maxBytes: 32768,
+        maxAgeMs: 86400000,
+        scope: "thread-or-room",
+      },
+      attachments: {
+        downloadText: true,
+        maxBytes: 65536,
+        allowedMimeTypes: ["text/plain", "application/json"],
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
+      id: "to-demo",
+      sourceId: "team-matrix",
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("validates Discord Gateway source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "discord.json"), {
+      id: "discord-gateway-personas",
+      kind: "discord-gateway",
+      tokenEnv: "RIEL_DISCORD_BOT_TOKEN",
+      applicationIdEnv: "RIEL_DISCORD_APPLICATION_ID",
+      guildIds: ["123456789012345678"],
+      channels: [
+        {
+          id: "234567890123456789",
+          includeThreads: true,
+          personas: ["yui", "mika", "rina"],
+        },
+      ],
+      history: {
+        maxMessages: 20,
+        maxBytes: 32768,
+        maxAgeMs: 86400000,
+        scope: "thread-or-channel",
+        fetchOnMessage: "when-cache-empty",
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "discord.json"), {
+      id: "discord-gateway-persona-replies",
+      kind: "chat",
+      sourceId: "discord-gateway-personas",
+      target: {
+        provider: "discord",
+        conversationId: "234567890123456789",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "discord.json"), {
+      id: "discord-gateway-personas-to-demo",
+      sourceId: "discord-gateway-personas",
+      outputDestinations: ["discord-gateway-persona-replies"],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{event.input.text}}",
+          history: "{{event.input.history}}",
+        },
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("rejects malformed Discord Gateway source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-discord.json"), {
+      id: "bad-discord",
+      kind: "discord-gateway",
+      tokenEnv: "discord.token.literal",
+      applicationIdEnv: "",
+      guildIds: ["1234567890123456"],
+      channels: [
+        {
+          id: "12345",
+          includeThreads: "yes",
+          personas: ["mika", ""],
+        },
+      ],
+      history: {
+        maxMessages: 1000,
+        maxBytes: 999999999,
+        maxAgeMs: 999999999999,
+        scope: "global",
+        fetchOnMessage: "every-time",
+      },
+      filters: {
+        ignoreSelf: false,
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "bad-discord.json"), {
+      id: "bad-discord-replies",
+      kind: "chat",
+      sourceId: "bad-discord",
+      target: {
+        conversationId: "1234567890123456",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "bad-discord.json"), {
+      id: "bad-discord-to-demo",
+      sourceId: "bad-discord",
+      outputDestinations: ["bad-discord-replies"],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-discord.tokenEnv",
+        "sources.bad-discord.applicationIdEnv",
+        "sources.bad-discord.guildIds[0]",
+        "sources.bad-discord.channels[0].id",
+        "sources.bad-discord.channels[0].includeThreads",
+        "sources.bad-discord.channels[0].personas",
+        "sources.bad-discord.history.maxMessages",
+        "sources.bad-discord.history.maxBytes",
+        "sources.bad-discord.history.maxAgeMs",
+        "sources.bad-discord.history.scope",
+        "sources.bad-discord.history.fetchOnMessage",
+        "sources.bad-discord.filters.ignoreSelf",
+        "destinations.bad-discord-replies.target.conversationId",
+      ]),
+    );
+  });
+
+  test("validates Telegram Gateway source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "telegram.json"), {
+      id: "telegram-gateway-personas",
+      kind: "telegram-gateway",
+      provider: "telegram",
+      tokenEnv: "RIEL_TELEGRAM_BOT_TOKEN",
+      botIdEnv: "RIEL_TELEGRAM_BOT_ID",
+      chats: [
+        {
+          id: "-1001234567890",
+          personas: ["yui", "mika", "rina"],
+        },
+      ],
+      polling: {
+        timeoutSeconds: 30,
+        limit: 100,
+        offsetPath: "telegram/telegram-gateway-personas-offset.json",
+      },
+      history: {
+        maxMessages: 20,
+        maxBytes: 32768,
+        maxAgeMs: 86400000,
+        scope: "chat",
+        includeBotMessages: false,
+      },
+      filters: {
+        ignoreBots: true,
+        ignoreSelf: true,
+      },
+      attachments: {
+        includePhotos: true,
+        resolveFilePaths: true,
+      },
+      replyBots: {
+        mika: { tokenEnv: "RIEL_TELEGRAM_MIKA_BOT_TOKEN" },
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "telegram.json"), {
+      id: "telegram-gateway-persona-replies",
+      kind: "chat",
+      sourceId: "telegram-gateway-personas",
+      target: {
+        provider: "telegram",
+        conversationId: "-1001234567890",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "telegram.json"), {
+      id: "telegram-gateway-personas-to-demo",
+      sourceId: "telegram-gateway-personas",
+      outputDestinations: ["telegram-gateway-persona-replies"],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{event.input.text}}",
+          history: "{{event.input.history}}",
+          attachments: "{{event.input.attachments}}",
+        },
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("rejects malformed Telegram Gateway source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-telegram.json"), {
+      id: "bad-telegram",
+      kind: "telegram-gateway",
+      provider: "discord",
+      tokenEnv: "telegram.token.literal",
+      botIdEnv: "telegram.bot.id",
+      chats: [
+        {
+          id: "chat-name",
+          personas: ["yui", ""],
+        },
+      ],
+      polling: {
+        timeoutSeconds: 99,
+        limit: 101,
+        offsetPath: "",
+      },
+      history: {
+        maxMessages: 1000,
+        maxBytes: 999999999,
+        maxAgeMs: 999999999999,
+        scope: "global",
+        includeBotMessages: "no",
+      },
+      filters: {
+        ignoreSelf: false,
+      },
+      attachments: {
+        includePhotos: "yes",
+        resolveFilePaths: "yes",
+      },
+      replyBots: {
+        "Bad Bot": { tokenEnv: "bad.token" },
+      },
+      restBaseUrl: "",
+    });
+    await writeJson(path.join(eventRoot, "destinations", "bad-telegram.json"), {
+      id: "bad-telegram-replies",
+      kind: "chat",
+      sourceId: "bad-telegram",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "bad-telegram.json"), {
+      id: "bad-telegram-to-demo",
+      sourceId: "bad-telegram",
+      outputDestinations: ["bad-telegram-replies"],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-telegram.tokenEnv",
+        "sources.bad-telegram.botIdEnv",
+        "sources.bad-telegram.chats[0].id",
+        "sources.bad-telegram.chats[0].personas",
+        "sources.bad-telegram.polling.timeoutSeconds",
+        "sources.bad-telegram.polling.limit",
+        "sources.bad-telegram.polling.offsetPath",
+        "sources.bad-telegram.history.maxMessages",
+        "sources.bad-telegram.history.maxBytes",
+        "sources.bad-telegram.history.maxAgeMs",
+        "sources.bad-telegram.history.scope",
+        "sources.bad-telegram.history.includeBotMessages",
+        "sources.bad-telegram.filters.ignoreSelf",
+        "sources.bad-telegram.attachments.includePhotos",
+        "sources.bad-telegram.attachments.resolveFilePaths",
+        "sources.bad-telegram.replyBots.Bad Bot",
+        "sources.bad-telegram.replyBots.Bad Bot.tokenEnv",
+        "sources.bad-telegram.provider",
+        "sources.bad-telegram.restBaseUrl",
+      ]),
+    );
+  });
+
+  test.each([
+    "slack",
+    "teams",
+    "gchat",
+    "discord",
+    "telegram",
+    "github",
+    "linear",
+    "whatsapp",
+    "messenger",
+    "web",
+  ] as const)("validates Chat SDK %s source configuration", async (provider) => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", `${provider}.json`), {
+      id: `${provider}-chat`,
+      kind: "chat-sdk",
+      provider,
+      mode: "generic-webhook",
+      webhook: {
+        path: `chat-sdk/${provider}`,
+        signingSecretEnv: "RIEL_CHAT_SDK_WEBHOOK_SECRET",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
+        rateLimit: { windowMs: 60000, maxRequests: 10 },
+      },
+      send: {
+        endpointUrlEnv: "RIEL_CHAT_SDK_SEND_URL",
+        tokenEnv: "RIEL_CHAT_SDK_SEND_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", `${provider}.json`), {
+      id: `${provider}-reply`,
+      kind: "chat",
+      sourceId: `${provider}-chat`,
+    });
+    await writeJson(path.join(eventRoot, "bindings", `${provider}.json`), {
+      id: `${provider}-to-demo`,
+      sourceId: `${provider}-chat`,
+      outputDestinations: [`${provider}-reply`],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("rejects malformed Chat SDK source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-chat-sdk.json"), {
+      id: "bad-chat-sdk",
+      kind: "chat-sdk",
+      provider: "irc",
+      mode: "direct-package",
+      webhook: {
+        path: "../unsafe",
+        signingSecretEnv: "literal-secret-value",
+        bearerTokenEnv: "not-loud-enough",
+        rateLimit: { windowMs: 0, maxRequests: 0 },
+      },
+      send: {
+        endpointUrlEnv: "https://send.example.test",
+        tokenEnv: "plain-token",
+      },
+      providerConfig: {
+        eventType: "chat.action",
+      },
+      history: {
+        maxMessages: 1000,
+        maxBytes: 999999999,
+        maxAgeMs: 999999999999,
+        scope: "global",
+        includeBotMessages: "sometimes",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "bad.json"), {
+      id: "bad-to-demo",
+      sourceId: "bad-chat-sdk",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-chat-sdk.provider",
+        "sources.bad-chat-sdk.mode",
+        "sources.bad-chat-sdk.webhook.path",
+        "sources.bad-chat-sdk.webhook.signingSecretEnv",
+        "sources.bad-chat-sdk.webhook.bearerTokenEnv",
+        "sources.bad-chat-sdk.webhook.rateLimit.windowMs",
+        "sources.bad-chat-sdk.webhook.rateLimit.maxRequests",
+        "sources.bad-chat-sdk.send.endpointUrlEnv",
+        "sources.bad-chat-sdk.send.tokenEnv",
+        "sources.bad-chat-sdk.providerConfig.eventType",
+        "sources.bad-chat-sdk.history",
+        "sources.bad-chat-sdk.history.maxMessages",
+        "sources.bad-chat-sdk.history.maxBytes",
+        "sources.bad-chat-sdk.history.maxAgeMs",
+        "sources.bad-chat-sdk.history.scope",
+        "sources.bad-chat-sdk.history.includeBotMessages",
+      ]),
+    );
+  });
+
+  test("reports non-string Chat SDK webhook paths without throwing", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-path.json"), {
+      id: "bad-path-chat-sdk",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: 123,
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "bad-path.json"), {
+      id: "bad-path-to-demo",
+      sourceId: "bad-path-chat-sdk",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "sources.bad-path-chat-sdk.webhook.path",
+      }),
+    );
+  });
+
+  test("reports unsupported Chat SDK providers with binding event types without throwing", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "irc.json"), {
+      id: "irc-chat-sdk",
+      kind: "chat-sdk",
+      provider: "irc",
+      webhook: {
+        path: "chat-sdk/irc",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "irc.json"), {
+      id: "irc-to-demo",
+      sourceId: "irc-chat-sdk",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "sources.irc-chat-sdk.provider",
+      }),
+    );
+  });
+
+  test("rejects Chat SDK webhook sources without inbound authentication", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "no-auth.json"), {
+      id: "no-auth-chat-sdk",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: { path: "chat-sdk/no-auth" },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "no-auth.json"), {
+      id: "no-auth-to-demo",
+      sourceId: "no-auth-chat-sdk",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "sources.no-auth-chat-sdk.webhook",
+        message: expect.stringContaining("signingSecretEnv or bearerTokenEnv"),
+      }),
+    );
+  });
+
+  test("rejects Chat SDK duplicate paths, destinations without send config, and unsupported event types", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "first.json"), {
+      id: "first-chat-sdk",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: "chat-sdk/shared",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "sources", "second.json"), {
+      id: "second-chat-sdk",
+      kind: "chat-sdk",
+      provider: "discord",
+      webhook: {
+        path: "chat-sdk/shared",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
+      },
+      send: { endpointUrlEnv: "RIEL_CHAT_SDK_SEND_URL" },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "reply.json"), {
+      id: "missing-send-reply",
+      kind: "chat",
+      sourceId: "first-chat-sdk",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "unsupported.json"), {
+      id: "unsupported-event-type",
+      sourceId: "second-chat-sdk",
+      workflowName: "demo",
+      match: { eventType: "chat.action" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "sources.second-chat-sdk.path",
+          message: expect.stringContaining("already used"),
+        }),
+        expect.objectContaining({
+          path: "destinations.missing-send-reply.sourceId",
+          message: expect.stringContaining("does not configure send"),
+        }),
+        expect.objectContaining({
+          path: "bindings.unsupported-event-type.match.eventType",
+          message: expect.stringContaining("does not support event type"),
+        }),
+      ]),
+    );
+  });
+
+  test.each([
+    "chat.mention",
+    "chat.command",
+    "chat.action",
+    "chat.modal-submit",
+  ])("rejects undeclared Chat SDK capability event type %s", async (eventType) => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "slack.json"), {
+      id: "slack-chat",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: "chat-sdk/slack",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "slack.json"), {
+      id: "slack-to-demo",
+      sourceId: "slack-chat",
+      workflowName: "demo",
+      match: { eventType },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "bindings.slack-to-demo.match.eventType",
+      }),
+    );
+  });
+
+  test("accepts schedule-registration policy with binding inputMapping", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "resolver", "workflow.json"), {
+      workflowId: "resolver",
+    });
+    await writeJson(path.join(eventRoot, "sources", "chat.json"), {
+      id: "chat",
+      kind: "webhook",
+      path: "/events/chat",
+    });
+    await writeJson(
+      path.join(eventRoot, "bindings", "register-schedule.json"),
+      {
+        id: "register-schedule",
+        sourceId: "chat",
+        inputMapping: {
+          mode: "template",
+          template: {
+            request: "{{event.input.text}}",
+            timezone: "{{event.input.timezone}}",
+          },
+        },
+        execution: {
+          mode: "schedule-registration",
+          resolverWorkflowName: "resolver",
+          resolverNodeId: "resolver-worker",
+          minConfidence: 0.8,
+        },
+      },
+    );
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test.each([
+    "inputPath",
+    "timezonePath",
+  ] as const)("rejects schedule-registration execution.%s in favor of inputMapping", async (field) => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "resolver", "workflow.json"), {
+      workflowId: "resolver",
+    });
+    await writeJson(path.join(eventRoot, "sources", "chat.json"), {
+      id: "chat",
+      kind: "webhook",
+      path: "/events/chat",
+    });
+    await writeJson(
+      path.join(eventRoot, "bindings", "register-schedule.json"),
+      {
+        id: "register-schedule",
+        sourceId: "chat",
+        inputMapping: {
+          mode: "event-input",
+        },
+        execution: {
+          mode: "schedule-registration",
+          resolverWorkflowName: "resolver",
+          resolverNodeId: "resolver-worker",
+          [field]: "event.input.text",
+        },
+      },
+    );
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: `bindings.register-schedule.execution.${field}`,
+        message: expect.stringContaining("inputMapping"),
+      }),
+    );
+  });
+
+  test("rejects malformed Matrix source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-matrix.json"), {
+      id: "bad-matrix",
+      kind: "matrix",
+      homeserverUrlEnv: "not-loud-enough",
+      accessTokenEnv: "",
+      userId: "rielflow",
+      rooms: [
+        {
+          roomId: "release-room",
+          alias: "",
+        },
+      ],
+      sync: {
+        pollTimeoutMs: 10,
+        sinceTokenPath: "../token.json",
+      },
+      history: {
+        maxMessages: 1000,
+        maxBytes: 999999999,
+        maxAgeMs: 999999999999,
+        scope: "global",
+        includeOwnMessages: "sometimes",
+      },
+      attachments: {
+        downloadText: "yes",
+        maxBytes: 999999999,
+        allowedMimeTypes: [],
+      },
+      replyBots: {
+        "Bad Bot": {
+          accessTokenEnv: "not-loud-enough",
+        },
+      },
+      ignoreOwnMessages: "yes",
+    });
+    await writeJson(
+      path.join(eventRoot, "sources", "bad-matrix-attachments.json"),
+      {
+        id: "bad-matrix-attachments",
+        kind: "matrix",
+        homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+        accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
+        userId: "@rielflow:matrix.example",
+        rooms: [{ roomId: "!release:matrix.example" }],
+        attachments: true,
+      },
+    );
+    await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
+      id: "to-demo",
+      sourceId: "bad-matrix",
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-matrix.homeserverUrlEnv",
+        "sources.bad-matrix.accessTokenEnv",
+        "sources.bad-matrix.userId",
+        "sources.bad-matrix.rooms[0].roomId",
+        "sources.bad-matrix.rooms[0].alias",
+        "sources.bad-matrix.sync.pollTimeoutMs",
+        "sources.bad-matrix.sync.sinceTokenPath",
+        "sources.bad-matrix.history.maxMessages",
+        "sources.bad-matrix.history.maxBytes",
+        "sources.bad-matrix.history.maxAgeMs",
+        "sources.bad-matrix.history.scope",
+        "sources.bad-matrix.history.includeOwnMessages",
+        "sources.bad-matrix.attachments.downloadText",
+        "sources.bad-matrix.attachments.maxBytes",
+        "sources.bad-matrix.attachments.allowedMimeTypes",
+        "sources.bad-matrix.replyBots.Bad Bot",
+        "sources.bad-matrix.replyBots.Bad Bot.accessTokenEnv",
+        "sources.bad-matrix.ignoreOwnMessages",
+        "sources.bad-matrix-attachments.attachments",
+      ]),
+    );
+  });
+
+  test("rejects malformed supervised command-map configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "chat-webhook.json"), {
+      id: "chat-webhook",
+      kind: "webhook",
+      path: "/events/chat",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "supervised-demo.json"), {
+      id: "supervised-demo",
+      sourceId: "chat-webhook",
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+      execution: {
+        mode: "supervised",
+        control: {
+          intentMapping: {
+            mode: "command-map",
+            inputPath: "event.input.text",
+            commands: {
+              start: 1,
+              invalidAction: "status",
+            },
+            defaultAction: "launch",
+          },
+        },
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "bindings.supervised-demo.execution.control.intentMapping.defaultAction",
+        "bindings.supervised-demo.execution.control.intentMapping.commands.start",
+        "bindings.supervised-demo.execution.control.intentMapping.commands.invalidAction",
+      ]),
+    );
+  });
+});

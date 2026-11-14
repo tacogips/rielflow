@@ -1,0 +1,577 @@
+import { readdir, readFile, rm } from "node:fs/promises";
+import path from "node:path";
+import {
+  resolveUserScopeRootForCheckout,
+  type WorkflowCheckoutScope,
+} from "../checkout";
+import { resolveConfiguredRootPath } from "../paths";
+import { err, ok, type Result } from "../result";
+import {
+  checkoutWorkflowPackage,
+  type WorkflowPackageCheckoutResult,
+} from "./checkout";
+import {
+  createNoopWorkflowPackageUpdateResult,
+  resolveWorkflowPackageCheckoutStatus,
+} from "./status";
+import type {
+  WorkflowPackageFailure,
+  WorkflowPackageRegistryConfigOptions,
+  WorkflowPackageSkillInstallTarget,
+} from "./types";
+
+export interface WorkflowPackageInstalledRecord {
+  readonly installId: string;
+  readonly packageId: string;
+  readonly packageName: string;
+  readonly workflowName: string;
+  readonly scope: WorkflowCheckoutScope;
+  readonly destinationDirectory: string;
+  readonly checkoutRecordPath: string;
+  readonly checkedOutAt?: string;
+  readonly version?: string;
+  readonly packageVersion?: string;
+  readonly packageHash?: string;
+  readonly checksum?: string;
+  readonly checksumAlgorithm?: string;
+  readonly contentDigest?: string;
+  readonly integrityDigest?: string;
+  readonly registryUrl?: string;
+  readonly registryRef?: string;
+  readonly sourceUrl?: string;
+  readonly skills: readonly WorkflowPackageSkillInstallTarget[];
+}
+
+export interface WorkflowPackageListResult {
+  readonly packages: readonly WorkflowPackageInstalledRecord[];
+}
+
+export interface WorkflowPackageRemoveResult {
+  readonly installId: string;
+  readonly packageId: string;
+  readonly workflowName: string;
+  readonly scope: WorkflowCheckoutScope;
+  readonly removedPaths: readonly string[];
+  readonly skippedPaths: readonly string[];
+  readonly checkoutRecordPath: string;
+}
+
+function packageFailure(
+  code: WorkflowPackageFailure["code"],
+  message: string,
+): WorkflowPackageFailure {
+  return { code, message };
+}
+
+async function removePathIfPresent(filePath: string): Promise<void> {
+  try {
+    await rm(filePath, { recursive: true, force: true });
+  } catch (error: unknown) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? (error as { readonly code?: unknown }).code
+        : undefined;
+    if (code !== "ENOENT" && code !== "ENOTDIR") {
+      throw error;
+    }
+  }
+}
+
+async function readJsonRecord(
+  filePath: string,
+): Promise<Readonly<Record<string, unknown>> | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(filePath, "utf8")) as unknown;
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? (parsed as Readonly<Record<string, unknown>>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function listPackageCheckoutRecords(input: {
+  readonly userRoot: string;
+}): Promise<
+  readonly {
+    readonly path: string;
+    readonly record: Readonly<Record<string, unknown>>;
+  }[]
+> {
+  const checkoutRoot = path.join(
+    input.userRoot,
+    "workflow-registry",
+    "checkouts",
+  );
+  try {
+    const entries = await readdir(checkoutRoot, { withFileTypes: true });
+    const records = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+        .map(async (entry) => {
+          const recordPath = path.join(checkoutRoot, entry.name);
+          const record = await readJsonRecord(recordPath);
+          return record?.["checkoutKind"] === "package"
+            ? { path: recordPath, record }
+            : undefined;
+        }),
+    );
+    return records.filter(
+      (
+        record,
+      ): record is {
+        readonly path: string;
+        readonly record: Readonly<Record<string, unknown>>;
+      } => record !== undefined,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function recordString(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function recordArray(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): readonly unknown[] {
+  const value = record[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function resolveStatusProjectRootIdentity(
+  options: WorkflowPackageRegistryConfigOptions | undefined,
+): string {
+  if (options?.projectRoot !== undefined) {
+    return path.resolve(options.projectRoot);
+  }
+  if (options?.cwd !== undefined) {
+    return path.resolve(options.cwd);
+  }
+  return process.cwd();
+}
+
+function workflowDefinitionDirOverride(
+  options: WorkflowPackageRegistryConfigOptions | undefined,
+): string | undefined {
+  return options?.workflowRoot === undefined
+    ? undefined
+    : resolveConfiguredRootPath(options.workflowRoot, options);
+}
+
+function recordScope(
+  record: Readonly<Record<string, unknown>>,
+): WorkflowCheckoutScope | undefined {
+  const scope = recordString(record, "scope");
+  return scope === "project" || scope === "user" ? scope : undefined;
+}
+
+function recordSkills(
+  record: Readonly<Record<string, unknown>>,
+): readonly WorkflowPackageSkillInstallTarget[] {
+  return recordArray(record, "skills").filter(
+    (entry): entry is WorkflowPackageSkillInstallTarget => {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+        return false;
+      }
+      const skillRecord = entry as Readonly<Record<string, unknown>>;
+      return (
+        recordString(skillRecord, "vendor") !== undefined &&
+        recordString(skillRecord, "name") !== undefined &&
+        recordString(skillRecord, "sourcePath") !== undefined &&
+        recordString(skillRecord, "checksum") !== undefined &&
+        recordString(skillRecord, "managedPath") !== undefined &&
+        recordString(skillRecord, "installMode") !== undefined
+      );
+    },
+  );
+}
+
+function integrityRecordDigest(
+  record: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const integrity = record["integrity"];
+  if (
+    typeof integrity !== "object" ||
+    integrity === null ||
+    Array.isArray(integrity)
+  ) {
+    return undefined;
+  }
+  return recordString(integrity as Readonly<Record<string, unknown>>, "digest");
+}
+
+function toInstalledPackageRecord(input: {
+  readonly path: string;
+  readonly record: Readonly<Record<string, unknown>>;
+}): WorkflowPackageInstalledRecord | undefined {
+  const installId = recordString(input.record, "installId");
+  const packageId = recordString(input.record, "packageId");
+  const packageName = recordString(input.record, "packageName") ?? packageId;
+  const workflowName = recordString(input.record, "workflowName");
+  const scope = recordScope(input.record);
+  const destinationDirectory = recordString(
+    input.record,
+    "destinationDirectory",
+  );
+  if (
+    installId === undefined ||
+    packageId === undefined ||
+    packageName === undefined ||
+    workflowName === undefined ||
+    scope === undefined ||
+    destinationDirectory === undefined
+  ) {
+    return undefined;
+  }
+  const version = recordString(input.record, "version");
+  const checkedOutAt = recordString(input.record, "checkedOutAt");
+  const packageHash = recordString(input.record, "packageHash");
+  const checksum = recordString(input.record, "checksum");
+  const checksumAlgorithm = recordString(input.record, "checksumAlgorithm");
+  const contentDigest = recordString(input.record, "contentDigest");
+  const integrityDigest = integrityRecordDigest(input.record);
+  const registryUrl = recordString(input.record, "registryUrl");
+  const registryRef = recordString(input.record, "registryRef");
+  const sourceUrl = recordString(input.record, "sourceUrl");
+  return {
+    installId,
+    packageId,
+    packageName,
+    workflowName,
+    scope,
+    destinationDirectory,
+    checkoutRecordPath: input.path,
+    ...(checkedOutAt === undefined ? {} : { checkedOutAt }),
+    ...(version === undefined ? {} : { version, packageVersion: version }),
+    ...(packageHash === undefined ? {} : { packageHash }),
+    ...(checksum === undefined ? {} : { checksum }),
+    ...(checksumAlgorithm === undefined ? {} : { checksumAlgorithm }),
+    ...(contentDigest === undefined ? {} : { contentDigest }),
+    ...(integrityDigest === undefined ? {} : { integrityDigest }),
+    ...(registryUrl === undefined ? {} : { registryUrl }),
+    ...(registryRef === undefined ? {} : { registryRef }),
+    ...(sourceUrl === undefined ? {} : { sourceUrl }),
+    skills: recordSkills(input.record),
+  };
+}
+
+function matchesPackageCheckoutRecord(input: {
+  readonly record: Readonly<Record<string, unknown>>;
+  readonly workflowName?: string;
+  readonly installId?: string;
+  readonly scope?: WorkflowCheckoutScope;
+  readonly currentProjectRootIdentity: string;
+  readonly currentWorkflowDefinitionDir?: string;
+}): boolean {
+  if (input.installId !== undefined) {
+    return recordString(input.record, "installId") === input.installId;
+  }
+  if (
+    input.workflowName !== undefined &&
+    recordString(input.record, "workflowName") !== input.workflowName &&
+    recordString(input.record, "packageId") !== input.workflowName &&
+    recordString(input.record, "packageName") !== input.workflowName
+  ) {
+    return false;
+  }
+  const scope = recordString(input.record, "scope");
+  if (input.scope !== undefined && scope !== input.scope) {
+    return false;
+  }
+  if (scope !== "project") {
+    return true;
+  }
+  const recordProjectRootIdentity = recordString(
+    input.record,
+    "projectRootIdentity",
+  );
+  if (
+    recordProjectRootIdentity !== undefined &&
+    recordProjectRootIdentity !== input.currentProjectRootIdentity
+  ) {
+    return false;
+  }
+  const recordWorkflowDefinitionDir = recordString(
+    input.record,
+    "workflowDefinitionDirOverride",
+  );
+  return (
+    input.currentWorkflowDefinitionDir === undefined ||
+    recordWorkflowDefinitionDir === undefined ||
+    recordWorkflowDefinitionDir === input.currentWorkflowDefinitionDir
+  );
+}
+
+function matchPackageCheckoutRecords(input: {
+  readonly workflowName?: string;
+  readonly installId?: string;
+  readonly scope?: WorkflowCheckoutScope;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+  readonly records: readonly {
+    readonly path: string;
+    readonly record: Readonly<Record<string, unknown>>;
+  }[];
+}): readonly {
+  readonly path: string;
+  readonly record: Readonly<Record<string, unknown>>;
+}[] {
+  const currentProjectRootIdentity = resolveStatusProjectRootIdentity(
+    input.options,
+  );
+  const currentWorkflowDefinitionDir = workflowDefinitionDirOverride(
+    input.options,
+  );
+  return input.records.filter(({ record }) =>
+    matchesPackageCheckoutRecord({
+      record,
+      ...(input.workflowName === undefined
+        ? {}
+        : { workflowName: input.workflowName }),
+      ...(input.installId === undefined ? {} : { installId: input.installId }),
+      ...(input.scope === undefined ? {} : { scope: input.scope }),
+      currentProjectRootIdentity,
+      ...(currentWorkflowDefinitionDir === undefined
+        ? {}
+        : { currentWorkflowDefinitionDir }),
+    }),
+  );
+}
+
+export async function getWorkflowPackageCheckoutStatus(input: {
+  readonly workflowName?: string;
+  readonly installId?: string;
+  readonly scope?: WorkflowCheckoutScope;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+}): Promise<Result<Readonly<Record<string, unknown>>, WorkflowPackageFailure>> {
+  const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
+  const matched = matchPackageCheckoutRecords({
+    ...(input.workflowName === undefined
+      ? {}
+      : { workflowName: input.workflowName }),
+    ...(input.installId === undefined ? {} : { installId: input.installId }),
+    ...(input.scope === undefined ? {} : { scope: input.scope }),
+    ...(input.options === undefined ? {} : { options: input.options }),
+    records: await listPackageCheckoutRecords({ userRoot }),
+  });
+  if (matched.length === 0) {
+    return err(
+      packageFailure("MISSING_PACKAGE", "package checkout record not found"),
+    );
+  }
+  if (matched.length > 1) {
+    return err(
+      packageFailure(
+        "DUPLICATE_PACKAGE",
+        "multiple package checkout records match; retry with --install-id",
+      ),
+    );
+  }
+  const record = matched[0];
+  if (record === undefined) {
+    return err(
+      packageFailure("MISSING_PACKAGE", "package checkout record not found"),
+    );
+  }
+  return resolveWorkflowPackageCheckoutStatus({
+    record: record.record,
+    checkoutRecordPath: record.path,
+    ...(input.options === undefined ? {} : { options: input.options }),
+  });
+}
+
+export async function listWorkflowPackageCheckouts(input: {
+  readonly scope?: WorkflowCheckoutScope;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+}): Promise<Result<WorkflowPackageListResult, WorkflowPackageFailure>> {
+  const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
+  const records = matchPackageCheckoutRecords({
+    ...(input.scope === undefined ? {} : { scope: input.scope }),
+    ...(input.options === undefined ? {} : { options: input.options }),
+    records: await listPackageCheckoutRecords({ userRoot }),
+  });
+  const packages = records
+    .map(toInstalledPackageRecord)
+    .filter(
+      (record): record is WorkflowPackageInstalledRecord =>
+        record !== undefined,
+    )
+    .sort((left, right) =>
+      `${left.scope}:${left.packageId}:${left.workflowName}:${left.installId}`.localeCompare(
+        `${right.scope}:${right.packageId}:${right.workflowName}:${right.installId}`,
+      ),
+    );
+  return ok({ packages });
+}
+
+async function removeRecordedPackagePath(input: {
+  readonly path: string | undefined;
+  readonly removedPaths: string[];
+}): Promise<void> {
+  if (input.path === undefined) {
+    return;
+  }
+  await removePathIfPresent(input.path);
+  input.removedPaths.push(input.path);
+}
+
+export async function removeWorkflowPackageCheckout(input: {
+  readonly workflowName?: string;
+  readonly installId?: string;
+  readonly scope?: WorkflowCheckoutScope;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+}): Promise<Result<WorkflowPackageRemoveResult, WorkflowPackageFailure>> {
+  if (input.workflowName === undefined && input.installId === undefined) {
+    return err(
+      packageFailure(
+        "USAGE",
+        "package remove requires a workflow name or --install-id",
+      ),
+    );
+  }
+  const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
+  const matched = matchPackageCheckoutRecords({
+    ...(input.workflowName === undefined
+      ? {}
+      : { workflowName: input.workflowName }),
+    ...(input.installId === undefined ? {} : { installId: input.installId }),
+    ...(input.scope === undefined ? {} : { scope: input.scope }),
+    ...(input.options === undefined ? {} : { options: input.options }),
+    records: await listPackageCheckoutRecords({ userRoot }),
+  });
+  if (matched.length === 0) {
+    return err(
+      packageFailure("MISSING_PACKAGE", "package checkout record not found"),
+    );
+  }
+  if (matched.length > 1) {
+    return err(
+      packageFailure(
+        "DUPLICATE_PACKAGE",
+        "multiple package checkout records match; retry with --install-id",
+      ),
+    );
+  }
+  const matchedRecord = matched[0];
+  if (matchedRecord === undefined) {
+    return err(
+      packageFailure("MISSING_PACKAGE", "package checkout record not found"),
+    );
+  }
+  const installed = toInstalledPackageRecord(matchedRecord);
+  if (installed === undefined) {
+    return err(
+      packageFailure("INVALID_MANIFEST", "package checkout record is invalid"),
+    );
+  }
+  const removedPaths: string[] = [];
+  const skippedPaths: string[] = [];
+  try {
+    for (const skill of installed.skills) {
+      await removeRecordedPackagePath({
+        path: skill.projectionPath,
+        removedPaths,
+      });
+      await removeRecordedPackagePath({
+        path: skill.managedPath,
+        removedPaths,
+      });
+    }
+    await removeRecordedPackagePath({
+      path: recordString(matchedRecord.record, "managedSkillRoot"),
+      removedPaths,
+    });
+    await removeRecordedPackagePath({
+      path: path.join(
+        installed.destinationDirectory,
+        ".rielflow-package-provenance.json",
+      ),
+      removedPaths,
+    });
+    await removeRecordedPackagePath({
+      path: installed.destinationDirectory,
+      removedPaths,
+    });
+    await removeRecordedPackagePath({
+      path: matchedRecord.path,
+      removedPaths,
+    });
+    return ok({
+      installId: installed.installId,
+      packageId: installed.packageId,
+      workflowName: installed.workflowName,
+      scope: installed.scope,
+      removedPaths,
+      skippedPaths,
+      checkoutRecordPath: matchedRecord.path,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    return err(packageFailure("IO", `package remove failed: ${message}`));
+  }
+}
+
+export async function updateWorkflowPackageCheckout(input: {
+  readonly workflowName?: string;
+  readonly installId?: string;
+  readonly scope?: WorkflowCheckoutScope;
+  readonly yes?: boolean;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+}): Promise<Result<WorkflowPackageCheckoutResult, WorkflowPackageFailure>> {
+  const status = await getWorkflowPackageCheckoutStatus(input);
+  if (!status.ok) {
+    return status;
+  }
+  if (status.value["updateAvailable"] !== true) {
+    return ok(createNoopWorkflowPackageUpdateResult(status.value));
+  }
+  if (input.yes !== true) {
+    return err(
+      packageFailure(
+        "UPDATE_CONFIRMATION_REQUIRED",
+        "package update requires --yes for noninteractive clean install",
+      ),
+    );
+  }
+  const packageName = recordString(status.value, "packageId");
+  if (packageName === undefined) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        "package checkout record is missing packageId",
+      ),
+    );
+  }
+  const registry = recordString(status.value, "registryUrl");
+  const branch = recordString(status.value, "registryRef");
+  const projectRootIdentity = recordString(status.value, "projectRootIdentity");
+  const workflowDefinitionDir = recordString(
+    status.value,
+    "workflowDefinitionDirOverride",
+  );
+  const options = {
+    ...(input.options ?? {}),
+    ...(projectRootIdentity === undefined ? {} : { cwd: projectRootIdentity }),
+    ...(workflowDefinitionDir === undefined
+      ? {}
+      : { workflowRoot: workflowDefinitionDir }),
+  };
+  return checkoutWorkflowPackage({
+    packageName,
+    packageId: packageName,
+    ...(registry === undefined ? {} : { registry }),
+    ...(branch === undefined ? {} : { branch }),
+    overwrite: true,
+    yes: true,
+    userScope: recordString(status.value, "scope") === "user",
+    options,
+  });
+}

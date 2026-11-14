@@ -1,0 +1,76 @@
+{
+  "workflowId": "chat-supervisor-collaboration",
+  "description": "Chat-triggered supervisor collaboration reference: Workflow A and B brainstorm, Workflow C turns the result into an execution specification, then asks A and B for review through external chat destinations.",
+  "defaults": {
+    "maxLoopIterations": 2,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Act as the assigned supervisor persona. Keep internal workflow mail separate from external chat events and destinations. Return concise JSON."
+  },
+  "entryStepId": "workflow-a-brainstorm",
+  "nodes": [
+    {
+      "id": "workflow-a-brainstorm",
+      "nodeFile": "nodes/node-workflow-a-brainstorm.json"
+    },
+    {
+      "id": "workflow-b-brainstorm",
+      "nodeFile": "nodes/node-workflow-b-brainstorm.json"
+    },
+    {
+      "id": "workflow-c-spec-and-implementation",
+      "nodeFile": "nodes/node-workflow-c-spec-and-implementation.json"
+    },
+    {
+      "id": "workflow-c-request-review",
+      "nodeFile": "nodes/node-workflow-c-request-review.json"
+    },
+    {
+      "id": "workflow-output",
+      "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "workflow-a-brainstorm",
+      "nodeId": "workflow-a-brainstorm",
+      "transitions": [
+        {
+          "toStepId": "workflow-b-brainstorm"
+        }
+      ]
+    },
+    {
+      "id": "workflow-b-brainstorm",
+      "nodeId": "workflow-b-brainstorm",
+      "transitions": [
+        {
+          "toStepId": "workflow-c-spec-and-implementation"
+        }
+      ]
+    },
+    {
+      "id": "workflow-c-spec-and-implementation",
+      "nodeId": "workflow-c-spec-and-implementation",
+      "transitions": [
+        {
+          "toStepId": "workflow-c-request-review"
+        }
+      ]
+    },
+    {
+      "id": "workflow-c-request-review",
+      "nodeId": "workflow-c-request-review",
+      "transitions": [
+        {
+          "toStepId": "workflow-output"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output"
+    }
+  ]
+}
