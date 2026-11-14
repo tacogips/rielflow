@@ -1,0 +1,9 @@
+{
+  "id": "rielflow-manager",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/supervisor-manager.md",
+  "variables": {
+    "workflowId": "rielflow-default-workflow-supervisor"
+  }
+}

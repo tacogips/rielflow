@@ -1,0 +1,10 @@
+{
+  "id": "local-docs",
+  "kind": "file-change",
+  "directory": "../../watched-docs",
+  "changeTypes": ["create", "modify", "delete"],
+  "recursive": false,
+  "filters": {
+    "suffixes": [".md", ".json"]
+  }
+}

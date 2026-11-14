@@ -1,0 +1,18 @@
+{
+  "id": "read-digest-state",
+  "description": "Reads the persisted X digest cursor and prepares a one-hour or max-50 fetch request.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/read-digest-state.sh",
+    "envTemplate": {
+      "RIEL_X_DIGEST_STATE_FILE": "{{workflowInput.stateFile}}",
+      "RIEL_X_DIGEST_ACCOUNT_USERNAME": "{{workflowInput.accountUsername}}",
+      "RIEL_X_DIGEST_LOOKBACK_MINUTES": "{{workflowInput.lookbackMinutes}}",
+      "RIEL_X_DIGEST_MAX_POSTS": "{{workflowInput.maxPosts}}"
+    }
+  },
+  "output": {
+    "description": "Output envelope with cursor state and x-gateway fetch parameters."
+  }
+}
