@@ -1,0 +1,11 @@
+{
+  "id": "step3-post-handoff",
+  "description": "Record the delegated design-and-implement-review-loop result before the next active-plan assessment.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/step3-post-handoff.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with delegated workflow status, selected plan path, changed files, verification evidence, commit information, and residual risks."
+  }
+}

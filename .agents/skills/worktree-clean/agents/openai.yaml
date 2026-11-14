@@ -1,0 +1,4 @@
+interface:
+  display_name: "Worktree Clean"
+  short_description: "Remove merged managed worktrees"
+  default_prompt: "Use $worktree-clean to dry-run cleanup of merged package worktrees."

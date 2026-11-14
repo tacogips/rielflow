@@ -1,0 +1,93 @@
+{
+  "workflowId": "same-node-session-echo",
+  "description": "Reference workflow authored in the step-addressed model where two distinct steps revisit one reusable worker node so it can first echo the request and then answer on the next visit using an inherited backend session.",
+  "defaults": {
+    "maxLoopIterations": 2,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}} so one reusable worker node is visited twice through explicit steps: first echo the normalized request, then answer using that echoed content.",
+    "workerSystemPromptTemplate": "Return concise business JSON only. Preserve upstream data faithfully and do not invent extra workflow control beyond the current node responsibility."
+  },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "main-divedra",
+      "nodeFile": "nodes/node-main-divedra.json"
+    },
+    {
+      "id": "workflow-input",
+      "nodeFile": "nodes/node-workflow-input.json"
+    },
+    {
+      "id": "echo-session",
+      "nodeFile": "nodes/node-echo-session.json"
+    },
+    {
+      "id": "workflow-output",
+      "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "main-divedra"
+        }
+      ]
+    },
+    {
+      "id": "main-divedra",
+      "nodeId": "main-divedra",
+      "transitions": [
+        {
+          "toStepId": "workflow-input"
+        }
+      ]
+    },
+    {
+      "id": "workflow-input",
+      "nodeId": "workflow-input",
+      "transitions": [
+        {
+          "toStepId": "echo-request"
+        }
+      ]
+    },
+    {
+      "id": "echo-request",
+      "nodeId": "echo-session",
+      "transitions": [
+        {
+          "toStepId": "answer-request"
+        }
+      ]
+    },
+    {
+      "id": "answer-request",
+      "nodeId": "echo-session",
+      "promptVariant": "answer",
+      "sessionPolicy": {
+        "mode": "reuse",
+        "inheritFromStepId": "echo-request"
+      },
+      "transitions": [
+        {
+          "toStepId": "workflow-output"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output"
+    }
+  ]
+}
