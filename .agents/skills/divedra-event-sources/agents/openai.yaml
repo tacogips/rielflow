@@ -1,0 +1,4 @@
+interface:
+  display_name: "Divedra Event Sources"
+  short_description: "Configure and test workflow events"
+  default_prompt: "Use $divedra-event-sources to configure and test this divedra event source."

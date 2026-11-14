@@ -1,0 +1,26 @@
+{
+  "workflowId": "refactoring-slice-review",
+  "description": "Read-only review workflow for one codebase slice produced by refactoring-divide-and-conquer fanout.",
+  "defaults": {
+    "maxLoopIterations": 1,
+    "nodeTimeoutMs": 3600000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep slice identity, owned paths, findings, proposed refactoring tasks, conflicts, verification suggestions, and confidence explicit. Do not edit files."
+  },
+  "entryStepId": "slice-review",
+  "nodes": [
+    {
+      "id": "slice-review",
+      "nodeFile": "nodes/node-slice-review.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "slice-review",
+      "nodeId": "slice-review",
+      "description": "Review one package or related processing-group slice without editing files.",
+      "role": "worker"
+    }
+  ]
+}

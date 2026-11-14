@@ -1,0 +1,8 @@
+{
+  "id": "divedra-manager",
+  "description": "Coordinate the parent workflow and trigger the drafting step before the workflow call.",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplate": "Start the parent workflow and let draft-write produce the caller payload for the review workflow.",
+  "variables": {}
+}

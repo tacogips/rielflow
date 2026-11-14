@@ -1,0 +1,170 @@
+version: "3"
+
+vars:
+  PROJECT_NAME: divedra
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  install:
+    desc: Install dependencies
+    cmds:
+      - bun install
+
+  dev:
+    desc: Run in development mode with watch
+    cmds:
+      - bun run dev
+
+  build:
+    desc: Build the project
+    cmds:
+      - bun run build
+
+  start:
+    desc: Run the application
+    cmds:
+      - bun run start
+
+  test:
+    desc: Run tests with Vitest
+    cmds:
+      - bun run test
+
+  test-all:
+    desc: Run all automated tests
+    cmds:
+      - bun run test:all
+
+  test-watch:
+    desc: Run tests in watch mode with Vitest
+    cmds:
+      - bun run test:watch
+
+  test-verbose:
+    desc: Run tests with verbose output
+    cmds:
+      - vitest run --reporter=verbose
+
+  typecheck:
+    desc: Run TypeScript type checking
+    cmds:
+      - bun run typecheck
+
+  typecheck-server:
+    desc: Run TypeScript type checking
+    cmds:
+      - bun run typecheck:server
+
+  fmt:
+    desc: Format code with Biome
+    cmds:
+      - bun run format
+
+  fmt-check:
+    desc: Check code formatting
+    cmds:
+      - bun run format:check
+
+  lint:
+    desc: Run all lints (Biome check + format check + typecheck)
+    cmds:
+      - bun run lint:biome
+      - task: fmt-check
+      - task: typecheck
+
+  gitleaks:
+    desc: Scan staged changes for secrets before commit
+    cmds:
+      - gitleaks git --pre-commit --redact --staged --verbose
+
+  colima:docker:
+    desc: Restart the Colima Docker runtime profile
+    cmds:
+      - task: colima:start
+        vars:
+          COLIMA_PROFILE: docker
+          COLIMA_RUNTIME: docker
+
+  colima:all:
+    desc: Restart all Colima runtime profiles managed by this Taskfile
+    cmds:
+      - task: colima:docker
+      - task: colima:containerd
+      - task: colima:incus
+
+  colima:containerd:
+    desc: Restart the Colima containerd runtime profile
+    cmds:
+      - task: colima:start
+        vars:
+          COLIMA_PROFILE: containerd
+          COLIMA_RUNTIME: containerd
+
+  colima:nerdctl:
+    desc: Restart the Colima containerd profile for nerdctl
+    cmds:
+      - task: colima:containerd
+
+  colima:incus:
+    desc: Restart the Colima Incus runtime profile
+    cmds:
+      - task: colima:start
+        vars:
+          COLIMA_PROFILE: incus
+          COLIMA_RUNTIME: incus
+
+  colima:start:
+    internal: true
+    requires:
+      vars:
+        - COLIMA_PROFILE
+        - COLIMA_RUNTIME
+    cmds:
+      - |
+        set -euo pipefail
+
+        if colima status "{{.COLIMA_PROFILE}}" >/dev/null 2>&1; then
+          colima stop "{{.COLIMA_PROFILE}}"
+        fi
+
+        colima start "{{.COLIMA_PROFILE}}" --runtime "{{.COLIMA_RUNTIME}}"
+
+  install-git-hooks:
+    desc: Install the Nix-managed pre-commit hook configuration
+    cmds:
+      - nix develop -c pre-commit install --install-hooks
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - bun run clean
+
+  ci:
+    desc: Run all CI checks
+    cmds:
+      - bun run lint:biome
+      - task: fmt-check
+      - task: typecheck
+      - task: test
+
+  nix-bin:
+    desc: Build the default flake package and open a shell with its bin dir prepended to PATH (pass a command after `--` to run it instead)
+    interactive: true
+    env:
+      TASK_NIX_BIN_ARGS: "{{.CLI_ARGS}}"
+    cmds:
+      - |
+        set -euo pipefail
+        result_path="$(nix build .#default --print-out-paths --no-link | tail -n 1)"
+        export PATH="${result_path}/bin:${PATH}"
+
+        if [ -n "${TASK_NIX_BIN_ARGS}" ]; then
+          exec bash -lc "${TASK_NIX_BIN_ARGS}"
+        fi
+
+        echo "Temporary PATH includes ${result_path}/bin"
+        exec "${SHELL:-bash}" -i
