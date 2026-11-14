@@ -1,0 +1,23 @@
+{
+  "id": "exit-gate",
+  "description": "Route based on blocking security findings.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/exit-gate.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with when.needs_fix and a payload matching this schema. Schema validation failure must be treated as an invalid output and retried.",
+    "maxValidationAttempts": 3,
+    "jsonSchema": {
+      "type": "object",
+      "required": ["needs_fix", "blockingFindingIds", "acceptedLowRiskIds", "falsePositiveFindingIds", "routingReason"],
+      "properties": {
+        "needs_fix": { "type": "boolean" },
+        "blockingFindingIds": { "type": "array", "items": { "type": "string" } },
+        "acceptedLowRiskIds": { "type": "array", "items": { "type": "string" } },
+        "falsePositiveFindingIds": { "type": "array", "items": { "type": "string" } },
+        "routingReason": { "type": "string" }
+      }
+    }
+  }
+}

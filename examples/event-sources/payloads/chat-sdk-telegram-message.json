@@ -1,0 +1,19 @@
+{
+  "provider": "telegram",
+  "eventId": "chat-sdk-telegram-evt-1",
+  "eventType": "message",
+  "occurredAt": "2026-05-14T00:00:00.000Z",
+  "actor": {
+    "id": "telegram-user-123",
+    "displayName": "Telegram Operator"
+  },
+  "conversation": {
+    "id": "telegram-chat-123",
+    "threadId": "telegram-topic-1"
+  },
+  "message": {
+    "text": "Run the arithmetic workflow from Telegram.",
+    "format": "plain",
+    "attachments": []
+  }
+}
