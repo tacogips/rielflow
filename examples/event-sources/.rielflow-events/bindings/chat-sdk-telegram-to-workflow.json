@@ -1,0 +1,27 @@
+{
+  "id": "chat-sdk-telegram-to-workflow",
+  "sourceId": "chat-sdk-telegram",
+  "outputDestinations": ["chat-sdk-telegram-replies"],
+  "workflowName": "first-four-arithmetic-pipeline",
+  "match": {
+    "eventType": "chat.message"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "provider": "{{event.input.provider}}",
+      "conversationId": "{{event.conversation.id}}",
+      "threadId": "{{event.conversation.threadId}}",
+      "history": "{{event.input.history}}",
+      "historySource": "{{event.input.historySource}}"
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}:{{event.conversation.id}}:{{event.conversation.threadId}}"
+  }
+}

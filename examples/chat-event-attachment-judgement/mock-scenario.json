@@ -1,0 +1,42 @@
+{
+  "judge-attachments": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.4-mini",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "attachments": [
+        {
+          "id": "img-release-dashboard",
+          "filename": "release-dashboard.png",
+          "kind": "image",
+          "mediaType": "image/png",
+          "evidence": [
+            "green deployment dashboard",
+            "all checks passing",
+            "no active alerts"
+          ],
+          "label": "healthy-release-dashboard",
+          "confidence": "high",
+          "rationale": "The deterministic image description says the dashboard is green with all checks passing and no active alerts.",
+          "needsManualReview": false
+        },
+        {
+          "id": "pdf-incident-summary",
+          "filename": "incident-summary.pdf",
+          "kind": "pdf",
+          "mediaType": "application/pdf",
+          "evidence": [
+            "customer data exposure was not observed",
+            "incident is closed after rollback verification"
+          ],
+          "label": "incident-summary-no-exposure",
+          "confidence": "high",
+          "rationale": "The deterministic PDF text states there was no observed customer data exposure and the incident is closed.",
+          "needsManualReview": false
+        }
+      ]
+    }
+  }
+}

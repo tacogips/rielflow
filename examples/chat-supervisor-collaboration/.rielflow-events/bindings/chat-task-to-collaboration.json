@@ -1,0 +1,38 @@
+{
+  "id": "chat-task-to-collaboration",
+  "sourceId": "collaboration-chat",
+  "outputDestinations": [
+    "coordinator-chat",
+    "workflow-a-review-chat",
+    "workflow-b-review-chat"
+  ],
+  "match": {
+    "eventType": "chat.message"
+  },
+  "workflowName": "chat-supervisor-collaboration",
+  "inputMapping": {
+    "mode": "template",
+    "mirrorToHumanInput": true,
+    "template": {
+      "task": "{{event.input.text}}",
+      "actor": "{{event.actor.displayName}}",
+      "conversationId": "{{event.conversation.id}}"
+    }
+  },
+  "taskPlanning": {
+    "requiredInput": [
+      {
+        "path": "task",
+        "label": "task description",
+        "question": "What task should the supervisor collaboration run?"
+      }
+    ],
+    "planTemplate": "Plan: acknowledge the request, ask Workflow A and Workflow B to brainstorm, have Workflow C create the execution spec, then request A/B review through chat destinations.",
+    "clarificationTemplate": "I need {{missing}} before starting the collaboration workflow."
+  },
+  "execution": {
+    "async": false,
+    "allowUnsafeSyncWebhook": true,
+    "dedupeWindowMs": 86400000
+  }
+}
