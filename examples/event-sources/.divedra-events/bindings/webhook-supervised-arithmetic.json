@@ -1,0 +1,39 @@
+{
+  "id": "webhook-supervised-arithmetic",
+  "sourceId": "example-webhook",
+  "match": {
+    "eventType": "chat.supervised.demo"
+  },
+  "workflowName": "first-four-arithmetic-pipeline",
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "source": "webhook"
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "mode": "supervised",
+    "async": true,
+    "supervisorWorkflowName": "divedra-default-workflow-supervisor",
+    "maxRestartsOnFailure": 3,
+    "autoImprove": false,
+    "control": {
+      "correlationKey": "{{event.sourceId}}:{{binding.id}}:{{event.conversation.id}}:{{event.conversation.threadId}}",
+      "allowActions": ["start", "stop", "restart", "status", "input"],
+      "startOnFirstInput": true,
+      "intentMapping": {
+        "mode": "command-map",
+        "inputPath": "event.input.text",
+        "commands": {
+          "start": "start",
+          "stop": "stop",
+          "restart": "restart",
+          "status": "status"
+        },
+        "defaultAction": "input"
+      }
+    }
+  }
+}

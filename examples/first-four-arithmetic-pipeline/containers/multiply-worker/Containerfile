@@ -1,0 +1,7 @@
+FROM alpine:3.21
+
+WORKDIR /app
+COPY multiply.sh /app/multiply.sh
+RUN chmod +x /app/multiply.sh
+
+ENTRYPOINT ["/app/multiply.sh"]
