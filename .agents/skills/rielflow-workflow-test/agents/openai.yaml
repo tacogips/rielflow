@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rielflow Workflow Test"
+  short_description: "Verify workflows with mock scenarios"
+  default_prompt: "Use $rielflow-workflow-test to verify this rielflow workflow with its mock scenario."

@@ -1,0 +1,3 @@
+interface:
+  display_name: "rielflow-release"
+  short_description: "Use when preparing, publishing, verifying, or troubleshooting a rielflow release through GitHub release assets and the tacogips/tap Homebrew formula."

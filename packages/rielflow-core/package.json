@@ -1,0 +1,81 @@
+{
+  "name": "rielflow-core",
+  "version": "0.1.0",
+  "description": "Core workflow runtime and library APIs for Rielflow",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./authored-node": {
+      "types": "./dist/authored-node.d.ts",
+      "import": "./dist/authored-node.js",
+      "default": "./dist/authored-node.js"
+    },
+    "./authored-workflow": {
+      "types": "./dist/authored-workflow.d.ts",
+      "import": "./dist/authored-workflow.js",
+      "default": "./dist/authored-workflow.js"
+    },
+    "./json-schema": {
+      "types": "./dist/json-schema.d.ts",
+      "import": "./dist/json-schema.js",
+      "default": "./dist/json-schema.js"
+    },
+    "./node-template-fields": {
+      "types": "./dist/node-template-fields.d.ts",
+      "import": "./dist/node-template-fields.js",
+      "default": "./dist/node-template-fields.js"
+    },
+    "./paths": {
+      "types": "./dist/paths.d.ts",
+      "import": "./dist/paths.js",
+      "default": "./dist/paths.js"
+    },
+    "./prompt-template-file": {
+      "types": "./dist/prompt-template-file.d.ts",
+      "import": "./dist/prompt-template-file.js",
+      "default": "./dist/prompt-template-file.js"
+    },
+    "./prompt-template-context": {
+      "types": "./dist/prompt-template-context.d.ts",
+      "import": "./dist/prompt-template-context.js",
+      "default": "./dist/prompt-template-context.js"
+    },
+    "./render": {
+      "types": "./dist/render.d.ts",
+      "import": "./dist/render.js",
+      "default": "./dist/render.js"
+    },
+    "./runtime-prompt-assets": {
+      "types": "./dist/runtime-prompt-assets.d.ts",
+      "import": "./dist/runtime-prompt-assets.js",
+      "default": "./dist/runtime-prompt-assets.js"
+    },
+    "./workflow-bundle-input": {
+      "types": "./dist/workflow-bundle-input.d.ts",
+      "import": "./dist/workflow-bundle-input.js",
+      "default": "./dist/workflow-bundle-input.js"
+    },
+    "./workflow-validation": {
+      "types": "./dist/workflow-validation.d.ts",
+      "import": "./dist/workflow-validation.js",
+      "default": "./dist/workflow-validation.js"
+    },
+    "./workflow-model": {
+      "types": "./dist/workflow-model.d.ts",
+      "import": "./dist/workflow-model.js",
+      "default": "./dist/workflow-model.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run --cwd ../.. build:server",
+    "typecheck": "bun run --cwd ../.. typecheck"
+  },
+  "license": "MIT"
+}

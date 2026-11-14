@@ -1,0 +1,70 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "rielflow-core": ["packages/rielflow-core/src/index.ts"],
+      "rielflow-core/*": ["packages/rielflow-core/src/*.ts"],
+      "rielflow-addons": ["packages/rielflow-addons/src/index.ts"],
+      "rielflow-addons/*": ["packages/rielflow-addons/src/*.ts"],
+      "rielflow-adapters": ["packages/rielflow-adapters/src/index.ts"],
+      "rielflow-adapters/*": ["packages/rielflow-adapters/src/*.ts"],
+      "rielflow-graphql": ["packages/rielflow-graphql/src/index.ts"],
+      "rielflow-graphql/*": ["packages/rielflow-graphql/src/*.ts"],
+      "rielflow-events": ["packages/rielflow-events/src/index.ts"],
+      "rielflow-events/*": ["packages/rielflow-events/src/*.ts"],
+      "rielflow-hook": ["packages/rielflow-hook/src/index.ts"],
+      "rielflow-hook/*": ["packages/rielflow-hook/src/*.ts"],
+      "rielflow-server": ["packages/rielflow-server/src/index.ts"],
+      "rielflow-server/*": ["packages/rielflow-server/src/*.ts"]
+    },
+    "types": ["bun-types"],
+
+    /* Emit */
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "removeComments": false,
+
+    /* Interop Constraints */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    /* Type Checking - Maximum Strictness */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "alwaysStrict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    /* Additional Strict Checks */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+
+    /* Completeness */
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["scripts/**/*.ts", "packages/*/src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "packages/*/dist"]
+}

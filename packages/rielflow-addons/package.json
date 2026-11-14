@@ -1,0 +1,24 @@
+{
+  "name": "rielflow-addons",
+  "version": "0.1.0",
+  "description": "Built-in node add-on registry and native add-on helpers for Rielflow",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run --cwd ../.. build:server",
+    "typecheck": "bun run --cwd ../.. typecheck"
+  },
+  "dependencies": {
+    "rielflow-core": "workspace:*"
+  },
+  "license": "MIT"
+}

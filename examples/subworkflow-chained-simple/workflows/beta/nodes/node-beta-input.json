@@ -1,0 +1,10 @@
+{
+  "id": "beta-input",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/beta-input.md",
+  "variables": {},
+  "output": {
+    "description": "Bind alpha-lane output into a bounded request for beta-worker."
+  }
+}
