@@ -1,0 +1,33 @@
+{
+  "id": "workflow-output",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/workflow-output.md",
+  "variables": {},
+  "output": {
+    "description": "Return the final workflow handoff for the caller.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "summary",
+        "status"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}
