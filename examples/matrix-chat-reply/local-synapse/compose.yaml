@@ -1,0 +1,19 @@
+name: divedra-matrix-sample
+
+services:
+  synapse:
+    image: matrixdotorg/synapse:v1.152.1
+    container_name: divedra-matrix-sample-synapse
+    environment:
+      SYNAPSE_SERVER_NAME: localhost
+      SYNAPSE_REPORT_STATS: "no"
+    ports:
+      - "${DIVEDRA_MATRIX_SAMPLE_PORT:-18008}:8008"
+    volumes:
+      - "${DIVEDRA_MATRIX_SAMPLE_DATA_DIR:-./data}:/data"
+    healthcheck:
+      test: ["CMD", "curl", "-fSs", "http://localhost:8008/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s

@@ -1,0 +1,48 @@
+{
+  "workflowId": "divedra-default-superviser",
+  "description": "Minimal phase-2 nested superviser: one step runs divedra/start-workflow with runtime-bound supervision auth (use with --auto-improve --nested-superviser). The engine injects supervisionRunId, targetSessionId, and superviserTargetWorkflowId into the superviser session runtime variables.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "entryStepId": "invoke-start",
+  "nodes": [
+    {
+      "id": "invoke-start",
+      "addon": {
+        "name": "divedra/start-workflow",
+        "version": "1",
+        "config": {
+          "argumentsTemplate": {},
+          "argumentBindings": [
+            {
+              "source": "variables",
+              "sourcePath": "supervisionRunId",
+              "targetPath": "supervisionRunId",
+              "required": true
+            },
+            {
+              "source": "variables",
+              "sourcePath": "targetSessionId",
+              "targetPath": "targetSessionId",
+              "required": true
+            },
+            {
+              "source": "variables",
+              "sourcePath": "superviserTargetWorkflowId",
+              "targetPath": "workflowId",
+              "required": true
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "invoke-start",
+      "nodeId": "invoke-start",
+      "role": "worker"
+    }
+  ]
+}

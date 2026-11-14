@@ -1,0 +1,24 @@
+{
+  "id": "local-docs-to-arithmetic",
+  "sourceId": "local-docs",
+  "match": {
+    "eventType": "file.change.created",
+    "pathPrefix": "plans/"
+  },
+  "workflowName": "first-four-arithmetic-pipeline",
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "Review the changed local file metadata.",
+      "change": "{{event.input.change}}",
+      "file": "{{event.input.file}}",
+      "watch": "{{event.input.watch}}"
+    },
+    "mirrorToHumanInput": false
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "concurrencyKey": "{{event.input.file.path}}"
+  }
+}

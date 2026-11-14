@@ -1,0 +1,52 @@
+{
+  "id": "negative-speaker",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.3-codex-spark",
+  "sessionPolicy": {
+    "mode": "reuse"
+  },
+  "systemPromptTemplateFile": "prompts/negative-system.md",
+  "promptTemplateFile": "prompts/negative-speaker.md",
+  "sessionStartPromptTemplateFile": "prompts/session-start.md",
+  "argumentsTemplate": {
+    "role": "negative",
+    "maxTurns": 10
+  },
+  "argumentBindings": [
+    {
+      "targetPath": "topic",
+      "source": "node-output",
+      "sourceRef": "negative-input",
+      "sourcePath": "output.payload.topic",
+      "required": true
+    }
+  ],
+  "variables": {
+    "stanceLabel": "negative",
+    "opponentStanceLabel": "affirmative"
+  },
+  "output": {
+    "description": "Return the next negative debate turn as JSON.",
+    "jsonSchema": {
+      "type": "object",
+      "required": ["stance", "argument", "responseToOpponent", "done"],
+      "properties": {
+        "stance": {
+          "type": "string",
+          "const": "negative"
+        },
+        "argument": {
+          "type": "string"
+        },
+        "responseToOpponent": {
+          "type": "string"
+        },
+        "done": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}
