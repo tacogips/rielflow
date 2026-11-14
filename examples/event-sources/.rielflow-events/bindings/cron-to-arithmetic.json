@@ -1,0 +1,17 @@
+{
+  "id": "cron-to-arithmetic",
+  "sourceId": "nightly-cron",
+  "workflowName": "first-four-arithmetic-pipeline",
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "Run the nightly arithmetic fixture.",
+      "scheduledAt": "{{event.input.scheduledAt}}"
+    },
+    "mirrorToHumanInput": false
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000
+  }
+}
