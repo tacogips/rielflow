@@ -1,0 +1,26 @@
+{
+  "id": "chat-sdk-slack",
+  "kind": "chat-sdk",
+  "provider": "slack",
+  "mode": "generic-webhook",
+  "webhook": {
+    "path": "chat-sdk/slack",
+    "signingSecretEnv": "RIEL_CHAT_SDK_SLACK_WEBHOOK_SECRET",
+    "bearerTokenEnv": "RIEL_CHAT_SDK_SLACK_BEARER_TOKEN",
+    "rateLimit": {
+      "windowMs": 60000,
+      "maxRequests": 60
+    }
+  },
+  "send": {
+    "endpointUrlEnv": "RIEL_CHAT_SDK_SLACK_SEND_URL",
+    "tokenEnv": "RIEL_CHAT_SDK_SLACK_SEND_TOKEN"
+  },
+  "history": {
+    "maxMessages": 20,
+    "maxBytes": 32768,
+    "maxAgeMs": 86400000,
+    "scope": "thread-or-conversation",
+    "includeBotMessages": false
+  }
+}

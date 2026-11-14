@@ -1,0 +1,44 @@
+{
+  "id": "telegram-gateway-personas",
+  "kind": "telegram-gateway",
+  "provider": "telegram",
+  "tokenEnv": "RIEL_TELEGRAM_BOT_TOKEN",
+  "botIdEnv": "RIEL_TELEGRAM_BOT_ID",
+  "chats": [
+    {
+      "id": "-1001234567890",
+      "personas": ["yui", "mika", "rina"]
+    }
+  ],
+  "polling": {
+    "timeoutSeconds": 30,
+    "limit": 100,
+    "offsetPath": "telegram/telegram-gateway-personas-offset.json"
+  },
+  "history": {
+    "maxMessages": 20,
+    "maxBytes": 32768,
+    "maxAgeMs": 86400000,
+    "scope": "chat",
+    "includeBotMessages": false
+  },
+  "filters": {
+    "ignoreBots": true,
+    "ignoreSelf": true
+  },
+  "attachments": {
+    "includePhotos": true,
+    "resolveFilePaths": true
+  },
+  "replyBots": {
+    "yui": {
+      "tokenEnv": "RIEL_TELEGRAM_YUI_BOT_TOKEN"
+    },
+    "mika": {
+      "tokenEnv": "RIEL_TELEGRAM_MIKA_BOT_TOKEN"
+    },
+    "rina": {
+      "tokenEnv": "RIEL_TELEGRAM_RINA_BOT_TOKEN"
+    }
+  }
+}
