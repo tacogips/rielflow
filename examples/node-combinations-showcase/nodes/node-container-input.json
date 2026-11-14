@@ -1,0 +1,9 @@
+{
+  "id": "container-input",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/container-input.md",
+  "variables": {
+    "lane": "container"
+  }
+}

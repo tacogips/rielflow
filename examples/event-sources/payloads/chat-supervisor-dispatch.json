@@ -1,0 +1,15 @@
+{
+  "eventId": "chat-dispatch-demo-1",
+  "eventType": "chat.supervisor.dispatch.demo",
+  "actor": {
+    "id": "user-1",
+    "displayName": "Example User"
+  },
+  "conversation": {
+    "id": "example-channel",
+    "threadId": "thread-supervisor-dispatch-demo"
+  },
+  "input": {
+    "text": "Say hello using a direct answer."
+  }
+}

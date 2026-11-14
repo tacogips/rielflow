@@ -1,0 +1,19 @@
+{
+  "id": "chat-sdk-slack-to-workflow",
+  "sourceId": "chat-sdk-slack",
+  "outputDestinations": ["chat-sdk-slack-replies"],
+  "workflowName": "chat-event-attachment-judgement",
+  "match": {
+    "eventType": "chat.message"
+  },
+  "inputMapping": {
+    "mode": "event-input",
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}:{{event.conversation.id}}:{{event.conversation.threadId}}"
+  }
+}
