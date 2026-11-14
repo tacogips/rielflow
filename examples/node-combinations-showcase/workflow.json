@@ -1,0 +1,156 @@
+{
+  "workflowId": "node-combinations-showcase",
+  "description": "Compact reference bundle in the step-addressed shape: command-node, container-node, and a foreach lane with a judge step that branches back on continue_items (same behavior as the former node-local repeat authoring).",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000,
+    "containerRuntime": {
+      "runnerKind": "podman"
+    }
+  },
+  "prompts": {
+    "rielflowPromptTemplate": "Coordinate {{workflowId}} as a compact structure showcase. Run the command lane, then the container lane, then the foreach lane (judge step transitions loop until continue_items is false).",
+    "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise workflow JSON-oriented output."
+  },
+  "managerStepId": "rielflow-manager",
+  "entryStepId": "rielflow-manager",
+  "nodes": [
+    {
+      "id": "rielflow-manager",
+      "nodeFile": "nodes/node-rielflow-manager.json"
+    },
+    {
+      "id": "command-manager",
+      "nodeFile": "nodes/node-command-manager.json"
+    },
+    {
+      "id": "command-input",
+      "nodeFile": "nodes/node-command-input.json"
+    },
+    {
+      "id": "command-worker",
+      "nodeFile": "nodes/node-command-worker.json"
+    },
+    {
+      "id": "command-output",
+      "nodeFile": "nodes/node-command-output.json"
+    },
+    {
+      "id": "container-manager",
+      "nodeFile": "nodes/node-container-manager.json"
+    },
+    {
+      "id": "container-input",
+      "nodeFile": "nodes/node-container-input.json"
+    },
+    {
+      "id": "container-worker",
+      "nodeFile": "nodes/node-container-worker.json"
+    },
+    {
+      "id": "container-output",
+      "nodeFile": "nodes/node-container-output.json"
+    },
+    {
+      "id": "foreach-manager",
+      "nodeFile": "nodes/node-foreach-manager.json"
+    },
+    {
+      "id": "foreach-input",
+      "nodeFile": "nodes/node-foreach-input.json"
+    },
+    {
+      "id": "foreach-worker",
+      "nodeFile": "nodes/node-foreach-worker.json"
+    },
+    {
+      "id": "foreach-judge",
+      "nodeFile": "nodes/node-foreach-judge.json"
+    },
+    {
+      "id": "foreach-output",
+      "nodeFile": "nodes/node-foreach-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "rielflow-manager",
+      "nodeId": "rielflow-manager",
+      "role": "manager",
+      "transitions": [{ "toStepId": "command-manager" }]
+    },
+    {
+      "id": "command-manager",
+      "nodeId": "command-manager",
+      "transitions": [{ "toStepId": "command-input" }]
+    },
+    {
+      "id": "command-input",
+      "nodeId": "command-input",
+      "transitions": [{ "toStepId": "command-worker" }]
+    },
+    {
+      "id": "command-worker",
+      "nodeId": "command-worker",
+      "transitions": [{ "toStepId": "command-output" }]
+    },
+    {
+      "id": "command-output",
+      "nodeId": "command-output",
+      "transitions": [{ "toStepId": "container-manager" }]
+    },
+    {
+      "id": "container-manager",
+      "nodeId": "container-manager",
+      "transitions": [{ "toStepId": "container-input" }]
+    },
+    {
+      "id": "container-input",
+      "nodeId": "container-input",
+      "transitions": [{ "toStepId": "container-worker" }]
+    },
+    {
+      "id": "container-worker",
+      "nodeId": "container-worker",
+      "transitions": [{ "toStepId": "container-output" }]
+    },
+    {
+      "id": "container-output",
+      "nodeId": "container-output",
+      "transitions": [{ "toStepId": "foreach-manager" }]
+    },
+    {
+      "id": "foreach-manager",
+      "nodeId": "foreach-manager",
+      "transitions": [{ "toStepId": "foreach-input" }]
+    },
+    {
+      "id": "foreach-input",
+      "nodeId": "foreach-input",
+      "transitions": [{ "toStepId": "foreach-worker" }]
+    },
+    {
+      "id": "foreach-worker",
+      "nodeId": "foreach-worker",
+      "transitions": [{ "toStepId": "foreach-judge" }]
+    },
+    {
+      "id": "foreach-judge",
+      "nodeId": "foreach-judge",
+      "transitions": [
+        {
+          "toStepId": "foreach-manager",
+          "label": "continue_items"
+        },
+        {
+          "toStepId": "foreach-output",
+          "label": "!(continue_items)"
+        }
+      ]
+    },
+    {
+      "id": "foreach-output",
+      "nodeId": "foreach-output"
+    }
+  ]
+}

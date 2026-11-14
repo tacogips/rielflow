@@ -1,0 +1,68 @@
+{
+  "name": "rielflow-workspace",
+  "version": "0.1.3",
+  "description": "TypeScript/Bun workflow runtime for cooperative multi-agent execution",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "type": "module",
+  "main": "dist/lib.js",
+  "module": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js",
+      "default": "./dist/lib.js"
+    },
+    "./cli": {
+      "import": "./dist/main.js",
+      "default": "./dist/main.js"
+    }
+  },
+  "scripts": {
+    "dev": "bun run --watch packages/rielflow/src/bin.ts",
+    "build": "bun run build:server",
+    "build:server": "bun build packages/rielflow/src/bin.ts --outfile dist/main.js --target bun && bun build packages/rielflow/src/index.ts --outfile dist/lib.js --target bun && bun build packages/rielflow-core/src/index.ts --outfile packages/rielflow-core/dist/core-runtime.js --target bun --minify && bun build packages/rielflow-core/src/authored-node.ts packages/rielflow-core/src/authored-workflow.ts packages/rielflow-core/src/json-schema.ts packages/rielflow-core/src/node-template-fields.ts packages/rielflow-core/src/paths.ts packages/rielflow-core/src/prompt-template-context.ts packages/rielflow-core/src/prompt-template-file.ts packages/rielflow-core/src/render.ts packages/rielflow-core/src/runtime-prompt-assets.ts packages/rielflow-core/src/workflow-bundle-input.ts packages/rielflow-core/src/workflow-model.ts packages/rielflow-core/src/workflow-validation.ts --outdir packages/rielflow-core/dist --target bun && bun build packages/rielflow-addons/src/index.ts --outfile packages/rielflow-addons/dist/index.js --target bun && bun build packages/rielflow-adapters/src/index.ts --outfile packages/rielflow-adapters/dist/index.js --target bun --external rielflow-core && bun build packages/rielflow-events/src/index.ts packages/rielflow-events/src/path-resolution.ts packages/rielflow-events/src/runtime-ports.ts packages/rielflow-events/src/types.ts --outdir packages/rielflow-events/dist --target bun --external rielflow-core && bun build packages/rielflow-graphql/src/index.ts packages/rielflow-graphql/src/control-plane-service.ts packages/rielflow-graphql/src/dto.ts packages/rielflow-graphql/src/schema-contract.ts --outdir packages/rielflow-graphql/dist --target bun && bun build packages/rielflow-server/src/index.ts packages/rielflow-server/src/contracts.ts packages/rielflow-server/src/browser-overview.ts --outdir packages/rielflow-server/dist --target bun && for entry in index config context detect-vendor dispatch handler parse recorder-contracts redaction types; do bun build packages/rielflow-hook/src/$entry.ts --outfile packages/rielflow-hook/dist/$entry.js --target bun --external rielflow-core; done && rm -rf packages/rielflow-hook/dist/packages && bun build packages/rielflow/src/index.ts --outfile packages/rielflow/dist/lib.js --target bun && bun build packages/rielflow/src/cli.ts --outfile packages/rielflow/dist/cli.js --target bun && bun build packages/rielflow/src/bin.ts --outfile packages/rielflow/dist/main.js --target bun && tsc -p tsconfig.build.json --emitDeclarationOnly && bun run scripts/sync-package-declarations.ts && rm -rf dist/prompts packages/rielflow/dist/prompts packages/rielflow-core/dist/prompts packages/rielflow-addons/dist/prompts && cp -R packages/rielflow/src/workflow/prompts dist/prompts && cp -R packages/rielflow/src/workflow/prompts packages/rielflow/dist/prompts && cp -R packages/rielflow/src/workflow/prompts packages/rielflow-core/dist/prompts && cp -R packages/rielflow/src/workflow/prompts packages/rielflow-addons/dist/prompts",
+    "typecheck:server": "tsc --noEmit",
+    "start": "bun run packages/rielflow/src/bin.ts",
+    "test": "bash ./scripts/run-bun-tests.sh",
+    "test:all": "bun run test",
+    "test:watch": "bash ./scripts/run-bun-tests.sh --watch",
+    "typecheck": "bun run typecheck:server",
+    "check:source-filenames": "bun run scripts/check-source-filenames.ts",
+    "lint:biome": "biome check . --diagnostic-level=warn && bun run check:source-filenames",
+    "lint": "bun run lint:biome && bun run typecheck",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "clean": "rm -rf dist"
+  },
+  "homepage": "https://github.com/tacogips/rielflow",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tacogips/rielflow"
+  },
+  "license": "MIT",
+  "trustedDependencies": [],
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.78.0",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.218.0",
+    "@opentelemetry/resources": "2.7.1",
+    "@opentelemetry/sdk-node": "0.218.0",
+    "@opentelemetry/semantic-conventions": "1.41.1",
+    "claude-code-agent": "github:tacogips/claude-code-agent#eb3d81d3499df77695cc3b0ed92da73fc5b21f4e",
+    "codex-agent": "github:tacogips/codex-agent#3f6bbea86a0f4822ff7fdc88079097fd51575bbe",
+    "cursor-cli-agent": "github:tacogips/cursor-cli-agent#b14a00e5008cceae6debb73c986aa793671ff8ef",
+    "graphql": "16.13.1",
+    "graphql-yoga": "5.18.1",
+    "openai": "6.27.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.1.14",
+    "bun-types": "1.1.37",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  }
+}

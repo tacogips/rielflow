@@ -1,0 +1,21 @@
+{
+  "id": "nightly-instruction-list",
+  "kind": "sequential-list",
+  "entries": [
+    {
+      "id": "summarize-backlog",
+      "prompt": "Summarize the current backlog and identify blockers.",
+      "metadata": {
+        "category": "planning"
+      }
+    },
+    {
+      "id": "draft-next-actions",
+      "prompt": "Draft the next three concrete actions from the blocker summary.",
+      "metadata": {
+        "category": "planning"
+      }
+    }
+  ],
+  "onItemFailure": "stop"
+}
