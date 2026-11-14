@@ -1,0 +1,16 @@
+{
+  "id": "step1-plan-assess",
+  "description": "Assess target implementation-plan completion from the plan file.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/assess-plan.sh",
+    "envTemplate": {
+      "PLAN_PATH": "{{workflowInput.planPath}}",
+      "TARGET_TASKS_JSON": "{{workflowInput.targetTasks}}"
+    }
+  },
+  "output": {
+    "description": "Return JSON with plan_complete, nextTaskId, incompleteTasks, completedTasks, and implementation guidance."
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Divedra Workflow Reference"
+  short_description: "Use divedra APIs and GraphQL clients"
+  default_prompt: "Use $divedra-workflow-reference to integrate this application with divedra workflow APIs."

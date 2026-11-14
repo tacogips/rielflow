@@ -1,0 +1,11 @@
+{
+  "id": "workflow-output",
+  "description": "Publish the final refactoring workflow result.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/workflow-output.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with final mode, plan path, completed tasks, remaining tasks, changed files, verification evidence, and residual risks."
+  }
+}
