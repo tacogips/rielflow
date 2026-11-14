@@ -1,0 +1,26 @@
+{
+  "id": "chat-sdk-telegram",
+  "kind": "chat-sdk",
+  "provider": "telegram",
+  "mode": "generic-webhook",
+  "webhook": {
+    "path": "chat-sdk/telegram",
+    "signingSecretEnv": "RIEL_CHAT_SDK_TELEGRAM_WEBHOOK_SECRET",
+    "bearerTokenEnv": "RIEL_CHAT_SDK_TELEGRAM_BEARER_TOKEN",
+    "rateLimit": {
+      "windowMs": 60000,
+      "maxRequests": 60
+    }
+  },
+  "send": {
+    "endpointUrlEnv": "RIEL_CHAT_SDK_TELEGRAM_SEND_URL",
+    "tokenEnv": "RIEL_CHAT_SDK_TELEGRAM_SEND_TOKEN"
+  },
+  "history": {
+    "maxMessages": 20,
+    "maxBytes": 32768,
+    "maxAgeMs": 86400000,
+    "scope": "thread-or-conversation",
+    "includeBotMessages": false
+  }
+}

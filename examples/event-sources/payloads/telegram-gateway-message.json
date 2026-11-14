@@ -1,0 +1,19 @@
+{
+  "update_id": 2001,
+  "message": {
+    "message_id": 76,
+    "date": 1780048800,
+    "chat": {
+      "id": -1001234567890,
+      "type": "supergroup",
+      "title": "Persona Lab"
+    },
+    "from": {
+      "id": 2001,
+      "is_bot": false,
+      "first_name": "Operator",
+      "username": "operator"
+    },
+    "text": "Yui, give your opinion and ask Mika too."
+  }
+}
