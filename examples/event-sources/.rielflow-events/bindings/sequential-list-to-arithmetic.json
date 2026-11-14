@@ -1,0 +1,21 @@
+{
+  "id": "sequential-list-to-arithmetic",
+  "sourceId": "nightly-instruction-list",
+  "workflowName": "first-four-arithmetic-pipeline",
+  "match": {
+    "eventType": "sequential-list.item.ready"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.prompt}}",
+      "sequence": "{{event.input.sequence}}",
+      "metadata": "{{event.input.metadata}}"
+    },
+    "mirrorToHumanInput": false
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000
+  }
+}
