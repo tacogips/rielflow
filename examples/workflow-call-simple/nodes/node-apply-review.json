@@ -1,0 +1,8 @@
+{
+  "id": "apply-review",
+  "description": "Consume the workflow-call result delivered back from the review workflow and finalize the parent result.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplate": "Read the latest upstream review result and finalize the reviewed outcome.",
+  "variables": {}
+}

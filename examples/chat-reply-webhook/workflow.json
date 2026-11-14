@@ -1,0 +1,30 @@
+{
+  "workflowId": "chat-reply-webhook",
+  "description": "Reply to a chat webhook event with the built-in rielflow chat reply worker add-on through one explicit worker step.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "entryStepId": "reply-to-chat",
+  "nodes": [
+    {
+      "id": "reply-to-chat",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "Thanks {{event.actor.displayName}}. I received: {{event.input.text}}",
+          "visibility": "public",
+          "threadPolicy": "same-thread"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "reply-to-chat",
+      "nodeId": "reply-to-chat",
+      "role": "worker"
+    }
+  ]
+}
