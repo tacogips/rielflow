@@ -1,0 +1,4 @@
+interface:
+  display_name: "Divedra Manager Control"
+  short_description: "Issue typed manager control actions"
+  default_prompt: "Use $divedra-manager-control to issue a safe divedra manager control action."

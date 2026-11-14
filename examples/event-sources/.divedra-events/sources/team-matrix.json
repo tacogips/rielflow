@@ -1,0 +1,18 @@
+{
+  "id": "team-matrix",
+  "kind": "matrix",
+  "provider": "matrix",
+  "homeserverUrlEnv": "DIVEDRA_MATRIX_HOMESERVER_URL",
+  "accessTokenEnv": "DIVEDRA_MATRIX_ACCESS_TOKEN",
+  "userId": "@divedra:matrix.example",
+  "rooms": [
+    {
+      "roomId": "!release:matrix.example",
+      "alias": "#release:matrix.example"
+    }
+  ],
+  "sync": {
+    "pollTimeoutMs": 30000,
+    "sinceTokenPath": "tmp/matrix/team-matrix-sync.json"
+  }
+}

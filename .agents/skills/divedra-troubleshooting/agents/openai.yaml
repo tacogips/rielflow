@@ -1,0 +1,4 @@
+interface:
+  display_name: "Divedra Troubleshooting"
+  short_description: "Diagnose workflow execution issues"
+  default_prompt: "Use $divedra-troubleshooting to diagnose this failed divedra workflow run."

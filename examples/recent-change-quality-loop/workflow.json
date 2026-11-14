@@ -1,0 +1,116 @@
+{
+  "workflowId": "recent-change-quality-loop",
+  "description": "Review code changes introduced within a configurable recent time window, including uncommitted changes, and delegate any blocking findings into the design-and-implement workflow before re-reviewing until no high or mid findings remain.",
+  "defaults": {
+    "maxLoopIterations": 6,
+    "nodeTimeoutMs": 3600000,
+    "supervision": {
+      "monitorIntervalMs": 15000,
+      "stallTimeoutMs": 300000
+    }
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}}. Start at Step 1 review. Step 1 reviews recent committed and uncommitted changes. Step 2 inspects Step 1 and routes to Step 3 when any high or mid finding remains; otherwise route to workflow-output and finish. Step 3 packages the blocking findings and dispatches design-and-implement-review-loop. After the delegated workflow completes, resume at Step 4, capture the accepted delegated result, and then route back to Step 1 for another review pass. Finish only after Step 1 has no high or mid findings.",
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep severity, reviewed commands, delegated-workflow inputs, changed files, verification, and routing decisions explicit."
+  },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "step1-review",
+      "nodeFile": "nodes/node-step1-review.json"
+    },
+    {
+      "id": "step2-exit-gate",
+      "nodeFile": "nodes/node-step2-exit-gate.json"
+    },
+    {
+      "id": "step3-handoff",
+      "nodeFile": "nodes/node-step3-handoff.json"
+    },
+    {
+      "id": "step4-post-handoff",
+      "nodeFile": "nodes/node-step4-post-handoff.json"
+    },
+    {
+      "id": "workflow-output",
+      "kind": "output",
+      "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "description": "Start the recent-change quality loop.",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "step1-review"
+        }
+      ]
+    },
+    {
+      "id": "step1-review",
+      "nodeId": "step1-review",
+      "description": "Review committed changes from the recent time window plus uncommitted changes.",
+      "role": "worker",
+      "stallTimeoutMs": 900000,
+      "transitions": [
+        {
+          "toStepId": "step2-exit-gate"
+        }
+      ]
+    },
+    {
+      "id": "step2-exit-gate",
+      "nodeId": "step2-exit-gate",
+      "description": "Exit when Step 1 has no high or mid findings; otherwise send the blocking findings into the delegated implementation handoff.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step3-handoff",
+          "label": "needs_fix"
+        },
+        {
+          "toStepId": "workflow-output",
+          "label": "!(needs_fix)"
+        }
+      ]
+    },
+    {
+      "id": "step3-handoff",
+      "nodeId": "step3-handoff",
+      "description": "Package blocking findings into a delegated issue-resolution request for design-and-implement-review-loop.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toWorkflowId": "design-and-implement-review-loop",
+          "toStepId": "divedra-manager",
+          "resumeStepId": "step4-post-handoff"
+        }
+      ]
+    },
+    {
+      "id": "step4-post-handoff",
+      "nodeId": "step4-post-handoff",
+      "description": "Consume the delegated workflow result and prepare the next recent-change review pass.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step1-review"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output",
+      "description": "Publish the accepted review summary once no high or mid findings remain.",
+      "role": "worker"
+    }
+  ]
+}
