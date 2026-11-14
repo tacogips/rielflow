@@ -1,0 +1,287 @@
+{
+  "workflowId": "matrix-agent-trio-chat",
+  "description": "Route provider-neutral Matrix chat messages, including text-compatible attachment descriptors, to one of three named female bot personas: Yui Codex by default, Mika Trend when called, or Rina Cursor when called. Persona nodes can hand off to another named persona when the user explicitly asks one bot to hear another bot's opinion.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 180000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Return concise JSON only. Keep user-facing chat text in payload.replyText. Do not expose internal workflow routing details unless the user asks for diagnostics.",
+    "chatFailureMessageTemplate": "ごめん、{{node.variables.shortName}}はいま少し調子が悪いみたい。少し待ってからもう一度呼んでね。"
+  },
+  "entryStepId": "route-message",
+  "nodes": [
+    {
+      "id": "route-message",
+      "addon": {
+        "name": "rielflow/chat-persona-router",
+        "version": "1",
+        "config": {
+          "defaultPersonaId": "yui",
+          "personas": [
+            {
+              "id": "yui",
+              "name": "Yui Codex",
+              "aliases": [
+                "yui",
+                "codex",
+                "default bot"
+              ]
+            },
+            {
+              "id": "mika",
+              "name": "Mika Trend",
+              "aliases": [
+                "mika",
+                "claude",
+                "gyaru",
+                "trend",
+                "entertainment",
+                "pop culture"
+              ]
+            },
+            {
+              "id": "rina",
+              "name": "Rina Cursor",
+              "aliases": [
+                "rina",
+                "cursor",
+                "otaku",
+                "nerd",
+                "technical analyst"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "yui-codex",
+      "nodeFile": "nodes/node-yui-codex.json"
+    },
+    {
+      "id": "read-yui-memory",
+      "nodeFile": "nodes/node-read-yui-memory.json"
+    },
+    {
+      "id": "write-yui-memory",
+      "nodeFile": "nodes/node-write-yui-memory.json"
+    },
+    {
+      "id": "mika-claude",
+      "nodeFile": "nodes/node-mika-claude.json"
+    },
+    {
+      "id": "read-mika-memory",
+      "nodeFile": "nodes/node-read-mika-memory.json"
+    },
+    {
+      "id": "write-mika-memory",
+      "nodeFile": "nodes/node-write-mika-memory.json"
+    },
+    {
+      "id": "rina-cursor",
+      "nodeFile": "nodes/node-rina-cursor.json"
+    },
+    {
+      "id": "read-rina-memory",
+      "nodeFile": "nodes/node-read-rina-memory.json"
+    },
+    {
+      "id": "write-rina-memory",
+      "nodeFile": "nodes/node-write-rina-memory.json"
+    },
+    {
+      "id": "send-yui-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "yui",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    },
+    {
+      "id": "send-mika-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "mika",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    },
+    {
+      "id": "send-rina-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "rina",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "route-message",
+      "nodeId": "route-message",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "read-yui-memory",
+          "label": "target_yui"
+        },
+        {
+          "toStepId": "read-mika-memory",
+          "label": "target_mika"
+        },
+        {
+          "toStepId": "read-rina-memory",
+          "label": "target_rina"
+        }
+      ]
+    },
+    {
+      "id": "read-yui-memory",
+      "nodeId": "read-yui-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "yui-codex"
+        }
+      ]
+    },
+    {
+      "id": "yui-codex",
+      "nodeId": "yui-codex",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "write-yui-memory"
+        }
+      ]
+    },
+    {
+      "id": "write-yui-memory",
+      "nodeId": "write-yui-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-yui-reply"
+        },
+        {
+          "toStepId": "read-mika-memory",
+          "label": "handoff_mika"
+        },
+        {
+          "toStepId": "read-rina-memory",
+          "label": "handoff_rina"
+        }
+      ]
+    },
+    {
+      "id": "send-yui-reply",
+      "nodeId": "send-yui-reply",
+      "role": "worker"
+    },
+    {
+      "id": "read-mika-memory",
+      "nodeId": "read-mika-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "mika-claude"
+        }
+      ]
+    },
+    {
+      "id": "mika-claude",
+      "nodeId": "mika-claude",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "write-mika-memory"
+        }
+      ]
+    },
+    {
+      "id": "write-mika-memory",
+      "nodeId": "write-mika-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-mika-reply"
+        },
+        {
+          "toStepId": "read-yui-memory",
+          "label": "handoff_yui"
+        },
+        {
+          "toStepId": "read-rina-memory",
+          "label": "handoff_rina"
+        }
+      ]
+    },
+    {
+      "id": "send-mika-reply",
+      "nodeId": "send-mika-reply",
+      "role": "worker"
+    },
+    {
+      "id": "read-rina-memory",
+      "nodeId": "read-rina-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "rina-cursor"
+        }
+      ]
+    },
+    {
+      "id": "rina-cursor",
+      "nodeId": "rina-cursor",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "write-rina-memory"
+        }
+      ]
+    },
+    {
+      "id": "write-rina-memory",
+      "nodeId": "write-rina-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-rina-reply"
+        },
+        {
+          "toStepId": "read-yui-memory",
+          "label": "handoff_yui"
+        },
+        {
+          "toStepId": "read-mika-memory",
+          "label": "handoff_mika"
+        }
+      ]
+    },
+    {
+      "id": "send-rina-reply",
+      "nodeId": "send-rina-reply",
+      "role": "worker"
+    }
+  ]
+}
