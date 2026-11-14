@@ -1,0 +1,8 @@
+{
+  "id": "draft-write",
+  "description": "Prepare the caller payload that the review workflow will receive as workflowCall.input.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplate": "Produce a concise draft payload for the downstream workflow-call review.",
+  "variables": {}
+}

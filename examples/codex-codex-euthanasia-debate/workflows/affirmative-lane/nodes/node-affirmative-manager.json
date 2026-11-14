@@ -1,0 +1,7 @@
+{
+  "id": "affirmative-manager",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/affirmative-manager.md",
+  "variables": {}
+}

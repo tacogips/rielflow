@@ -1,0 +1,4 @@
+interface:
+  display_name: "Divedra Node Add-Ons"
+  short_description: "Use built-in and local node add-ons"
+  default_prompt: "Use $divedra-node-addons to add or review this divedra node add-on."

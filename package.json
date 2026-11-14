@@ -1,0 +1,58 @@
+{
+  "name": "divedra",
+  "version": "0.1.0",
+  "description": "TypeScript/Bun workflow runtime for cooperative multi-agent execution",
+  "type": "module",
+  "main": "dist/lib.js",
+  "module": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js",
+      "default": "./dist/lib.js"
+    },
+    "./cli": {
+      "import": "./dist/main.js",
+      "default": "./dist/main.js"
+    }
+  },
+  "scripts": {
+    "dev": "bun run --watch src/main.ts",
+    "build": "bun run build:server",
+    "build:server": "bun build src/main.ts src/lib.ts --outdir dist --target bun && tsc -p tsconfig.build.json --emitDeclarationOnly && rm -rf dist/prompts && cp -R src/workflow/prompts dist/prompts",
+    "typecheck:server": "tsc --noEmit",
+    "start": "bun run src/main.ts",
+    "test": "bash ./scripts/run-bun-tests.sh",
+    "test:all": "bun run test",
+    "test:watch": "bash ./scripts/run-bun-tests.sh --watch",
+    "typecheck": "bun run typecheck:server",
+    "lint:biome": "biome check . --diagnostic-level=warn",
+    "lint": "biome check . --diagnostic-level=warn && bun run typecheck",
+    "format": "prettier --ignore-unknown --write \"src/**/*.{ts,tsx}\" \"scripts/**/*\" \"*.{md,json}\"",
+    "format:check": "prettier --ignore-unknown --check \"src/**/*.{ts,tsx}\" \"scripts/**/*\" \"*.{md,json}\"",
+    "clean": "rm -rf dist"
+  },
+  "homepage": "https://github.com/user/repo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/user/repo"
+  },
+  "license": "MIT",
+  "trustedDependencies": [],
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.78.0",
+    "claude-code-agent": "github:tacogips/claude-code-agent#4b27720b4708b93426d4c73fa5b800dac36ebc5b",
+    "codex-agent": "github:tacogips/codex-agent#05f4e9d7f316f29e7cdf148ce3cbd970ab9fb1f7",
+    "cursor-cli-agent": "github:tacogips/cursor-cli-agent#ba633b0081f8889c8727e324e5beb28e37966fe0",
+    "graphql": "16.13.1",
+    "graphql-yoga": "5.18.1",
+    "openai": "6.27.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.1.14",
+    "prettier": "3.4.2",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  }
+}
